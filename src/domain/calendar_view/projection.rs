@@ -4,6 +4,7 @@ use crate::domain::{
     planned_workouts::PlannedWorkout,
     races::Race,
     special_days::{SpecialDay, SpecialDayKind},
+    training_plan_supervisor::TrainingPlanSupervisorStatus,
 };
 
 use super::{
@@ -14,6 +15,14 @@ use super::{
 pub fn project_planned_workout_entry(
     workout: &PlannedWorkout,
     sync_states: &[ExternalSyncState],
+) -> CalendarEntryView {
+    project_planned_workout_entry_with_supervisor(workout, sync_states, None)
+}
+
+pub fn project_planned_workout_entry_with_supervisor(
+    workout: &PlannedWorkout,
+    sync_states: &[ExternalSyncState],
+    supervisor_status: Option<TrainingPlanSupervisorStatus>,
 ) -> CalendarEntryView {
     let raw_workout_doc = if workout.rest_day {
         None
@@ -48,6 +57,7 @@ pub fn project_planned_workout_entry(
         race: None,
         summary: None,
         sync: map_planned_workout_sync_states(workout, sync_states),
+        supervisor_status,
     }
 }
 
@@ -84,6 +94,7 @@ pub fn project_completed_workout_entry(workout: &CompletedWorkout) -> CalendarEn
             normalized_power_watts: workout.metrics.normalized_power_watts,
         }),
         sync: None,
+        supervisor_status: None,
     }
 }
 
@@ -114,6 +125,7 @@ pub fn project_race_entry(
         }),
         summary: None,
         sync: map_sync_state(sync_state),
+        supervisor_status: None,
     }
 }
 
@@ -140,6 +152,7 @@ pub fn project_special_day_entry(special_day: &SpecialDay) -> CalendarEntryView 
         race: None,
         summary: None,
         sync: None,
+        supervisor_status: None,
     }
 }
 

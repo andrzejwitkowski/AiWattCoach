@@ -331,6 +331,25 @@ impl TrainingPlanProjectionRepository for EmptyTrainingPlanProjectionRepository 
             })
         })
     }
+
+    fn apply_partial_replacement(
+        &self,
+        _replacement: aiwattcoach::domain::training_plan::TrainingPlanPartialReplacement,
+    ) -> TrainingPlanBoxFuture<Result<(), TrainingPlanError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn update_supervisor_status(
+        &self,
+        _user_id: &str,
+        _operation_key: &str,
+        _supervisor_status: Option<
+            aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorStatus,
+        >,
+        _updated_at_epoch_seconds: i64,
+    ) -> TrainingPlanBoxFuture<Result<(), TrainingPlanError>> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 #[derive(Clone, Default)]
@@ -834,6 +853,7 @@ pub(crate) fn sample_calendar_entry(
         race: None,
         summary: None,
         sync: None,
+        supervisor_status: None,
     }
 }
 

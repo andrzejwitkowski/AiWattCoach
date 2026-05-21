@@ -22,6 +22,7 @@ use aiwattcoach::{
             TrainingPlanError, TrainingPlanGenerationService, TrainingPlanGenerator,
             TrainingPlanPhaseOutput, TrainingPlanPlanningContext, TrainingPlanUseCases,
         },
+        training_plan_supervisor::NoopTrainingPlanSupervisorScheduler,
         workout_summary::WorkoutRecap,
     },
 };
@@ -44,6 +45,7 @@ type DirectService<Generator, Refresh = NoopCalendarEntryViewRefresh> =
         Generator,
         StubWorkoutSummaryPort,
         SchedulerClock,
+        NoopTrainingPlanSupervisorScheduler,
         Refresh,
     >;
 type WrappedService<Generator, Refresh = NoopCalendarEntryViewRefresh> =

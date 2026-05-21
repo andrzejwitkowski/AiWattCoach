@@ -13,6 +13,10 @@ vi.mock('../api/settings', () => ({
 const updateAiAgentsMock = vi.mocked(updateAiAgents);
 const testAiAgentsConnectionMock = vi.mocked(testAiAgentsConnection);
 
+function getMainModelInput() {
+  return screen.getByLabelText(/^model$/i);
+}
+
 function buildSettings(overrides?: Partial<UserSettingsResponse['aiAgents']>): UserSettingsResponse {
   return {
     aiAgents: {
@@ -26,6 +30,8 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['aiAgents']>): U
       deepseekApiKeySet: false,
       selectedProvider: 'openrouter',
       selectedModel: 'openai/gpt-4o-mini',
+      trainingPlanSupervisorEnabled: false,
+      trainingPlanSupervisorModel: 'gemini-2.5-pro',
       ...overrides,
     },
     intervals: {
@@ -83,7 +89,7 @@ describe('AiAgentsCard', () => {
     render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
 
     expect(screen.getByLabelText(/active provider/i)).toHaveValue('openrouter');
-    expect(screen.getByLabelText(/model/i)).toHaveValue('openai/gpt-4o-mini');
+    expect(getMainModelInput()).toHaveValue('openai/gpt-4o-mini');
     expect(screen.getByRole('button', { name: 'openai/gpt-5' })).toBeInTheDocument();
   });
 
@@ -98,7 +104,7 @@ describe('AiAgentsCard', () => {
 
     render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
 
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(getMainModelInput(), {
       target: { value: 'anthropic/claude-3.5-sonnet' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
@@ -120,7 +126,7 @@ describe('AiAgentsCard', () => {
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'openrouter' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(getMainModelInput(), {
       target: { value: 'openai/gpt-4.1-mini' },
     });
     fireEvent.change(screen.getByLabelText(/openrouter api key/i), {
@@ -146,7 +152,7 @@ describe('AiAgentsCard', () => {
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'deepseek' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(getMainModelInput(), {
       target: { value: 'deepseek-v4-pro' },
     });
     fireEvent.change(screen.getByLabelText(/deepseek api key/i), {
@@ -162,6 +168,91 @@ describe('AiAgentsCard', () => {
       });
     });
     expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves training plan supervisor fields', async () => {
+    updateAiAgentsMock.mockResolvedValue(buildSettings({
+      geminiApiKey: '***...1234',
+      geminiApiKeySet: true,
+      trainingPlanSupervisorEnabled: true,
+      trainingPlanSupervisorModel: 'gemini-2.5-flash',
+    }));
+
+    render(
+      <AiAgentsCard
+        settings={buildSettings({ geminiApiKey: '***...1234', geminiApiKeySet: true })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText(/enable training plan supervisor/i));
+    fireEvent.change(screen.getByLabelText(/training plan supervisor model/i), {
+      target: { value: 'gemini-2.5-flash' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    await waitFor(() => {
+      expect(updateAiAgentsMock).toHaveBeenCalledWith('', {
+        trainingPlanSupervisorEnabled: true,
+        trainingPlanSupervisorModel: 'gemini-2.5-flash',
+      });
+    });
+  });
+
+  it('blocks saving enabled supervisor when no gemini key exists', async () => {
+    render(
+      <AiAgentsCard
+        settings={buildSettings({ geminiApiKey: null, geminiApiKeySet: false })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText(/enable training plan supervisor/i));
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    expect(updateAiAgentsMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toHaveTextContent(/gemini api key required/i);
+    expect(screen.getByRole('button', { name: 'OK' })).toHaveFocus();
+  });
+
+  it('closes supervisor gemini key modal on Escape', async () => {
+    render(
+      <AiAgentsCard
+        settings={buildSettings({ geminiApiKey: null, geminiApiKeySet: false })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText(/enable training plan supervisor/i));
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('preserves a persisted custom supervisor model option', () => {
+    render(
+      <AiAgentsCard
+        settings={buildSettings({ trainingPlanSupervisorModel: 'gemini-2.5-pro-exp-custom' })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    expect(screen.getByLabelText(/training plan supervisor model/i)).toHaveValue(
+      'gemini-2.5-pro-exp-custom',
+    );
+    expect(
+      screen.getByRole('option', { name: 'gemini-2.5-pro-exp-custom' }),
+    ).toBeInTheDocument();
   });
 
   it('clears plaintext api key fields after a successful save', async () => {
@@ -182,6 +273,35 @@ describe('AiAgentsCard', () => {
     expect(openrouterKeyInput.value).toBe('');
   });
 
+  it('ignores draft edits while save is in flight', async () => {
+    let resolveSave: ((value: UserSettingsResponse) => void) | undefined;
+    updateAiAgentsMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+
+    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    const modelInput = getMainModelInput() as HTMLInputElement;
+    fireEvent.change(modelInput, {
+      target: { value: 'openai/gpt-4.1-mini' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    fireEvent.change(modelInput, {
+      target: { value: 'deepseek-v4-pro' },
+    });
+
+    expect(modelInput.value).toBe('openai/gpt-4.1-mini');
+
+    await act(async () => {
+      resolveSave?.(buildSettings({ selectedModel: 'openai/gpt-4.1-mini' }));
+      await Promise.resolve();
+    });
+  });
+
   it('sends explicit provider and model clears on save', async () => {
     updateAiAgentsMock.mockResolvedValue(buildSettings({ selectedProvider: null, selectedModel: null }));
 
@@ -190,7 +310,7 @@ describe('AiAgentsCard', () => {
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: '' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(getMainModelInput(), {
       target: { value: '' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
@@ -226,7 +346,7 @@ describe('AiAgentsCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
     expect(screen.getByText(/testing the current visible ai draft/i)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(getMainModelInput(), {
       target: { value: 'gpt-4o-mini' },
     });
 
@@ -252,7 +372,7 @@ describe('AiAgentsCard', () => {
       target: { value: 'gemini' },
     });
 
-    expect(screen.getByLabelText(/model/i)).toHaveValue('gemini-3-flash-preview');
+    expect(getMainModelInput()).toHaveValue('gemini-3-flash-preview');
   });
 
   it('autofills deepseek model when provider switches to deepseek', () => {
@@ -262,7 +382,7 @@ describe('AiAgentsCard', () => {
       target: { value: 'deepseek' },
     });
 
-    expect(screen.getByLabelText(/model/i)).toHaveValue('deepseek-v4-flash');
+    expect(getMainModelInput()).toHaveValue('deepseek-v4-flash');
   });
 
   it('shows higher-end suggested models for each provider', () => {
@@ -295,7 +415,7 @@ describe('AiAgentsCard', () => {
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'openai' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(getMainModelInput(), {
       target: { value: '' },
     });
 

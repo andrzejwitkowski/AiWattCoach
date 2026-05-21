@@ -16,11 +16,14 @@ use aiwattcoach::{
             settings_adapter::{IntervalsSettingsAdapter, SettingsIntervalsProvider},
         },
         llm::{
-            adapter::LlmAdapter, athlete_summary_generator::AthleteSummaryLlmGenerator,
-            dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
+            adapter::LlmAdapter,
+            athlete_summary_generator::AthleteSummaryLlmGenerator,
+            dev_adapter::DevLlmCoachAdapter,
+            gemini::{batch_client::GeminiBatchClient, client::GeminiClient},
             get_selected_workout_data::GetSelectedWorkoutDataAdapter,
             openai_compatible::client::OpenAiCompatibleClient,
-            openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
+            openrouter::client::OpenRouterClient,
+            settings_adapter::SettingsLlmConfigProvider,
             training_plan_generator::TrainingPlanLlmGenerator,
             update_planned_workout_data::UpdatePlannedWorkoutDataAdapter,
             workout_summary_coach::LlmWorkoutCoach,
@@ -58,6 +61,7 @@ use aiwattcoach::{
             training_plan_generation_operations::MongoTrainingPlanGenerationOperationRepository,
             training_plan_projections::MongoTrainingPlanProjectionRepository,
             training_plan_snapshots::MongoTrainingPlanSnapshotRepository,
+            training_plan_supervisor_operations::MongoTrainingPlanSupervisorOperationRepository,
             users::MongoUserRepository,
             wahoo_connect_state::MongoWahooConnectStateRepository,
             wahoo_fit_files::MongoWahooFitFileRepository,
@@ -112,6 +116,10 @@ use aiwattcoach::{
         training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
         TrainingPlanGenerationService,
     },
+    domain::training_plan_supervisor::{
+        GeminiTrainingPlanSupervisorWebhookService, TrainingPlanSupervisorService,
+        TrainingPlanSupervisorWebhookUseCases,
+    },
     domain::wahoo::{WahooService, WahooWebhookService},
     domain::wahoo_fit_enrichment::{
         wahoo_fit_enrichment_task_handler, SchedulerBackedWahooFitEnrichmentService,
@@ -139,6 +147,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         server,
         mongo,
         auth,
+        gemini_supervisor_webhook_token,
         dev_intervals_enabled,
         dev_llm_coach_enabled,
         client_log_ingestion_enabled,
@@ -274,6 +283,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     training_plan_generation_operation_repository
         .ensure_indexes()
         .await?;
+    let training_plan_supervisor_operation_repository =
+        MongoTrainingPlanSupervisorOperationRepository::new(mongo_client.clone(), &mongo_database);
+    training_plan_supervisor_operation_repository
+        .ensure_indexes()
+        .await?;
+    let gemini_http_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()?;
+    let gemini_batch_client = GeminiBatchClient::new(gemini_http_client);
     // These repositories are bootstrapped at startup so their durable collections
     // have indexes in place before background sync workflows start using them.
     let external_observation_repository =
@@ -635,6 +654,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             TrainingPlanWorkoutSummaryAdapter::new(workout_summary_direct_service.clone()),
             SystemClock,
         )
+        .with_training_plan_supervisor(
+            TrainingPlanSupervisorService::new(
+                training_plan_supervisor_operation_repository,
+                (*settings_service).clone(),
+                SystemClock,
+            )
+            .with_batch(gemini_batch_client.clone())
+            .with_sync_states(external_sync_state_repository.clone()),
+        )
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
     let training_plan_service = Arc::new(SchedulerBackedTrainingPlanService::new(
@@ -642,6 +670,25 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         shared_task_scheduler.clone(),
         UuidIdGenerator,
     ));
+    let training_plan_supervisor_webhook_service: Arc<dyn TrainingPlanSupervisorWebhookUseCases> =
+        Arc::new(
+            GeminiTrainingPlanSupervisorWebhookService::new(
+                TrainingPlanSupervisorService::new(
+                    MongoTrainingPlanSupervisorOperationRepository::new(
+                        mongo_client.clone(),
+                        &mongo_database,
+                    ),
+                    (*settings_service).clone(),
+                    SystemClock,
+                )
+                .with_batch(gemini_batch_client.clone())
+                .with_sync_states(external_sync_state_repository.clone()),
+                training_plan_projection_repository.clone(),
+                gemini_batch_client,
+                gemini_supervisor_webhook_token.clone(),
+            )
+            .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
+        );
     let race_service = Arc::new(
         RaceService::new(
             authoritative_race_repository.clone(),
@@ -759,7 +806,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_workout_summary_save_notifier((*save_notifier).clone())
         .with_intervals_service(intervals_service)
         .with_race_service(race_service)
-        .with_intervals_connection_tester(Arc::new(intervals_connection_tester));
+        .with_intervals_connection_tester(Arc::new(intervals_connection_tester))
+        .with_gemini_supervisor_webhook_token(gemini_supervisor_webhook_token)
+        .with_training_plan_supervisor_webhook_service(training_plan_supervisor_webhook_service);
     let app_state = if let Some(wahoo_service) = wahoo_service {
         let app_state = app_state.with_wahoo_service(wahoo_service);
         if let Some(wahoo_webhook_service) = wahoo_webhook_service {

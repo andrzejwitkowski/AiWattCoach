@@ -46,6 +46,7 @@ pub(super) fn build_projected_calendar_event(
             source_workout_id: day.workout_id,
             rest_day: day.rest_day,
             rest_day_reason: day.rest_day_reason,
+            supervisor_status: day.supervisor_status,
         }),
         sync_status: Some(status),
         linked_intervals_event_id,

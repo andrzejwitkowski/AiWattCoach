@@ -131,6 +131,9 @@ pub(super) struct ProjectedWorkoutDto {
     #[serde(rename = "restDayReason")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rest_day_reason: Option<String>,
+    #[serde(rename = "supervisorStatus")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supervisor_status: Option<String>,
 }
 
 #[derive(Serialize)]

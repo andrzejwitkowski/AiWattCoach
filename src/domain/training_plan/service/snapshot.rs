@@ -11,7 +11,7 @@ use crate::domain::training_plan::{
     TrainingPlanSnapshot, TrainingPlanSnapshotRepository, TrainingPlanWorkoutSummaryPort,
 };
 
-impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
+impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Supervisor, Refresh>
     TrainingPlanGenerationService<
         Snapshots,
         Projections,
@@ -19,6 +19,7 @@ impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refres
         Generator,
         WorkoutSummary,
         Time,
+        Supervisor,
         Refresh,
     >
 where
@@ -28,6 +29,7 @@ where
     Generator: TrainingPlanGenerator + Clone,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone,
     Time: Clock + Clone,
+    Supervisor: crate::domain::training_plan_supervisor::TrainingPlanSupervisorScheduler + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
 {
     fn days_are_contiguous(days: &[TrainingPlanDay]) -> bool {
@@ -97,6 +99,7 @@ where
                 rest_day: day.rest_day,
                 rest_day_reason: day.rest_day_reason.clone(),
                 workout: day.workout.clone(),
+                supervisor_status: None,
                 superseded_at_epoch_seconds: None,
                 created_at_epoch_seconds: self.clock.now_epoch_seconds(),
                 updated_at_epoch_seconds: self.clock.now_epoch_seconds(),

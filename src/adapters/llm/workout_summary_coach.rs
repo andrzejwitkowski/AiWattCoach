@@ -181,7 +181,7 @@ where
             } else {
                 None
             };
-            let request = build_chat_request(LlmChatRequestInput {
+            let mut request = build_chat_request(LlmChatRequestInput {
                 user_id: user_id.clone(),
                 system_prompt,
                 stable_context,
@@ -191,6 +191,8 @@ where
                 cache_key: Some(context_hash.clone()),
                 reusable_cache_id,
             });
+            request.response_mime_type = Some("application/json".to_string());
+            request.response_schema_json = Some(workout_summary_coach_reply_json_schema());
             tracing::info!(
                 user_id = %user_id,
                 workout_id = %summary.workout_id,

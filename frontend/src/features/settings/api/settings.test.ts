@@ -142,6 +142,8 @@ describe('settings api', () => {
         deepseekApiKeySet: false,
         selectedProvider: null,
         selectedModel: null,
+        trainingPlanSupervisorEnabled: false,
+        trainingPlanSupervisorModel: 'gemini-2.5-pro',
       },
       intervals: {
         apiKey: null,
@@ -533,6 +535,38 @@ describe('settings api', () => {
         deepseekApiKey: 'sk-ds-key',
         selectedProvider: 'deepseek',
         selectedModel: 'deepseek-v4-flash',
+      }),
+    });
+  });
+
+  it('includes training plan supervisor fields in update requests', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateAiAgents('', {
+      trainingPlanSupervisorEnabled: true,
+      trainingPlanSupervisorModel: ' gemini-2.5-flash ',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/ai-agents', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        trainingPlanSupervisorEnabled: true,
+        trainingPlanSupervisorModel: 'gemini-2.5-flash',
       }),
     });
   });

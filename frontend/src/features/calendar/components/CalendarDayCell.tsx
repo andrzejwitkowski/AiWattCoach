@@ -27,6 +27,13 @@ type PlannedSyncVisual = {
   label: string;
 };
 
+type SupervisorVisual = {
+  badgeClass: string;
+  textClass: string;
+  label: string;
+  shortLabel: string;
+};
+
 type RacePriorityVisual = {
   className: string;
   label: string;
@@ -88,6 +95,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   // Only accessed inside hasCompactRacePrep branches where primaryPlannedWorkoutEvent is guaranteed non-null.
   const compactPlannedEvent = primaryPlannedWorkoutEvent!;
   const plannedSyncStatus = primaryPlannedWorkoutEvent?.syncStatus ?? null;
+  const supervisorStatus = primaryPlannedWorkoutEvent?.projectedWorkout?.supervisorStatus ?? null;
   const hasTraining = Boolean(visibleActivity || primaryEvent || raceLabel);
   const pickerVisibleItemCount = dayItems.length;
   const visibleItemCount = visibleActivity
@@ -142,6 +150,8 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
       : BedDouble;
   const isSelectable = hasTraining && Boolean(onSelect);
   const plannedSyncVisual = isPredictedPlannedOnly ? getPlannedSyncVisual(plannedSyncStatus, t) : null;
+  const supervisorVisual = supervisorStatus ? getSupervisorVisual(supervisorStatus, t) : null;
+  const workerOnlyLabel = isPredictedPlannedOnly && !supervisorStatus ? t('calendar.supervisorWorkerOnly') : null;
   const racePriorityVisual = raceLabel ? getRacePriorityVisual(raceLabel.payload.priority) : null;
   const matchedPlanBadgeLabel = hasMatchedPlannedWorkout ? t('calendar.planMatched') : null;
 
@@ -192,6 +202,16 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
               <plannedSyncVisual.icon className={plannedSyncVisual.iconClass} size={12} />
             </span>
           ) : null}
+          {supervisorVisual ? (
+            <span
+              className={supervisorVisual.badgeClass}
+              title={supervisorVisual.label}
+              aria-label={supervisorVisual.label}
+              data-testid="supervisor-status"
+            >
+              {supervisorVisual.shortLabel}
+            </span>
+          ) : null}
           <Icon className={iconColorClass(tone)} size={14} />
         </div>
       </div>
@@ -238,6 +258,16 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
               {plannedSyncVisual ? (
                 <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${plannedSyncVisual.iconClass}`}>
                   {plannedSyncVisual.label}
+                </p>
+              ) : null}
+              {supervisorVisual ? (
+                <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${supervisorVisual.textClass}`}>
+                  {supervisorVisual.label}
+                </p>
+              ) : null}
+              {workerOnlyLabel ? (
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                  {workerOnlyLabel}
                 </p>
               ) : null}
             </div>
@@ -603,6 +633,43 @@ function getPlannedSyncVisual(
         iconClass: 'text-[#d8ce9c]',
         badgeClass: 'inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#b9b082]/35 bg-[#b9b082]/10',
         label: t('calendar.notSynced'),
+      };
+  }
+}
+
+function getSupervisorVisual(
+  status: NonNullable<NonNullable<CalendarDay['events'][number]['projectedWorkout']>['supervisorStatus']>,
+  t: ReturnType<typeof useTranslation>['t'],
+): SupervisorVisual {
+  switch (status) {
+    case 'accepted':
+      return {
+        badgeClass: 'inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-[#80d998]/35 bg-[#80d998]/10 px-1 text-[9px] font-black text-[#8fe8a4]',
+        textClass: 'text-[#8fe8a4]',
+        label: t('calendar.supervisorAccepted'),
+        shortLabel: 'AI',
+      };
+    case 'replaced':
+      return {
+        badgeClass: 'inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-[#00e3fd]/35 bg-[#00e3fd]/10 px-1 text-[9px] font-black text-[#00e3fd]',
+        textClass: 'text-[#00e3fd]',
+        label: t('calendar.supervisorReplaced'),
+        shortLabel: 'AI',
+      };
+    case 'failed':
+      return {
+        badgeClass: 'inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-[#ff7351]/35 bg-[#ff7351]/10 px-1 text-[9px] font-black text-[#ff9b85]',
+        textClass: 'text-[#ff9b85]',
+        label: t('calendar.supervisorFailed'),
+        shortLabel: 'AI',
+      };
+    case 'pending':
+    default:
+      return {
+        badgeClass: 'inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-[#b9b082]/35 bg-[#b9b082]/10 px-1 text-[9px] font-black text-[#d8ce9c]',
+        textClass: 'text-[#d8ce9c]',
+        label: t('calendar.supervisorPending'),
+        shortLabel: 'AI',
       };
   }
 }

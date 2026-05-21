@@ -127,6 +127,7 @@ fn map_calendar_entry_to_event(
                         &entry.date,
                         entry.rest_day,
                         entry.rest_day_reason.as_deref(),
+                        entry.supervisor_status,
                     )
                 })
         }
@@ -298,6 +299,9 @@ fn parse_projected_workout(
     date: &str,
     rest_day: bool,
     rest_day_reason: Option<&str>,
+    supervisor_status: Option<
+        crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus,
+    >,
 ) -> Option<CalendarProjectedWorkout> {
     let (operation_key, projected_date) = planned_workout_id.rsplit_once(':')?;
     if projected_date != date {
@@ -311,5 +315,6 @@ fn parse_projected_workout(
         source_workout_id: planned_workout_id.to_string(),
         rest_day,
         rest_day_reason: rest_day_reason.map(ToString::to_string),
+        supervisor_status,
     })
 }

@@ -1,6 +1,9 @@
 use std::sync::{Arc, Mutex};
 
-use aiwattcoach::domain::training_plan::TrainingPlanReplacementResult;
+use aiwattcoach::domain::training_plan::{
+    TrainingPlanPartialReplacement, TrainingPlanReplacementResult,
+};
+use aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorStatus;
 
 use super::{
     push_call, CallLog, TrainingPlanError, TrainingPlanGenerationClaimResult,
@@ -284,6 +287,68 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
                 projected_days: projected_days.clone(),
                 superseded_date_range,
             })
+        })
+    }
+
+    fn update_supervisor_status(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+        supervisor_status: Option<TrainingPlanSupervisorStatus>,
+        updated_at_epoch_seconds: i64,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<(), TrainingPlanError>> {
+        let store = self.projected_days.clone();
+        let user_id = user_id.to_string();
+        let operation_key = operation_key.to_string();
+        Box::pin(async move {
+            for day in store.lock().unwrap().iter_mut() {
+                if day.user_id == user_id
+                    && day.operation_key == operation_key
+                    && day.superseded_at_epoch_seconds.is_none()
+                {
+                    day.supervisor_status = supervisor_status;
+                    day.updated_at_epoch_seconds = updated_at_epoch_seconds;
+                }
+            }
+            Ok(())
+        })
+    }
+
+    fn apply_partial_replacement(
+        &self,
+        replacement: TrainingPlanPartialReplacement,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<(), TrainingPlanError>> {
+        let store = self.projected_days.clone();
+        let snapshots = self.snapshots.clone();
+        Box::pin(async move {
+            let replace_dates = replacement
+                .replace_dates
+                .iter()
+                .cloned()
+                .collect::<std::collections::HashSet<_>>();
+            let mut stored = store.lock().unwrap();
+            for projected_day in replacement
+                .projected_days
+                .iter()
+                .filter(|day| replace_dates.contains(&day.date))
+            {
+                if let Some(existing) = stored.iter_mut().find(|existing| {
+                    existing.user_id == projected_day.user_id
+                        && existing.operation_key == projected_day.operation_key
+                        && existing.date == projected_day.date
+                        && existing.superseded_at_epoch_seconds.is_none()
+                }) {
+                    *existing = projected_day.clone();
+                }
+            }
+            let mut stored_snapshots = snapshots.lock().unwrap();
+            if let Some(existing) = stored_snapshots
+                .iter_mut()
+                .find(|existing| existing.operation_key == replacement.snapshot.operation_key)
+            {
+                *existing = replacement.snapshot;
+            }
+            Ok(())
         })
     }
 }

@@ -26,6 +26,8 @@ function buildSettings(): UserSettingsResponse {
       deepseekApiKeySet: false,
       selectedProvider: null,
       selectedModel: null,
+      trainingPlanSupervisorEnabled: false,
+      trainingPlanSupervisorModel: 'gemini-2.5-pro',
     },
     intervals: {
       apiKey: null,

@@ -14,6 +14,8 @@ const aiAgentsSettingsSchema = z.object({
   deepseekApiKeySet: z.boolean(),
   selectedProvider: llmProviderSchema.nullable().optional(),
   selectedModel: z.string().nullable().optional(),
+  trainingPlanSupervisorEnabled: z.boolean(),
+  trainingPlanSupervisorModel: z.string().nullable().optional(),
 });
 
 const intervalsSettingsSchema = z.object({
@@ -148,6 +150,8 @@ export const updateAiAgentsRequestSchema = z.object({
   deepseekApiKey: z.string().nullable().optional(),
   selectedProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
   selectedModel: z.string().nullable().optional(),
+  trainingPlanSupervisorEnabled: z.boolean().optional(),
+  trainingPlanSupervisorModel: z.string().nullable().optional(),
 });
 
 export type LlmProvider = z.infer<typeof llmProviderSchema>;

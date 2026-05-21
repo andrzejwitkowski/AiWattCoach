@@ -42,12 +42,23 @@ function normalizeAiAgentsPayload(data: unknown) {
         : candidate.selectedProvider,
     selectedModel:
       typeof candidate.selectedModel === 'string' ? candidate.selectedModel.trim() : candidate.selectedModel,
+    trainingPlanSupervisorModel:
+      typeof candidate.trainingPlanSupervisorModel === 'string'
+        ? candidate.trainingPlanSupervisorModel.trim()
+        : candidate.trainingPlanSupervisorModel,
   };
 }
 
 function getAiAgentsFieldValue(
   data: unknown,
-  key: 'openaiApiKey' | 'geminiApiKey' | 'openrouterApiKey' | 'deepseekApiKey' | 'selectedProvider' | 'selectedModel',
+  key:
+    | 'openaiApiKey'
+    | 'geminiApiKey'
+    | 'openrouterApiKey'
+    | 'deepseekApiKey'
+    | 'selectedProvider'
+    | 'selectedModel'
+    | 'trainingPlanSupervisorModel',
   validatedValue: string | null | undefined,
 ) {
   if (!data || typeof data !== 'object' || !(key in data)) {
@@ -103,7 +114,7 @@ export async function loadSettings(apiBaseUrl: string) {
 
 export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
   const validated = updateAiAgentsRequestSchema.parse(normalizeAiAgentsPayload(data));
-  const body: Record<string, string | null> = {};
+  const body: Record<string, string | boolean | null> = {};
 
   const openaiApiKey = getAiAgentsFieldValue(data, 'openaiApiKey', validated.openaiApiKey);
   const geminiApiKey = getAiAgentsFieldValue(data, 'geminiApiKey', validated.geminiApiKey);
@@ -111,7 +122,15 @@ export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
   const deepseekApiKey = getAiAgentsFieldValue(data, 'deepseekApiKey', validated.deepseekApiKey);
   const selectedProvider = getAiAgentsFieldValue(data, 'selectedProvider', validated.selectedProvider);
   const selectedModel = getAiAgentsFieldValue(data, 'selectedModel', validated.selectedModel);
+  const trainingPlanSupervisorModel = getAiAgentsFieldValue(
+    data,
+    'trainingPlanSupervisorModel',
+    validated.trainingPlanSupervisorModel,
+  );
 
+  if (data && typeof data === 'object' && 'trainingPlanSupervisorEnabled' in data) {
+    body.trainingPlanSupervisorEnabled = validated.trainingPlanSupervisorEnabled ?? false;
+  }
   if (openaiApiKey !== undefined) {
     body.openaiApiKey = openaiApiKey;
   }
@@ -129,6 +148,9 @@ export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
   }
   if (selectedModel !== undefined) {
     body.selectedModel = selectedModel;
+  }
+  if (trainingPlanSupervisorModel !== undefined) {
+    body.trainingPlanSupervisorModel = trainingPlanSupervisorModel;
   }
 
   return patch(apiBaseUrl, '/api/settings/ai-agents', body);

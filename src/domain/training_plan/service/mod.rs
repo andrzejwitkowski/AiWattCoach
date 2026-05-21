@@ -12,6 +12,9 @@ use crate::domain::{
     ai_workflow::{ValidationIssue, WorkflowPhase, WorkflowStatus},
     calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
     identity::Clock,
+    training_plan_supervisor::{
+        NoopTrainingPlanSupervisorScheduler, TrainingPlanSupervisorScheduler,
+    },
     workout_summary::WorkoutRecap,
 };
 
@@ -51,6 +54,7 @@ pub struct TrainingPlanGenerationService<
     Generator,
     WorkoutSummary,
     Time,
+    Supervisor = NoopTrainingPlanSupervisorScheduler,
     Refresh = NoopCalendarEntryViewRefresh,
 > where
     Snapshots: TrainingPlanSnapshotRepository + Clone,
@@ -59,6 +63,7 @@ pub struct TrainingPlanGenerationService<
     Generator: TrainingPlanGenerator + Clone,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone,
     Time: Clock + Clone,
+    Supervisor: TrainingPlanSupervisorScheduler + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
 {
     snapshots: Snapshots,
@@ -67,6 +72,7 @@ pub struct TrainingPlanGenerationService<
     generator: Generator,
     workout_summary: WorkoutSummary,
     clock: Time,
+    supervisor: Supervisor,
     refresh: Refresh,
 }
 
@@ -74,6 +80,27 @@ pub(super) struct ParsedPlanWindow {
     pub(super) days_by_date: BTreeMap<String, TrainingPlanDay>,
     pub(super) issues: Vec<ValidationIssue>,
     pub(super) invalid_day_sections: Vec<String>,
+}
+
+fn snapshot_to_plan_text(snapshot: &TrainingPlanSnapshot) -> String {
+    snapshot
+        .days
+        .iter()
+        .map(|day| {
+            let body = if day.rest_day {
+                day.rest_day_reason
+                    .as_ref()
+                    .map(|reason| format!("Rest Day: {reason}"))
+                    .unwrap_or_else(|| "Rest Day".to_string())
+            } else if let Some(workout) = day.workout.as_ref() {
+                crate::domain::intervals::serialize_planned_workout(workout)
+            } else {
+                "Rest Day".to_string()
+            };
+            format!("{}\n{}", day.date, body)
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time>
@@ -84,6 +111,7 @@ impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time>
         Generator,
         WorkoutSummary,
         Time,
+        NoopTrainingPlanSupervisorScheduler,
     >
 where
     Snapshots: TrainingPlanSnapshotRepository + Clone,
@@ -108,7 +136,58 @@ where
             generator,
             workout_summary,
             clock,
+            supervisor: NoopTrainingPlanSupervisorScheduler,
             refresh: NoopCalendarEntryViewRefresh,
+        }
+    }
+}
+
+impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Supervisor, Refresh>
+    TrainingPlanGenerationService<
+        Snapshots,
+        Projections,
+        Operations,
+        Generator,
+        WorkoutSummary,
+        Time,
+        Supervisor,
+        Refresh,
+    >
+where
+    Snapshots: TrainingPlanSnapshotRepository + Clone,
+    Projections: TrainingPlanProjectionRepository + Clone,
+    Operations: TrainingPlanGenerationOperationRepository + Clone,
+    Generator: TrainingPlanGenerator + Clone,
+    WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone,
+    Time: Clock + Clone,
+    Supervisor: TrainingPlanSupervisorScheduler + Clone,
+    Refresh: CalendarEntryViewRefreshPort + Clone,
+{
+    pub fn with_training_plan_supervisor<NewSupervisor>(
+        self,
+        supervisor: NewSupervisor,
+    ) -> TrainingPlanGenerationService<
+        Snapshots,
+        Projections,
+        Operations,
+        Generator,
+        WorkoutSummary,
+        Time,
+        NewSupervisor,
+        Refresh,
+    >
+    where
+        NewSupervisor: TrainingPlanSupervisorScheduler + Clone,
+    {
+        TrainingPlanGenerationService {
+            snapshots: self.snapshots,
+            projections: self.projections,
+            operations: self.operations,
+            generator: self.generator,
+            workout_summary: self.workout_summary,
+            clock: self.clock,
+            supervisor,
+            refresh: self.refresh,
         }
     }
 
@@ -122,6 +201,7 @@ where
         Generator,
         WorkoutSummary,
         Time,
+        Supervisor,
         NewRefresh,
     >
     where
@@ -134,12 +214,13 @@ where
             generator: self.generator,
             workout_summary: self.workout_summary,
             clock: self.clock,
+            supervisor: self.supervisor,
             refresh,
         }
     }
 }
 
-impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
+impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Supervisor, Refresh>
     TrainingPlanGenerationService<
         Snapshots,
         Projections,
@@ -147,6 +228,7 @@ impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refres
         Generator,
         WorkoutSummary,
         Time,
+        Supervisor,
         Refresh,
     >
 where
@@ -156,6 +238,7 @@ where
     Generator: TrainingPlanGenerator + Clone,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone,
     Time: Clock + Clone,
+    Supervisor: TrainingPlanSupervisorScheduler + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
 {
     const SNAPSHOT_DAY_COUNT: usize = 14;
@@ -416,6 +499,39 @@ where
                 "training plan projection persistence incomplete after replace_window".to_string(),
             ));
         }
+        let supervisor_plan_text = operation
+            .raw_plan_response
+            .clone()
+            .unwrap_or_else(|| snapshot_to_plan_text(&replacement.snapshot));
+        let supervisor_operation = self
+            .supervisor
+            .initialize_pending_review(
+                &replacement.snapshot.user_id,
+                &replacement.snapshot.operation_key,
+                replacement.snapshot.saved_at_epoch_seconds,
+                &supervisor_plan_text,
+            )
+            .await?;
+        let supervisor_status = supervisor_operation
+            .as_ref()
+            .map(|operation| operation.status);
+        if supervisor_status.is_some() {
+            self.projections
+                .update_supervisor_status(
+                    &replacement.snapshot.user_id,
+                    &replacement.snapshot.operation_key,
+                    supervisor_status,
+                    self.clock.now_epoch_seconds(),
+                )
+                .await?;
+        }
+        let active_projected_days = active_projected_days
+            .into_iter()
+            .map(|mut day| {
+                day.supervisor_status = supervisor_status;
+                day
+            })
+            .collect::<Vec<_>>();
         let refresh_start = replacement
             .superseded_date_range
             .as_ref()
@@ -445,7 +561,7 @@ where
     }
 }
 
-impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
+impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Supervisor, Refresh>
     TrainingPlanUseCases
     for TrainingPlanGenerationService<
         Snapshots,
@@ -454,6 +570,7 @@ impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refres
         Generator,
         WorkoutSummary,
         Time,
+        Supervisor,
         Refresh,
     >
 where
@@ -463,6 +580,7 @@ where
     Generator: TrainingPlanGenerator + Clone + 'static,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone + 'static,
     Time: Clock + Clone + 'static,
+    Supervisor: TrainingPlanSupervisorScheduler + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     fn generate_recap_for_saved_workout(

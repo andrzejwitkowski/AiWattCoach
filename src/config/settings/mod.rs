@@ -43,6 +43,10 @@ impl Settings {
                 session: SessionSettings::parse(values)?,
                 admin_emails: parse_admin_emails(values.get("ADMIN_EMAILS")),
             },
+            gemini_supervisor_webhook_token: parse::optional_string_setting(
+                values,
+                "GEMINI_SUPERVISOR_WEBHOOK_TOKEN",
+            ),
             dev_intervals_enabled: parse::optional_bool_setting(
                 values.get("DEV_INTERVALS_ENABLED"),
                 "DEV_INTERVALS_ENABLED",
@@ -78,6 +82,7 @@ impl Settings {
             server: types::ServerSettings::test_defaults(),
             mongo: types::MongoSettings::test_defaults(),
             auth: AuthSettings::test_defaults(),
+            gemini_supervisor_webhook_token: None,
             dev_intervals_enabled: false,
             dev_llm_coach_enabled: false,
             client_log_ingestion_enabled: false,
@@ -88,7 +93,7 @@ impl Settings {
 }
 
 fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
-    const KEYS: [&str; 30] = [
+    const KEYS: [&str; 31] = [
         "APP_NAME",
         "SERVER_HOST",
         "SERVER_PORT",
@@ -116,6 +121,7 @@ fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
         "SESSION_TTL_HOURS",
         "SESSION_COOKIE_SECURE",
         "ADMIN_EMAILS",
+        "GEMINI_SUPERVISOR_WEBHOOK_TOKEN",
         "ENABLE_CLIENT_LOG_INGESTION",
         "ENABLE_LEGACY_TIME_STREAM_CLEANUP",
         "TRUST_PROXY_HEADERS",

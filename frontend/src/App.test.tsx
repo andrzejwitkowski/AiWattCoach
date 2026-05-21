@@ -375,7 +375,13 @@ describe('App', () => {
               geminiApiKey: null,
               geminiApiKeySet: false,
               openrouterApiKey: null,
-              openrouterApiKeySet: false
+              openrouterApiKeySet: false,
+              deepseekApiKey: null,
+              deepseekApiKeySet: false,
+              selectedProvider: null,
+              selectedModel: null,
+              trainingPlanSupervisorEnabled: false,
+              trainingPlanSupervisorModel: 'gemini-2.5-pro'
             },
             intervals: {
               apiKey: null,

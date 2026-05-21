@@ -21,6 +21,7 @@ use crate::domain::llm::{LlmChatPort, UserLlmConfigProvider};
 use crate::domain::races::RaceUseCases;
 use crate::domain::settings::UserSettingsUseCases;
 use crate::domain::training_load::TrainingLoadDashboardReadUseCases;
+use crate::domain::training_plan_supervisor::TrainingPlanSupervisorWebhookUseCases;
 use crate::domain::wahoo::WahooUseCases;
 use crate::domain::wahoo::WahooWebhookUseCases;
 use crate::domain::workout_summary::WorkoutSummaryUseCases;
@@ -41,6 +42,9 @@ pub struct AppState {
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
     pub wahoo_service: Option<Arc<dyn WahooUseCases>>,
     pub wahoo_webhook_service: Option<Arc<dyn WahooWebhookUseCases>>,
+    pub gemini_supervisor_webhook_token: Option<String>,
+    pub training_plan_supervisor_webhook_service:
+        Option<Arc<dyn TrainingPlanSupervisorWebhookUseCases>>,
     pub race_service: Option<Arc<dyn RaceUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     pub training_load_dashboard_service: Option<Arc<dyn TrainingLoadDashboardReadUseCases>>,
@@ -122,6 +126,8 @@ impl AppState {
             intervals_service: None,
             wahoo_service: None,
             wahoo_webhook_service: None,
+            gemini_supervisor_webhook_token: None,
+            training_plan_supervisor_webhook_service: None,
             race_service: None,
             settings_service: None,
             training_load_dashboard_service: None,
@@ -284,6 +290,23 @@ impl AppState {
         wahoo_webhook_service: Arc<dyn WahooWebhookUseCases>,
     ) -> Self {
         self.wahoo_webhook_service = Some(wahoo_webhook_service);
+        self
+    }
+
+    pub fn with_training_plan_supervisor_webhook_service(
+        mut self,
+        training_plan_supervisor_webhook_service: Arc<dyn TrainingPlanSupervisorWebhookUseCases>,
+    ) -> Self {
+        self.training_plan_supervisor_webhook_service =
+            Some(training_plan_supervisor_webhook_service);
+        self
+    }
+
+    pub fn with_gemini_supervisor_webhook_token(
+        mut self,
+        gemini_supervisor_webhook_token: Option<String>,
+    ) -> Self {
+        self.gemini_supervisor_webhook_token = gemini_supervisor_webhook_token;
         self
     }
 

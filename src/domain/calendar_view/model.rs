@@ -1,3 +1,5 @@
+use crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CalendarEntryViewError {
     Repository(String),
@@ -74,4 +76,5 @@ pub struct CalendarEntryView {
     pub race: Option<CalendarEntryRace>,
     pub summary: Option<CalendarEntrySummary>,
     pub sync: Option<CalendarEntrySync>,
+    pub supervisor_status: Option<TrainingPlanSupervisorStatus>,
 }

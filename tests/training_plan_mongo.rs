@@ -8,6 +8,7 @@ use aiwattcoach::{
         training_plan_generation_operations::MongoTrainingPlanGenerationOperationRepository,
         training_plan_projections::MongoTrainingPlanProjectionRepository,
         training_plan_snapshots::MongoTrainingPlanSnapshotRepository,
+        training_plan_supervisor_operations::MongoTrainingPlanSupervisorOperationRepository,
     },
     domain::{
         ai_workflow::{ValidationIssue, WorkflowPhase, WorkflowStatus},
@@ -21,6 +22,11 @@ use aiwattcoach::{
             TrainingPlanDay, TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
             TrainingPlanGenerationOperationRepository, TrainingPlanProjectedDay,
             TrainingPlanProjectionRepository, TrainingPlanSnapshot, TrainingPlanSnapshotRepository,
+        },
+        training_plan_supervisor::{
+            TrainingPlanSupervisorDecision, TrainingPlanSupervisorOperation,
+            TrainingPlanSupervisorOperationRepository, TrainingPlanSupervisorReview,
+            TrainingPlanSupervisorStatus,
         },
     },
     Settings,
@@ -221,6 +227,104 @@ async fn training_plan_generation_operation_repository_round_trips_recap_timesta
 }
 
 #[tokio::test]
+async fn training_plan_supervisor_operation_repository_round_trips_completed_review() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoTrainingPlanSupervisorOperationRepository::new(
+        fixture.client.clone(),
+        &fixture.database,
+    );
+    repository.ensure_indexes().await.unwrap();
+
+    let operation = TrainingPlanSupervisorOperation::pending(
+        "training-plan:user-1:workout-1:1700000000".to_string(),
+        "user-1".to_string(),
+        1_700_000_000,
+        "gemini-2.5-pro".to_string(),
+        1_700_000_050,
+    )
+    .complete_review(
+        TrainingPlanSupervisorReview {
+            decision: TrainingPlanSupervisorDecision::Replace,
+            reason: "needs more recovery before intensity".to_string(),
+            plan: Some("2026-04-06\nRest Day\n\n2026-04-07\nEndurance\n- 45m 65%".to_string()),
+        },
+        1_700_000_100,
+    )
+    .unwrap();
+    repository.upsert(operation.clone()).await.unwrap();
+
+    let found = repository
+        .find_by_worker_operation_key(&operation.worker_operation_key)
+        .await
+        .unwrap()
+        .expect("expected stored supervisor operation");
+
+    assert_eq!(found.status, TrainingPlanSupervisorStatus::Replaced);
+    assert_eq!(
+        found.review,
+        Some(TrainingPlanSupervisorReview {
+            decision: TrainingPlanSupervisorDecision::Replace,
+            reason: "needs more recovery before intensity".to_string(),
+            plan: Some("2026-04-06\nRest Day\n\n2026-04-07\nEndurance\n- 45m 65%".to_string()),
+        })
+    );
+    assert_eq!(found.updated_at_epoch_seconds, 1_700_000_100);
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn training_plan_supervisor_operation_repository_completes_pending_review_idempotently() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoTrainingPlanSupervisorOperationRepository::new(
+        fixture.client.clone(),
+        &fixture.database,
+    );
+    repository.ensure_indexes().await.unwrap();
+
+    let operation = TrainingPlanSupervisorOperation::pending(
+        "training-plan:user-1:workout-1:1700000000".to_string(),
+        "user-1".to_string(),
+        1_700_000_000,
+        "gemini-2.5-pro".to_string(),
+        1_700_000_050,
+    );
+    repository.upsert(operation).await.unwrap();
+
+    let review = TrainingPlanSupervisorReview {
+        decision: TrainingPlanSupervisorDecision::Accept,
+        reason: "looks good".to_string(),
+        plan: None,
+    };
+
+    let first = repository
+        .complete_review_if_pending(
+            "training-plan:user-1:workout-1:1700000000",
+            review.clone(),
+            1_700_000_100,
+        )
+        .await
+        .unwrap();
+    let second = repository
+        .complete_review_if_pending(
+            "training-plan:user-1:workout-1:1700000000",
+            review,
+            1_700_000_100,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(first, second);
+    assert_eq!(first.status, TrainingPlanSupervisorStatus::Accepted);
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
 async fn training_plan_snapshot_repository_finds_snapshot_by_operation_key() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;
@@ -380,6 +484,50 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
         .unwrap();
     assert_eq!(first_active.len(), 1);
     assert_eq!(first_active[0].date, "2026-04-06");
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn training_plan_projection_repository_updates_supervisor_status_for_active_operation_days() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoTrainingPlanProjectionRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    let snapshot = sample_snapshot("training-plan:user-1:workout-1:1700000000", "2026-04-06");
+    repository
+        .replace_window(
+            snapshot.clone(),
+            sample_projected_days(&snapshot, "2026-04-06"),
+            "2026-04-06",
+            1_700_000_000,
+        )
+        .await
+        .unwrap();
+
+    repository
+        .update_supervisor_status(
+            &snapshot.user_id,
+            &snapshot.operation_key,
+            Some(TrainingPlanSupervisorStatus::Accepted),
+            1_700_000_200,
+        )
+        .await
+        .unwrap();
+
+    let active = repository
+        .find_active_by_operation_key(&snapshot.operation_key)
+        .await
+        .unwrap();
+
+    assert_eq!(active.len(), 14);
+    assert!(active.iter().all(|day| {
+        day.supervisor_status == Some(TrainingPlanSupervisorStatus::Accepted)
+            && day.updated_at_epoch_seconds == 1_700_000_200
+    }));
 
     fixture.cleanup().await;
 }
@@ -815,6 +963,7 @@ fn sample_projected_days(
             rest_day: day.rest_day,
             rest_day_reason: day.rest_day_reason.clone(),
             workout: day.workout.clone(),
+            supervisor_status: None,
             superseded_at_epoch_seconds: None,
             created_at_epoch_seconds: snapshot.created_at_epoch_seconds,
             updated_at_epoch_seconds: snapshot.created_at_epoch_seconds,

@@ -2,6 +2,7 @@ use crate::domain::{
     ai_workflow::{AttemptRecord, ValidationIssue, WorkflowPhase, WorkflowStatus},
     intervals::PlannedWorkout,
     llm_tools::LlmToolLoopState,
+    training_plan_supervisor::TrainingPlanSupervisorStatus,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -9,6 +10,8 @@ pub enum TrainingPlanError {
     Unavailable(String),
     Repository(String),
     Validation(String),
+    GeminiSupervisorWebhookNotConfigured,
+    GeminiSupervisorWebhookUnauthorized,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,6 +53,12 @@ impl std::fmt::Display for TrainingPlanError {
             Self::Unavailable(message) => write!(f, "{message}"),
             Self::Repository(message) => write!(f, "{message}"),
             Self::Validation(message) => write!(f, "{message}"),
+            Self::GeminiSupervisorWebhookNotConfigured => {
+                write!(f, "Gemini supervisor webhook is not configured")
+            }
+            Self::GeminiSupervisorWebhookUnauthorized => {
+                write!(f, "Gemini supervisor webhook token is invalid")
+            }
         }
     }
 }
@@ -85,6 +94,7 @@ pub struct TrainingPlanProjectedDay {
     pub rest_day: bool,
     pub rest_day_reason: Option<String>,
     pub workout: Option<PlannedWorkout>,
+    pub supervisor_status: Option<TrainingPlanSupervisorStatus>,
     pub superseded_at_epoch_seconds: Option<i64>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,

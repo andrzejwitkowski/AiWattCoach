@@ -49,6 +49,8 @@ export function PlannedWorkoutDetailModal({
     : null;
   const activeInterval = chartIntervals.find((interval) => interval.id === highlightedIntervalKey) ?? null;
   const syncStatus = event.plannedSource === 'predicted' ? (event.syncStatus ?? 'unsynced') : null;
+  const supervisorStatus = event.projectedWorkout?.supervisorStatus ?? null;
+  const workerOnlyLabel = event.projectedWorkout && !supervisorStatus ? t('calendar.supervisorWorkerOnly') : null;
   const canSync = Boolean(event.projectedWorkout) && !event.restDay && !event.projectedWorkout?.restDay && !event.indoor;
   const canSyncToWahoo = canSync;
   const isInWahooSyncWindow = event.projectedWorkout ? isDateWithinWahooSyncWindow(event.projectedWorkout.date) : false;
@@ -143,6 +145,16 @@ export function PlannedWorkoutDetailModal({
         {syncStatus === 'modified' ? (
           <span className="rounded-full border border-[#ffb86a]/25 bg-[#ffb86a]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffd7a1]">
             {t('calendar.scheduleChanged')}
+          </span>
+        ) : null}
+        {supervisorStatus ? (
+          <span className="rounded-full border border-[#00e3fd]/20 bg-[#00e3fd]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#8eeeff]">
+            {supervisorBadgeLabel(supervisorStatus, t)}
+          </span>
+        ) : null}
+        {workerOnlyLabel ? (
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
+            {workerOnlyLabel}
           </span>
         ) : null}
         {canSync ? (
@@ -357,5 +369,22 @@ function syncBadgeLabel(syncStatus: NonNullable<IntervalEvent['syncStatus']>, t:
       return t('calendar.syncPending');
     default:
       return t('calendar.notSynced');
+  }
+}
+
+function supervisorBadgeLabel(
+  status: NonNullable<NonNullable<IntervalEvent['projectedWorkout']>['supervisorStatus']>,
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  switch (status) {
+    case 'accepted':
+      return t('calendar.supervisorAccepted');
+    case 'replaced':
+      return t('calendar.supervisorReplaced');
+    case 'failed':
+      return t('calendar.supervisorFailed');
+    case 'pending':
+    default:
+      return t('calendar.supervisorPending');
   }
 }

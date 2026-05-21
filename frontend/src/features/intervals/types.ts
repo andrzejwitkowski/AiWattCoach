@@ -109,6 +109,7 @@ export const intervalEventSchema = z.object({
     sourceWorkoutId: z.string(),
     restDay: z.boolean().optional().default(false),
     restDayReason: z.string().nullable().optional(),
+    supervisorStatus: z.enum(['pending', 'accepted', 'replaced', 'failed']).nullable().optional(),
   }).nullable().optional(),
 });
 

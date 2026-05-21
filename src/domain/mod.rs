@@ -24,6 +24,7 @@ pub mod task_scheduler;
 pub mod training_context;
 pub mod training_load;
 pub mod training_plan;
+pub mod training_plan_supervisor;
 pub mod wahoo;
 pub mod wahoo_fit_enrichment;
 pub mod wahoo_fit_files;

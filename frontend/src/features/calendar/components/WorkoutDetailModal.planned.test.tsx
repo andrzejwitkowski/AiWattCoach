@@ -247,6 +247,109 @@ describe('WorkoutDetailModal planned mode', () => {
     expect(within(metricCard('Duration')).getByText('16m')).toBeInTheDocument();
   });
 
+  it.each([
+    ['pending', 'AI review pending'],
+    ['accepted', 'AI reviewed'],
+    ['replaced', 'AI adjusted'],
+    ['failed', 'AI review failed'],
+  ] as const)('renders %s supervisor status separately from sync status', async (supervisorStatus, label) => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 78,
+        name: 'Reviewed Plan',
+        plannedSource: 'predicted',
+        syncStatus: 'synced',
+        projectedWorkout: {
+          projectedWorkoutId: 'training-plan:user-1:w1:1:2026-04-17',
+          operationKey: 'training-plan:user-1:w1:1',
+          date: '2026-04-17',
+          sourceWorkoutId: 'w1',
+          supervisorStatus,
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 45min 70%',
+          intervals: [makeIntervalDefinition({ definition: '- 45min 70%', durationSeconds: 2700, targetPercentFtp: 70, zoneId: 2 })],
+          segments: [makeWorkoutSegment({ label: '45min 70%', durationSeconds: 2700, endOffsetSeconds: 2700, targetPercentFtp: 70, zoneId: 2 })],
+          summary: makeWorkoutSummary({ totalDurationSeconds: 2700 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        selection={makeSelection({
+          event: makeEvent({
+            id: 78,
+            name: 'Reviewed Plan',
+            plannedSource: 'predicted',
+            syncStatus: 'synced',
+            projectedWorkout: {
+              projectedWorkoutId: 'training-plan:user-1:w1:1:2026-04-17',
+              operationKey: 'training-plan:user-1:w1:1',
+              date: '2026-04-17',
+              sourceWorkoutId: 'w1',
+              supervisorStatus,
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText(label)).toBeInTheDocument());
+
+    expect(screen.getByText('Synced')).toBeInTheDocument();
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it('renders worker-generated state when planned workout has no supervisor status', async () => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 79,
+        name: 'Worker Plan',
+        plannedSource: 'predicted',
+        syncStatus: 'unsynced',
+        projectedWorkout: {
+          projectedWorkoutId: 'training-plan:user-1:w1:1:2026-04-17',
+          operationKey: 'training-plan:user-1:w1:1',
+          date: '2026-04-17',
+          sourceWorkoutId: 'w1',
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 30min 65%',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 1800 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        selection={makeSelection({
+          event: makeEvent({
+            id: 79,
+            name: 'Worker Plan',
+            plannedSource: 'predicted',
+            syncStatus: 'unsynced',
+            projectedWorkout: {
+              projectedWorkoutId: 'training-plan:user-1:w1:1:2026-04-17',
+              operationKey: 'training-plan:user-1:w1:1',
+              date: '2026-04-17',
+              sourceWorkoutId: 'w1',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Worker generated')).toBeInTheDocument());
+
+    expect(screen.getByText('Not Synced')).toBeInTheDocument();
+    expect(screen.getByText('Worker generated')).toBeInTheDocument();
+  });
+
   it('renders grouped section headings for structured raw workout text', async () => {
     mockedLoadEvent.mockResolvedValue(
       makeEvent({

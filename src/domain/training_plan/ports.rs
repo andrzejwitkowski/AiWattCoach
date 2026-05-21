@@ -9,6 +9,14 @@ use super::{
     TrainingPlanReplacementResult, TrainingPlanSnapshot,
 };
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrainingPlanPartialReplacement {
+    pub snapshot: TrainingPlanSnapshot,
+    pub projected_days: Vec<TrainingPlanProjectedDay>,
+    pub replace_dates: Vec<String>,
+    pub replaced_at_epoch_seconds: i64,
+}
+
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 pub type TrainingPlanToolLoopCheckpoint =
     Arc<dyn Fn(LlmToolLoopState) -> BoxFuture<Result<(), TrainingPlanError>> + Send + Sync>;
@@ -44,6 +52,84 @@ pub trait TrainingPlanProjectionRepository: Send + Sync + 'static {
         today: &str,
         replaced_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>>;
+
+    fn apply_partial_replacement(
+        &self,
+        replacement: TrainingPlanPartialReplacement,
+    ) -> BoxFuture<Result<(), TrainingPlanError>>;
+
+    fn update_supervisor_status(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+        supervisor_status: Option<
+            crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus,
+        >,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), TrainingPlanError>>;
+}
+
+impl<T> TrainingPlanProjectionRepository for std::sync::Arc<T>
+where
+    T: TrainingPlanProjectionRepository + ?Sized,
+{
+    fn list_active_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>> {
+        self.as_ref().list_active_by_user_id(user_id)
+    }
+
+    fn find_active_by_operation_key(
+        &self,
+        operation_key: &str,
+    ) -> BoxFuture<Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>> {
+        self.as_ref().find_active_by_operation_key(operation_key)
+    }
+
+    fn find_active_by_user_id_and_operation_key(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+    ) -> BoxFuture<Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>> {
+        self.as_ref()
+            .find_active_by_user_id_and_operation_key(user_id, operation_key)
+    }
+
+    fn replace_window(
+        &self,
+        snapshot: TrainingPlanSnapshot,
+        projected_days: Vec<TrainingPlanProjectedDay>,
+        today: &str,
+        replaced_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>> {
+        self.as_ref()
+            .replace_window(snapshot, projected_days, today, replaced_at_epoch_seconds)
+    }
+
+    fn apply_partial_replacement(
+        &self,
+        replacement: TrainingPlanPartialReplacement,
+    ) -> BoxFuture<Result<(), TrainingPlanError>> {
+        self.as_ref().apply_partial_replacement(replacement)
+    }
+
+    fn update_supervisor_status(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+        supervisor_status: Option<
+            crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus,
+        >,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), TrainingPlanError>> {
+        self.as_ref().update_supervisor_status(
+            user_id,
+            operation_key,
+            supervisor_status,
+            updated_at_epoch_seconds,
+        )
+    }
 }
 
 pub trait TrainingPlanGenerationOperationRepository: Send + Sync + 'static {

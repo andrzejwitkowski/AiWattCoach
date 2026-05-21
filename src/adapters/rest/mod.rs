@@ -6,6 +6,7 @@ mod calendar_coach;
 mod completed_workouts;
 mod cookies;
 mod dashboard;
+mod gemini_supervisor_webhook;
 mod health;
 mod intervals;
 mod logging;
@@ -72,6 +73,14 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .merge(
             Router::new()
                 .route("/api/wahoo/webhook", post(wahoo::receive_webhook))
+                .route_layer(with_log_config(EndpointLogConfig::default())),
+        )
+        .merge(
+            Router::new()
+                .route(
+                    "/api/training-plan-supervisor/gemini/webhook/{worker_operation_key}",
+                    post(gemini_supervisor_webhook::receive_webhook),
+                )
                 .route_layer(with_log_config(EndpointLogConfig::default())),
         )
         .merge(Router::new().route(
@@ -289,7 +298,7 @@ fn make_request_span(request: &Request) -> Span {
             "health_request",
             http.method = %request.method(),
             http.route = %route,
-            http.target = %request.uri().path(),
+            http.target = %route,
             http.status_code = Empty,
             user_id = Empty,
             trace_id = Empty,
@@ -299,7 +308,7 @@ fn make_request_span(request: &Request) -> Span {
             "http_request",
             http.method = %request.method(),
             http.route = %route,
-            http.target = %request.uri().path(),
+            http.target = %route,
             http.status_code = Empty,
             user_id = Empty,
             trace_id = Empty,

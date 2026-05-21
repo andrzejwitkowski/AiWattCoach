@@ -1,4 +1,7 @@
-use crate::domain::settings::{AvailabilityDay, AvailabilitySettings, SettingsError, Weekday};
+use crate::domain::settings::{
+    AvailabilityDay, AvailabilitySettings, SettingsError, Weekday,
+    DEFAULT_TRAINING_PLAN_SUPERVISOR_MODEL,
+};
 
 use crate::domain::llm::LlmProvider;
 
@@ -93,19 +96,38 @@ pub fn validate_ai_provider(
 }
 
 pub fn validate_ai_model(model: Option<String>) -> Result<Option<String>, SettingsError> {
+    validate_named_model("selectedModel", model)
+}
+
+pub fn validate_training_plan_supervisor_model(
+    model: Option<String>,
+) -> Result<Option<String>, SettingsError> {
+    Ok(Some(
+        validate_named_model(
+            "trainingPlanSupervisorModel",
+            model.or_else(|| Some(DEFAULT_TRAINING_PLAN_SUPERVISOR_MODEL.to_string())),
+        )?
+        .unwrap_or_else(|| DEFAULT_TRAINING_PLAN_SUPERVISOR_MODEL.to_string()),
+    ))
+}
+
+fn validate_named_model(
+    field_name: &str,
+    model: Option<String>,
+) -> Result<Option<String>, SettingsError> {
     match model {
         Some(value) => {
             let trimmed = value.trim();
             if trimmed.is_empty() {
-                return Err(SettingsError::Validation(
-                    "selectedModel must not be empty".to_string(),
-                ));
+                return Err(SettingsError::Validation(format!(
+                    "{field_name} must not be empty"
+                )));
             }
 
             if trimmed.len() > 200 {
-                return Err(SettingsError::Validation(
-                    "selectedModel must be 200 characters or fewer".to_string(),
-                ));
+                return Err(SettingsError::Validation(format!(
+                    "{field_name} must be 200 characters or fewer"
+                )));
             }
 
             Ok(Some(trimmed.to_string()))
@@ -165,8 +187,14 @@ fn validate_availability_day(day: &AvailabilityDay) -> Result<(), SettingsError>
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_availability, validate_optional_profile_text};
-    use crate::domain::settings::{AvailabilityDay, AvailabilitySettings, SettingsError, Weekday};
+    use super::{
+        validate_availability, validate_optional_profile_text,
+        validate_training_plan_supervisor_model,
+    };
+    use crate::domain::settings::{
+        AvailabilityDay, AvailabilitySettings, SettingsError, Weekday,
+        DEFAULT_TRAINING_PLAN_SUPERVISOR_MODEL,
+    };
 
     #[test]
     fn validate_optional_profile_text_trims_value() {
@@ -210,6 +238,26 @@ mod tests {
         assert_eq!(
             error,
             SettingsError::Validation("athletePrompt must be 5 characters or fewer".to_string())
+        );
+    }
+
+    #[test]
+    fn validate_training_plan_supervisor_model_defaults_when_missing() {
+        let model = validate_training_plan_supervisor_model(None).unwrap();
+
+        assert_eq!(
+            model.as_deref(),
+            Some(DEFAULT_TRAINING_PLAN_SUPERVISOR_MODEL)
+        );
+    }
+
+    #[test]
+    fn validate_training_plan_supervisor_model_rejects_blank_values() {
+        let error = validate_training_plan_supervisor_model(Some("   ".to_string())).unwrap_err();
+
+        assert_eq!(
+            error,
+            SettingsError::Validation("trainingPlanSupervisorModel must not be empty".to_string())
         );
     }
 

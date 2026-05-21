@@ -17,6 +17,7 @@ use aiwattcoach::{
         AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
         SettingsError, UserSettings, UserSettingsUseCases,
     },
+    domain::training_plan_supervisor::TrainingPlanSupervisorWebhookUseCases,
     domain::wahoo::{
         WahooAuthExchange, WahooAuthStart, WahooCreatePlan, WahooCreateWorkout, WahooError,
         WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, WahooUser,
@@ -225,6 +226,35 @@ pub(crate) async fn auth_test_app_with_wahoo_webhook(
             24,
         )
         .with_wahoo_webhook_service(std::sync::Arc::new(wahoo_webhook_service)),
+        dist_dir,
+    )
+}
+
+pub(crate) async fn auth_test_app_with_gemini_supervisor_webhook(
+    identity_service: TestIdentityService,
+    webhook_service: impl TrainingPlanSupervisorWebhookUseCases + 'static,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let dist_dir = shared_frontend_fixture().dist_dir();
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
+            usize::MAX,
+            std::time::Duration::from_secs(60),
+        ))
+        .with_identity_service(
+            std::sync::Arc::new(identity_service),
+            "aiwattcoach_session",
+            "lax",
+            false,
+            24,
+        )
+        .with_training_plan_supervisor_webhook_service(std::sync::Arc::new(webhook_service)),
         dist_dir,
     )
 }

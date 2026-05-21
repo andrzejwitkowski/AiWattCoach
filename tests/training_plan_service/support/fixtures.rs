@@ -216,6 +216,7 @@ pub(crate) fn snapshot_projected_days_for_first_day() -> Vec<TrainingPlanProject
             rest_day: day.rest_day,
             rest_day_reason: day.rest_day_reason.clone(),
             workout: day.workout.clone(),
+            supervisor_status: None,
             superseded_at_epoch_seconds: None,
             created_at_epoch_seconds: date_epoch(FIRST_DAY),
             updated_at_epoch_seconds: date_epoch(FIRST_DAY),

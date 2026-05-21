@@ -14,6 +14,8 @@ export const mockSettings: UserSettingsResponse = {
     deepseekApiKeySet: false,
     selectedProvider: 'openai',
     selectedModel: 'gpt-4o-mini',
+    trainingPlanSupervisorEnabled: false,
+    trainingPlanSupervisorModel: 'gemini-2.5-pro',
   },
   intervals: {
     apiKey: '<redacted>',

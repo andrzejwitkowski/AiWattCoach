@@ -1219,6 +1219,8 @@ async fn test_ai_agents_connection_returns_bad_request_when_provider_changes_wit
         deepseek_api_key: None,
         selected_provider: Some(aiwattcoach::domain::llm::LlmProvider::OpenAi),
         selected_model: Some("gpt-4o-mini".to_string()),
+        training_plan_supervisor_enabled: false,
+        training_plan_supervisor_model: Some("gemini-2.5-pro".to_string()),
     };
     let app = settings_test_app_with_services(
         TestIdentityServiceWithSession::default(),

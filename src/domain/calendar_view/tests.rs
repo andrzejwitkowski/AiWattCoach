@@ -19,6 +19,7 @@ use crate::domain::{
     },
     races::{Race, RaceDiscipline, RacePriority, RaceRepository},
     special_days::{SpecialDay, SpecialDayKind, SpecialDayRepository},
+    training_plan_supervisor::TrainingPlanSupervisorStatus,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -860,6 +861,43 @@ async fn refresh_range_for_user_uses_external_sync_states_for_planned_entries() 
             .as_ref()
             .and_then(|sync| sync.sync_status.as_deref()),
         Some("modified")
+    );
+}
+
+#[tokio::test]
+async fn refresh_range_for_user_preserves_projected_supervisor_status() {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestCalendarPlannedWorkoutSource::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::default();
+
+    planned.upsert_with_supervisor_status(
+        sample_bridged_planned_workout("plan-op-1", "2026-05-10"),
+        CalendarPlannedWorkoutOrigin::Projected,
+        vec![],
+        Some(TrainingPlanSupervisorStatus::Accepted),
+    );
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views.clone(),
+        planned,
+        completed,
+        races,
+        special_days,
+        sync_states,
+    );
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(
+        refreshed[0].supervisor_status,
+        Some(TrainingPlanSupervisorStatus::Accepted)
     );
 }
 
@@ -1930,6 +1968,27 @@ impl TestCalendarPlannedWorkoutSource {
             workout,
             origin,
             sync_keys,
+            supervisor_status: None,
+        });
+    }
+
+    fn upsert_with_supervisor_status(
+        &self,
+        workout: PlannedWorkout,
+        origin: CalendarPlannedWorkoutOrigin,
+        sync_keys: Vec<CalendarPlannedSyncKey>,
+        supervisor_status: Option<TrainingPlanSupervisorStatus>,
+    ) {
+        let mut stored = self.stored.lock().unwrap();
+        stored.retain(|existing| {
+            !(existing.workout.user_id == workout.user_id
+                && existing.workout.planned_workout_id == workout.planned_workout_id)
+        });
+        stored.push(CalendarPlannedWorkoutCandidate {
+            workout,
+            origin,
+            sync_keys,
+            supervisor_status,
         });
     }
 }
@@ -2964,6 +3023,7 @@ fn sample_calendar_entry_with_date(date: &str) -> super::CalendarEntryView {
         race: None,
         summary: None,
         sync: None,
+        supervisor_status: None,
     }
 }
 

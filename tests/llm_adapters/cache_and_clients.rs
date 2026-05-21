@@ -1,12 +1,16 @@
 use aiwattcoach::{
     adapters::llm::gemini::cache::context_hash,
     domain::llm::{LlmChatPort, LlmProvider, LlmProviderConfig, LlmToolChoice, LlmToolDefinition},
+    domain::training_plan_supervisor::{
+        TrainingPlanSupervisorBatchPort, TrainingPlanSupervisorBatchRequest,
+        TrainingPlanSupervisorDecision,
+    },
 };
 
 use crate::shared_support::tracing_capture::capture_tracing_logs;
 use crate::support::{
-    deepseek_client, gemini_client, openai_client, openai_forbidden_client, openrouter_client,
-    sample_request, MockServer,
+    deepseek_client, gemini_batch_client, gemini_client, openai_client, openai_forbidden_client,
+    openrouter_client, sample_request, MockServer,
 };
 
 #[tokio::test]
@@ -125,6 +129,14 @@ async fn openai_client_maps_tool_call_response_and_finish_reason() {
 async fn gemini_client_creates_cache_and_reuses_cached_content() {
     let server = MockServer::start().await;
     let client = gemini_client(&server.base_url);
+    let structured_request = aiwattcoach::domain::llm::LlmChatRequest {
+        response_mime_type: Some("application/json".to_string()),
+        response_schema_json: Some(
+            r#"{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}"#
+                .to_string(),
+        ),
+        ..sample_request()
+    };
 
     let first = client
         .chat(
@@ -133,7 +145,7 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
                 model: "gemini-2.5-flash".to_string(),
                 api_key: "gemini-key".to_string(),
             },
-            sample_request(),
+            structured_request.clone(),
         )
         .await
         .unwrap();
@@ -155,7 +167,7 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
             },
             aiwattcoach::domain::llm::LlmChatRequest {
                 reusable_cache_id: Some("cachedContents/cache-1".to_string()),
-                ..sample_request()
+                ..structured_request
             },
         )
         .await
@@ -183,6 +195,17 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
     );
     assert_eq!(requests[1].body["cachedContent"], "cachedContents/cache-1");
     assert_eq!(requests[2].body["cachedContent"], "cachedContents/cache-1");
+    assert_eq!(
+        requests[1].body["generationConfig"]["responseMimeType"],
+        "application/json"
+    );
+    assert_eq!(
+        requests[2].body["generationConfig"]["responseMimeType"],
+        "application/json"
+    );
+    assert!(requests[1].body["generationConfig"]["responseSchema"]
+        .get("properties")
+        .is_some());
     assert_eq!(context_hash(&sample_request()).len(), 64);
     assert!(requests[1].body.get("systemInstruction").is_none());
     assert!(requests[2].body.get("systemInstruction").is_none());
@@ -206,6 +229,100 @@ async fn gemini_client_accepts_google_prefixed_model_name() {
         .unwrap();
 
     assert_eq!(response.assistant_text(), Some("Gemini says hi"));
+}
+
+#[tokio::test]
+async fn gemini_batch_client_downloads_result_and_maps_review() {
+    let server = MockServer::start().await;
+    let client = gemini_batch_client(&server.base_url);
+
+    let review = client
+        .download_result("gemini-key", "batches/batch-1")
+        .await
+        .unwrap();
+
+    assert_eq!(review.decision, TrainingPlanSupervisorDecision::Accept);
+    assert_eq!(review.reason, "plan is ready");
+    assert_eq!(review.plan, None);
+
+    let requests = server.requests();
+    assert_eq!(requests[0].path, "/v1beta/batches/batch-1");
+    assert_eq!(requests[0].google_api_key.as_deref(), Some("gemini-key"));
+    assert_eq!(
+        requests[1].path,
+        "/download/v1beta/files/result-file-1:download"
+    );
+    assert_eq!(requests[1].google_api_key.as_deref(), Some("gemini-key"));
+}
+
+#[tokio::test]
+async fn gemini_batch_client_reads_inline_supervisor_review_result() {
+    let server = MockServer::start().await;
+    let client = gemini_batch_client(&server.base_url);
+
+    let review = client
+        .download_result("gemini-key", "batches/batch-inline-1")
+        .await
+        .unwrap();
+
+    assert_eq!(review.decision, TrainingPlanSupervisorDecision::Accept);
+    assert_eq!(review.reason, "inline response is ready");
+    assert_eq!(review.plan, None);
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].path, "/v1beta/batches/batch-inline-1");
+    assert_eq!(requests[0].google_api_key.as_deref(), Some("gemini-key"));
+}
+
+#[tokio::test]
+async fn gemini_batch_client_submits_supervisor_review_as_structured_inline_request() {
+    let server = MockServer::start().await;
+    let client = gemini_batch_client(&server.base_url);
+
+    let submission = client
+        .submit_review(
+            "gemini-key",
+            TrainingPlanSupervisorBatchRequest {
+                user_id: "user-1".to_string(),
+                worker_operation_key: "training-plan:user-1:w1:1".to_string(),
+                model: "google/gemini-2.5-pro".to_string(),
+                original_plan: "2026-05-18\n- 60m 65%".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(submission.batch_name, "batches/batch-created-1");
+    let requests = server.requests();
+    assert_eq!(
+        requests[0].path,
+        "/v1beta/models/gemini-2.5-pro:batchGenerateContent"
+    );
+    assert_eq!(requests[0].google_api_key.as_deref(), Some("gemini-key"));
+    assert_eq!(
+        requests[0].body["batch"]["display_name"],
+        "aiwattcoach-supervisor-training-plan-user-1-w1-1"
+    );
+    let inline = &requests[0].body["batch"]["input_config"]["requests"]["requests"][0];
+    assert_eq!(inline["metadata"]["key"], "training-plan:user-1:w1:1");
+    assert_eq!(
+        inline["request"]["generationConfig"]["responseMimeType"],
+        "application/json"
+    );
+    assert!(inline["request"]["generationConfig"]["responseSchema"]
+        .get("properties")
+        .is_some());
+    let prompt = inline["request"]["contents"][0]["parts"][0]["text"]
+        .as_str()
+        .unwrap();
+    assert!(prompt.contains("Return only JSON matching the provided schema"));
+    assert!(prompt.contains("Critical rules: Output ONLY the raw workout text."));
+    assert!(prompt.contains("Step syntax: `- [Duration] [Target]`."));
+    assert!(prompt.contains("Ramp syntax: `- [Duration] ramp [Start Target]-[End Target]`."));
+    assert!(prompt.contains("Repeat headers must end with `x`, such as `Main Set 4x`."));
+    assert!(prompt.contains("Do not use cadence, zone targets, inline text cues, hour units, or distance units because the current backend parser does not accept them."));
+    assert!(prompt.contains("2026-05-18\n- 60m 65%"));
 }
 
 #[tokio::test]

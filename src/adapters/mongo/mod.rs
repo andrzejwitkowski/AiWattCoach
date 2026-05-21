@@ -37,6 +37,7 @@ pub mod training_plan_generation_operations;
 pub mod training_plan_projections;
 mod training_plan_shared;
 pub mod training_plan_snapshots;
+pub mod training_plan_supervisor_operations;
 pub mod users;
 pub mod wahoo_connect_state;
 pub mod wahoo_fit_files;

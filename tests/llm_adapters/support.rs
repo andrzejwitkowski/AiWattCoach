@@ -42,6 +42,7 @@ pub(crate) struct MockServerState {
 pub(crate) struct CapturedRequest {
     pub(crate) path: String,
     pub(crate) authorization: Option<String>,
+    pub(crate) google_api_key: Option<String>,
     pub(crate) referer: Option<String>,
     pub(crate) title: Option<String>,
     pub(crate) body: Value,
@@ -218,6 +219,22 @@ impl MockServer {
             .route("/api/v1/chat/completions", post(openrouter_handler))
             .route("/v1beta/cachedContents", post(gemini_cache_handler))
             .route(
+                "/v1beta/batches/batch-1",
+                axum::routing::get(gemini_batch_get_handler),
+            )
+            .route(
+                "/v1beta/batches/batch-inline-1",
+                axum::routing::get(gemini_batch_get_inline_handler),
+            )
+            .route(
+                "/v1beta/models/gemini-2.5-pro:batchGenerateContent",
+                post(gemini_batch_create_handler),
+            )
+            .route(
+                "/download/v1beta/files/result-file-1:download",
+                axum::routing::get(gemini_batch_download_handler),
+            )
+            .route(
                 "/v1beta/models/gemini-2.5-flash:generateContent",
                 post(gemini_generate_handler),
             )
@@ -263,6 +280,8 @@ pub(crate) fn sample_request() -> LlmChatRequest {
         cache_scope_key: Some("scope-1".to_string()),
         cache_key: Some("cache-key-1".to_string()),
         reusable_cache_id: None,
+        response_mime_type: None,
+        response_schema_json: None,
         tools: Vec::new(),
         tool_choice: LlmToolChoice::None,
     }
@@ -304,6 +323,13 @@ pub(crate) fn openrouter_client(base_url: &str) -> OpenRouterClient {
 
 pub(crate) fn gemini_client(base_url: &str) -> GeminiClient {
     GeminiClient::new(reqwest::Client::new()).with_base_url(format!("{base_url}/v1beta"))
+}
+
+pub(crate) fn gemini_batch_client(
+    base_url: &str,
+) -> aiwattcoach::adapters::llm::gemini::batch_client::GeminiBatchClient {
+    aiwattcoach::adapters::llm::gemini::batch_client::GeminiBatchClient::new(reqwest::Client::new())
+        .with_base_url(format!("{base_url}/v1beta"))
 }
 
 async fn openai_handler(
@@ -587,11 +613,82 @@ async fn gemini_generate_handler(
     )
 }
 
+async fn gemini_batch_get_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    capture_request(&state, "/v1beta/batches/batch-1", headers, json!({}));
+    Json(json!({
+        "name": "batches/batch-1",
+        "metadata": { "state": "JOB_STATE_SUCCEEDED" },
+        "response": { "responsesFile": "files/result-file-1" }
+    }))
+}
+
+async fn gemini_batch_get_inline_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    capture_request(&state, "/v1beta/batches/batch-inline-1", headers, json!({}));
+    Json(json!({
+        "name": "batches/batch-inline-1",
+        "metadata": { "state": "JOB_STATE_SUCCEEDED" },
+        "response": {
+            "inlinedResponses": [{
+                "key": "request-1",
+                "response": {
+                    "candidates": [{
+                        "content": {
+                            "parts": [{
+                                "text": "{\"decision\":\"accept\",\"reason\":\"inline response is ready\"}"
+                            }]
+                        }
+                    }]
+                }
+            }]
+        }
+    }))
+}
+
+async fn gemini_batch_create_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    capture_request(
+        &state,
+        "/v1beta/models/gemini-2.5-pro:batchGenerateContent",
+        headers,
+        body,
+    );
+    Json(json!({ "name": "batches/batch-created-1" }))
+}
+
+async fn gemini_batch_download_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    capture_request(
+        &state,
+        "/download/v1beta/files/result-file-1:download",
+        headers,
+        json!({}),
+    );
+    (
+        StatusCode::OK,
+        "{\"key\":\"request-1\",\"response\":{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"```json\\n{\\n  \\\"decision\\\": \\\"accept\\\",\\n  \\\"reason\\\": \\\"plan is ready\\\"\\n}\\n```\"}]}}]}}\n",
+    )
+}
+
 fn capture_request(state: &MockServerState, path: &str, headers: HeaderMap, body: Value) {
     state.requests.lock().unwrap().push(CapturedRequest {
         path: path.to_string(),
         authorization: headers
             .get(axum::http::header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_string()),
+        google_api_key: headers
+            .get("x-goog-api-key")
             .and_then(|value| value.to_str().ok())
             .map(|value| value.to_string()),
         referer: headers

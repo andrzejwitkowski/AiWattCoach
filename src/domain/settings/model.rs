@@ -1,5 +1,7 @@
 use crate::domain::llm::LlmProvider;
 
+pub const DEFAULT_TRAINING_PLAN_SUPERVISOR_MODEL: &str = "gemini-2.5-pro";
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum SettingsError {
     Unauthenticated,
@@ -19,7 +21,7 @@ impl std::fmt::Display for SettingsError {
 
 impl std::error::Error for SettingsError {}
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AiAgentsConfig {
     pub openai_api_key: Option<String>,
     pub gemini_api_key: Option<String>,
@@ -27,6 +29,25 @@ pub struct AiAgentsConfig {
     pub deepseek_api_key: Option<String>,
     pub selected_provider: Option<LlmProvider>,
     pub selected_model: Option<String>,
+    pub training_plan_supervisor_enabled: bool,
+    pub training_plan_supervisor_model: Option<String>,
+}
+
+impl Default for AiAgentsConfig {
+    fn default() -> Self {
+        Self {
+            openai_api_key: None,
+            gemini_api_key: None,
+            openrouter_api_key: None,
+            deepseek_api_key: None,
+            selected_provider: None,
+            selected_model: None,
+            training_plan_supervisor_enabled: false,
+            training_plan_supervisor_model: Some(
+                DEFAULT_TRAINING_PLAN_SUPERVISOR_MODEL.to_string(),
+            ),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]

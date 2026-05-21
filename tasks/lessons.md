@@ -8,6 +8,7 @@
 - I must read `reviewers.md` before writing a plan and before starting implementation work.
 - When repo instructions point at an Obsidian vault on Windows, store the exact subtree that contains the handbook notes, not only the vault root. A too-broad path wastes time and leads to false "file not found" lookups.
 - Before any commit or push, explicitly verify the current branch name against the user's requested target branch. Do not rely on conversational memory when the user references "this branch" or another already-existing branch by name.
+- When a user points out that a structured JSON output path still lacks transport-level enforcement, do not stop at confirming the gap. Add the provider-level `responseMimeType` / `responseSchema` wiring in the real request path, not just the prompt text, before calling the work done.
 
 ## PR Conflict Verification
 
@@ -60,6 +61,7 @@
 - For recovery-critical LLM tool-loop checkpoints, verify three separate boundaries: the terminal state is checkpointed before returning, checkpoint failure prevents a false success, and recovery from the checkpoint avoids a second provider call.
 - When restoring untracked files from `git stash -u`, use the stash's untracked parent (`stash@{n}^3`) and verify the restored file is non-empty before moving on.
 - When sending GitHub issue or PR bodies through shell commands, do not embed Markdown backticks inside double-quoted or `$'...'` shell strings. Build the JSON payload with a safe encoder such as `jq --arg` or a file input first, or shell expansion will silently corrupt paths and inline-code text.
+- When using `gh pr comment --body` or similar shell-passed GitHub CLI flags, treat Markdown backticks the same way: do not place them inside ordinary shell-quoted strings. Use `gh api -f body=...` with safe quoting, `jq --arg`, or edit the created comment immediately if shell substitution leaked into the posted text.
 - Before relying on `gh pr create`, verify GitHub CLI auth explicitly and remember that repo hooks may still run extra verification commands. If auth is missing or the hook path is risky on this host, fall back to direct GitHub REST API calls with already-available credentials.
 
 
@@ -139,6 +141,7 @@
 - When one parser reads canonical text produced by another serializer in the same repo, verify structural constructs end to end, not just token-level fields.
 - For repeated workout blocks, add regression tests that assert expanded segment order and total duration so grouped semantics cannot silently collapse back into flat line parsing.
 - If a grouped construct reuses child items parsed by the flat path, preserve child multiplicity too. Outer repeat support is still wrong if inline child repeats are emitted only once per parent iteration.
+- If two LLM paths are expected to emit the same parser-backed workout grammar, do not keep a full grammar in one prompt and a shorthand summary in the other. Extract one canonical grammar string and reuse it so worker and supervisor stay aligned.
 
 ## OpenCode Plugin Wiring
 
@@ -183,6 +186,7 @@
 ## Projection Window Semantics
 
 - If a persisted snapshot exposes `start_date`, `end_date`, and a concrete `days` list, verify whether `start_date` is inclusive before writing bridge readers or tests. Do not silently encode `date > start_date` unless the model explicitly defines `start_date` as an anchor outside the visible plan.
+- When validating that two projected date windows represent the same set of days, normalize both sides the same way before comparing. Also keep shifted-window regression fixtures on valid calendar dates, or the parser may fail early and hide the real alignment bug.
 - When a calendar/read-model row is missing, compare the durable source collection with the first canonical reader that reconstructs domain objects from it before changing refresh or cleanup logic. A missing read-model row can be caused upstream by an over-filtering root adapter, not by the projector itself.
 - Planned-workout rebuild assertions must source sync metadata from `ExternalSyncStateRepository`, not from previously materialized `calendar_view` rows. Existing view sync may still be a fallback for other entry kinds, but planned entries intentionally clear stale view-only sync when authoritative external state is missing.
 

@@ -11,8 +11,8 @@ pub use model::{
 };
 pub use ports::{
     BoxFuture, TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
-    TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
-    TrainingPlanToolLoopCheckpoint, TrainingPlanWorkoutSummaryPort,
+    TrainingPlanPartialReplacement, TrainingPlanProjectionRepository,
+    TrainingPlanSnapshotRepository, TrainingPlanToolLoopCheckpoint, TrainingPlanWorkoutSummaryPort,
 };
 pub use service::{
     training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
