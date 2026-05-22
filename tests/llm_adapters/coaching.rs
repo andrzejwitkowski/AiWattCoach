@@ -145,6 +145,12 @@ async fn llm_workout_coach_describes_power_compression_in_system_prompt() {
     assert!(requests[0]
         .system_prompt
         .contains("c5=cadence values in 5-second buckets"));
+    assert!(requests[0].system_prompt.contains(
+        "For completed interval workouts, judge execution quality primarily from packed workout evidence"
+    ));
+    assert!(requests[0].system_prompt.contains(
+        "Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only and are not sufficient proof"
+    ));
 }
 
 #[test]

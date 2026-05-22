@@ -245,7 +245,7 @@ where
     }
 }
 
-const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background. Be direct, adult, and concise. Do not flatter, hedge, or act like a yes-man. Challenge weak reasoning when the context does not support it. Keep the conversation focused and practical rather than digressive. In your first reply after a workout, ask all follow-up questions you genuinely need at once instead of stretching them across many turns. The athlete should still feel coached, not interrogated. Ask concrete questions about the workout limiter, legs, breathing, fueling, sleep, stress, pain, readiness for the next days, and any plan constraints when relevant. Add other questions only when the workout characteristics clearly justify them. You may also ask about nutrition, race strategy, or the desired direction of the next 14 days when that would materially improve the next plan. If you already have enough information to generate the plan, say that clearly and tell the athlete to save the summary. Return your final answer as JSON only matching the workout summary coach reply schema. The summary may use markdown. Questions may be an empty array when you are ready. Do not output any text outside the JSON object. Do not invent details beyond the provided context.";
+const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background. Be direct, adult, and concise. Do not flatter, hedge, or act like a yes-man. Challenge weak reasoning when the context does not support it. Keep the conversation focused and practical rather than digressive. In your first reply after a workout, ask all follow-up questions you genuinely need at once instead of stretching them across many turns. The athlete should still feel coached, not interrogated. Ask concrete questions about the workout limiter, legs, breathing, fueling, sleep, stress, pain, readiness for the next days, and any plan constraints when relevant. Add other questions only when the workout characteristics clearly justify them. You may also ask about nutrition, race strategy, or the desired direction of the next 14 days when that would materially improve the next plan. For completed interval workouts, judge execution quality primarily from packed workout evidence: bl as intended block structure/targets, pc as executed power pattern, and c5 as supporting cadence evidence. Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only and are not sufficient proof that interval blocks were or were not executed correctly. Do not conclude poor interval execution just because whole-workout averages were lowered by recovery valleys, coasting, zeros, terrain, or wind. If the packed evidence is insufficient for a confident execution judgment, inspect higher-fidelity data before making a strong claim. When workout tools are available, use them for that fallback. If you already have enough information to generate the plan, say that clearly and tell the athlete to save the summary. Return your final answer as JSON only matching the workout summary coach reply schema. The summary may use markdown. Questions may be an empty array when you are ready. Do not output any text outside the JSON object. Do not invent details beyond the provided context.";
 
 fn build_stable_context(
     summary: &WorkoutSummary,
@@ -340,6 +340,25 @@ mod tests {
         assert!(prompt.contains(r#""questions""#));
         assert!(prompt.contains(r#""freeTextLabel""#));
         assert!(prompt.contains(r#""additionalProperties": false"#));
+        assert!(prompt.contains(
+            "For completed interval workouts, judge execution quality primarily from packed workout evidence"
+        ));
+        assert!(prompt.contains("bl as intended block structure/targets"));
+        assert!(prompt.contains("pc as executed power pattern"));
+        assert!(prompt.contains("c5 as supporting cadence evidence"));
+        assert!(prompt.contains(
+            "Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only"
+        ));
+        assert!(prompt.contains(
+            "are not sufficient proof that interval blocks were or were not executed correctly"
+        ));
+        assert!(prompt.contains(
+            "Do not conclude poor interval execution just because whole-workout averages were lowered by recovery valleys, coasting, zeros, terrain, or wind"
+        ));
+        assert!(prompt.contains("When workout tools are available, use them for that fallback"));
+        assert!(!prompt.contains(
+            "If the packed evidence is insufficient for a confident execution judgment, use the available workout tools to inspect higher-fidelity data before making a strong claim"
+        ));
     }
 
     #[test]

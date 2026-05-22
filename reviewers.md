@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-22 | user | workout-summary tool guidance evidence hierarchy
+
+- Problem: workout-summary tool guidance listed the available workout tools but did not make the evidence hierarchy explicit enough. It did not clearly say that `get_selected_workout` is the fallback when packed execution evidence (`bl`, `pc`, `c5`) is not enough for a confident judgment, and it did not clearly demote `selected_workout_power_curve` to a supplemental source for duration-specific power facts rather than the primary basis for deciding whether planned interval blocks were hit.
+- Fix: kept the change guidance-only and scoped it to `ToolScope::WorkoutSummaryChat` inside `src/domain/llm_tools/mod.rs`, adding two explicit workout-summary-only guidance lines while leaving tool schemas, tool availability, execution, and provider behavior unchanged. Added narrow source-level tests to lock the wording and guard against leaking the workout-summary evidence rules into other tool scopes.
+- Prevention: when the base prompt already carries an evidence hierarchy, mirror any tool-level clarifications in the narrowest scope that actually needs them instead of broadening generic tool guidance for every chat mode. For workout-summary guidance specifically, keep `get_selected_workout` framed as the fallback for insufficient packed evidence and keep `selected_workout_power_curve` framed as supplemental rather than interval-hit adjudication.
+
+### 2026-05-22 | user | workout-summary prompt evidence hierarchy review follow-up
+
+- Problem: the new workout-summary prompt said to use workout tools when packed evidence was insufficient even though the same prompt can be used on providers or runtime contexts without available tools, and the added evidence-hierarchy assertions duplicated nearly the same literal prompt text in both the source-file unit test and the adapter-path test.
+- Fix: changed the prompt to make higher-fidelity inspection the generic fallback and mention workout tools only when they are available, while keeping the packed-evidence hierarchy and anti-aggregate rules intact. Reduced test brittleness by keeping the detailed prompt-contract assertions in the source-file unit test and leaving the adapter-path test with representative assertions that prove the outbound request still carries the contract.
+- Prevention: when adding prompt instructions about optional capabilities like tools, verify the prompt text stays true for providers and runtime paths where that capability is unavailable. For prompt regressions, avoid copying the full literal contract into multiple layers of tests; keep the exact wording checks closest to prompt construction and use lighter transport-path assertions elsewhere.
+
 ### 2026-05-15 | user | workout-summary polls schemars follow-up
 
 - Problem: Workout-summary poll feedback left three review risks: `CoachQuestionnaire.tsx` carried the whole questionnaire UI in one component, the workout-summary coach prompt duplicated a hand-written JSON reply contract instead of deriving it from the Rust shape being deserialized, and the parser treated plain-text LLM replies as invalid instead of preserving a usable coach reply without questionnaire questions.
