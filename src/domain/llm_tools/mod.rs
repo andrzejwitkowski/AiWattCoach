@@ -541,13 +541,20 @@ fn tool_prompt_guidance_for_scope(
     provider: &LlmProvider,
     tool_context: &ToolExecutionContext,
 ) -> String {
-    let guidance_lines: Vec<String> = available_tools_for_scope(scope, provider, tool_context)
+    let available_tools = available_tools_for_scope(scope, provider, tool_context);
+    let available_tool_names = available_tools
+        .iter()
+        .map(|tool| tool.name())
+        .collect::<Vec<_>>();
+    let mut guidance_lines: Vec<String> = available_tools
         .into_iter()
         .filter_map(|tool| {
             tool.prompt_guidance()
                 .map(|guidance| format!("- `{}`: {guidance}", tool.name()))
         })
         .collect();
+
+    guidance_lines.extend(scope_specific_tool_guidance(scope, &available_tool_names));
 
     if guidance_lines.is_empty() {
         return String::new();
@@ -557,6 +564,39 @@ fn tool_prompt_guidance_for_scope(
         "Tool usage guidance: when a tool can provide more specific or up-to-date facts than the packed context, call it instead of guessing. Use these tools deliberately:\n{}",
         guidance_lines.join("\n")
     )
+}
+
+fn scope_specific_tool_guidance(
+    scope: ToolScope,
+    available_tool_names: &[&'static str],
+) -> Vec<String> {
+    if scope != ToolScope::WorkoutSummaryChat {
+        return Vec::new();
+    }
+
+    let mut guidance = Vec::new();
+    let selected_workout_tool_name = GetSelectedWorkout.name();
+    let power_curve_tool_name = SelectedWorkoutPowerCurve.name();
+    let has_selected_workout = available_tool_names.contains(&selected_workout_tool_name);
+    let has_power_curve = available_tool_names.contains(&power_curve_tool_name);
+
+    if has_selected_workout {
+        guidance.push(
+            format!(
+                "- For workout-summary execution judgments, `{selected_workout_tool_name}` is the fallback when packed evidence like bl, pc, and c5 is insufficient for a confident call."
+            ),
+        );
+    }
+
+    if has_power_curve {
+        guidance.push(
+            format!(
+                "- `{power_curve_tool_name}` is supplemental for duration-specific power facts and not the primary basis for deciding whether planned interval blocks were hit."
+            ),
+        );
+    }
+
+    guidance
 }
 
 fn provider_supports_tools(provider: &LlmProvider) -> bool {
@@ -681,6 +721,59 @@ mod tests {
         );
 
         assert_eq!(prompt, "Base prompt.");
+    }
+
+    #[test]
+    fn workout_summary_prompt_guidance_prioritizes_selected_workout_over_power_curve_for_execution_judgment(
+    ) {
+        let prompt = with_tool_prompt_guidance(
+            "Base prompt.",
+            ToolScope::WorkoutSummaryChat,
+            &LlmProvider::OpenAi,
+            &sample_tool_context(true),
+        );
+
+        let selected_workout_line = prompt
+            .lines()
+            .find(|line| {
+                line.contains("`get_selected_workout`")
+                    && line.contains("workout-summary execution judgments")
+            })
+            .expect("workout-summary prompt should include selected-workout fallback guidance");
+        let power_curve_line = prompt
+            .lines()
+            .find(|line| {
+                line.contains("`selected_workout_power_curve`") && line.contains("supplemental")
+            })
+            .expect("workout-summary prompt should include power-curve guidance");
+
+        assert!(prompt.contains("Tool usage guidance"));
+        assert!(prompt.contains("workout-summary execution judgments"));
+        assert!(selected_workout_line.contains("fallback"));
+        assert!(selected_workout_line.contains("bl, pc, and c5"));
+        assert!(selected_workout_line.contains("insufficient"));
+        assert!(power_curve_line.contains("supplemental"));
+        assert!(power_curve_line.contains("duration-specific power facts"));
+        assert!(power_curve_line.contains("not the primary basis"));
+    }
+
+    #[test]
+    fn calendar_coach_prompt_guidance_does_not_include_workout_summary_specific_evidence_rules() {
+        let prompt = with_tool_prompt_guidance(
+            "Base prompt.",
+            ToolScope::CalendarCoachChat,
+            &LlmProvider::OpenAi,
+            &sample_tool_context(true),
+        );
+
+        assert!(!prompt.contains("For workout-summary execution judgments"));
+        assert!(!prompt.lines().any(|line| {
+            line.contains("`get_selected_workout`")
+                && line.contains("workout-summary execution judgments")
+        }));
+        assert!(!prompt.lines().any(|line| {
+            line.contains("`selected_workout_power_curve`") && line.contains("supplemental")
+        }));
     }
 
     #[test]

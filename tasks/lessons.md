@@ -56,6 +56,11 @@
 
 ## Small Review Fixes
 
+- When prompt guidance includes both a generic tool-description line and a scope-specific line for the same tool, tests must target the scope-specific discriminator too. Matching the first line that mentions the tool name will often grab the generic guidance and produce a false failure.
+- For scope-specific tool guidance, do not key follow-up logic off duplicated raw tool-name string literals if the tool types are already in scope. Derive the names from the tool implementations so guidance stays aligned with future rename-safe changes.
+- Prompt-guidance tests should assert the contract at the line or phrase level, not full sentence literals, when wording can legitimately tighten during review. Keep the assertions strong enough to prove fallback-vs-supplemental semantics without pinning every connective word.
+- For prompt contracts shared across tool-capable and no-tool providers, do not write unconditional instructions like "use workout tools" into the base prompt. Phrase the fallback generically first, then mention tools only when available so the prompt stays true in Gemini/no-data-port paths too.
+- When testing prompt wording, keep the exact literal contract assertions in one place near prompt construction and use only representative transport-path assertions elsewhere. Duplicating every sentence across unit and adapter tests makes review-driven wording changes noisy and brittle.
 - When extracting a shared retry helper for a read-merge-write flow, keep the entire retryable attempt inside the retry closure, including the fresh read. If `load_latest()` lives outside the retry loop, transient read failures will bypass the intended retry/backoff semantics and the helper no longer matches its callers' optimistic-retry contract.
 - For recovery-critical LLM tool-loop checkpoints, verify three separate boundaries: the terminal state is checkpointed before returning, checkpoint failure prevents a false success, and recovery from the checkpoint avoids a second provider call.
 - When restoring untracked files from `git stash -u`, use the stash's untracked parent (`stash@{n}^3`) and verify the restored file is non-empty before moving on.
