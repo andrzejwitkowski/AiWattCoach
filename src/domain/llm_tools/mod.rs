@@ -733,9 +733,18 @@ mod tests {
             &sample_tool_context(true),
         );
 
-        let selected_workout_line = prompt_line_containing(&prompt, "`get_selected_workout`")
+        let selected_workout_line = prompt
+            .lines()
+            .find(|line| {
+                line.contains("`get_selected_workout`")
+                    && line.contains("workout-summary execution judgments")
+            })
             .expect("workout-summary prompt should include selected-workout fallback guidance");
-        let power_curve_line = prompt_line_containing(&prompt, "`selected_workout_power_curve`")
+        let power_curve_line = prompt
+            .lines()
+            .find(|line| {
+                line.contains("`selected_workout_power_curve`") && line.contains("supplemental")
+            })
             .expect("workout-summary prompt should include power-curve guidance");
 
         assert!(prompt.contains("Tool usage guidance"));
@@ -758,12 +767,13 @@ mod tests {
         );
 
         assert!(!prompt.contains("For workout-summary execution judgments"));
-        assert!(prompt_line_containing(&prompt, "`get_selected_workout`")
-            .is_some_and(|line| !line.contains("fallback")));
-        assert!(
-            prompt_line_containing(&prompt, "`selected_workout_power_curve`")
-                .is_some_and(|line| !line.contains("supplemental"))
-        );
+        assert!(!prompt.lines().any(|line| {
+            line.contains("`get_selected_workout`")
+                && line.contains("workout-summary execution judgments")
+        }));
+        assert!(!prompt.lines().any(|line| {
+            line.contains("`selected_workout_power_curve`") && line.contains("supplemental")
+        }));
     }
 
     #[test]
@@ -808,10 +818,6 @@ mod tests {
             }),
             planned_workout_update_port: None,
         }
-    }
-
-    fn prompt_line_containing<'a>(prompt: &'a str, needle: &str) -> Option<&'a str> {
-        prompt.lines().find(|line| line.contains(needle))
     }
 
     #[derive(Clone)]

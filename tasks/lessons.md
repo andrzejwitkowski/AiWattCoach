@@ -56,6 +56,7 @@
 
 ## Small Review Fixes
 
+- When prompt guidance includes both a generic tool-description line and a scope-specific line for the same tool, tests must target the scope-specific discriminator too. Matching the first line that mentions the tool name will often grab the generic guidance and produce a false failure.
 - For scope-specific tool guidance, do not key follow-up logic off duplicated raw tool-name string literals if the tool types are already in scope. Derive the names from the tool implementations so guidance stays aligned with future rename-safe changes.
 - Prompt-guidance tests should assert the contract at the line or phrase level, not full sentence literals, when wording can legitimately tighten during review. Keep the assertions strong enough to prove fallback-vs-supplemental semantics without pinning every connective word.
 - For prompt contracts shared across tool-capable and no-tool providers, do not write unconditional instructions like "use workout tools" into the base prompt. Phrase the fallback generically first, then mention tools only when available so the prompt stays true in Gemini/no-data-port paths too.
