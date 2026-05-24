@@ -69,6 +69,14 @@ impl MongoTaskRepository {
                     )
                     .build(),
                 IndexModel::builder()
+                    .keys(doc! { "created_at_epoch_seconds": -1, "_id": -1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("tasks_admin_created_at_lookup".to_string())
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
                     .keys(doc! { "cleanup_after": 1 })
                     .options(
                         IndexOptions::builder()

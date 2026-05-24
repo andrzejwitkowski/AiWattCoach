@@ -12,6 +12,7 @@ import { SettingsProvider } from './features/settings/context/SettingsContext';
 import { CompletedWorkoutsProvider } from './features/intervals/context';
 import { AppHomePage } from './pages/AppHomePage';
 import { AdminSystemInfoPage } from './pages/AdminSystemInfoPage';
+import { AdminTaskSchedulerPage } from './pages/AdminTaskSchedulerPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { AICoachPage } from './pages/AICoachPage';
 import { LandingPage } from './pages/LandingPage';
@@ -19,6 +20,7 @@ import { RacesPage } from './pages/RacesPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 import { loadBackendStatus, type BackendStatus } from './lib/api/system';
+import { ApiBaseUrlProvider } from './lib/apiBaseUrl';
 
 const API_BASE_URL = getApiBaseUrl();
 const DEV_AUTH_ENABLED = isDevAuthEnabled();
@@ -124,6 +126,14 @@ export function App() {
               <Route element={<RacesPage apiBaseUrl={API_BASE_URL} />} path="/races" />
               <Route element={<AICoachPage apiBaseUrl={API_BASE_URL} />} path="/ai-coach" />
               <Route element={<RequireRole role="admin" />}>
+                <Route
+                  element={
+                    <ApiBaseUrlProvider value={API_BASE_URL}>
+                      <AdminTaskSchedulerPage />
+                    </ApiBaseUrlProvider>
+                  }
+                  path="/admin/task-scheduler"
+                />
                 <Route
                   element={
                     <AdminSystemInfoPage

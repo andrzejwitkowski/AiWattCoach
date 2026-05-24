@@ -5,7 +5,7 @@ use std::{
 
 use aiwattcoach::domain::task_scheduler::{
     ScheduledTask, TaskCheckpointRequest, TaskClaimRequest, TaskCompleteRequest, TaskEnqueueResult,
-    TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskMarkTimedOutRequest,
+    TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskListPage, TaskMarkTimedOutRequest,
     TaskRecoverRequest, TaskRepository, TaskRetryRequest, TaskSchedulerError, TaskStatus,
     TaskWorker, TaskWorkerRepository,
 };
@@ -352,9 +352,8 @@ impl TaskRepository for InMemoryTaskRepository {
     fn list(
         &self,
         filter: TaskListFilter,
-    ) -> aiwattcoach::domain::task_scheduler::BoxFuture<
-        Result<Vec<ScheduledTask>, TaskSchedulerError>,
-    > {
+    ) -> aiwattcoach::domain::task_scheduler::BoxFuture<Result<TaskListPage, TaskSchedulerError>>
+    {
         let tasks = self.tasks.clone();
         Box::pin(async move {
             let mut listed = tasks
@@ -389,8 +388,14 @@ impl TaskRepository for InMemoryTaskRepository {
                             .created_at_epoch_seconds
                             .cmp(&left.created_at_epoch_seconds)
                     })
+                    .then_with(|| right.id.cmp(&left.id))
             });
-            Ok(listed)
+            let limit = filter.clamped_limit();
+            let has_next_page = listed.len() > filter.offset.saturating_add(limit);
+            Ok(TaskListPage {
+                tasks: listed.into_iter().skip(filter.offset).take(limit).collect(),
+                has_next_page,
+            })
         })
     }
 }

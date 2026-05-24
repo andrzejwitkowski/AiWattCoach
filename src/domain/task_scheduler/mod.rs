@@ -12,9 +12,12 @@ pub(crate) use handler::{
 pub use model::{
     NewTask, RetryStrategy, ScheduledTask, TaskCheckpointRequest, TaskClaimRequest,
     TaskCompleteRequest, TaskEnqueueResult, TaskFailRequest, TaskHeartbeatRequest, TaskListFilter,
-    TaskMarkTimedOutRequest, TaskRecoverRequest, TaskRetryRequest, TaskSchedulerError, TaskStatus,
-    TaskWorker,
+    TaskListPage, TaskMarkTimedOutRequest, TaskRecoverRequest, TaskRetryRequest,
+    TaskSchedulerError, TaskSortDirection, TaskSortField, TaskStatus, TaskWorker,
+    DEFAULT_TASK_LIST_LIMIT, MAX_TASK_LIST_LIMIT,
 };
 pub use ports::{BoxFuture, TaskRepository, TaskWorkerRepository};
-pub use service::{FailTaskInput, ResultTaskHandler, TaskSchedulerService};
+pub use service::{
+    AdminTaskSchedulerUseCases, FailTaskInput, ResultTaskHandler, TaskSchedulerService,
+};
 pub use worker::{SharedTaskHandler, TaskHandler, TaskRunOutcome, TaskWorkerConfig};

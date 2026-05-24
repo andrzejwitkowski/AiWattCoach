@@ -5,7 +5,7 @@ use std::{
 
 use crate::domain::task_scheduler::{
     BoxFuture, ScheduledTask, TaskClaimRequest, TaskCompleteRequest, TaskEnqueueResult,
-    TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskMarkTimedOutRequest,
+    TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskListPage, TaskMarkTimedOutRequest,
     TaskRecoverRequest, TaskRepository, TaskRetryRequest, TaskSchedulerError, TaskStatus,
     TaskWorker, TaskWorkerRepository,
 };
@@ -244,11 +244,13 @@ impl TaskRepository for InMemoryTaskRepository {
         })
     }
 
-    fn list(
-        &self,
-        _filter: TaskListFilter,
-    ) -> BoxFuture<Result<Vec<ScheduledTask>, TaskSchedulerError>> {
-        Box::pin(async { Ok(Vec::new()) })
+    fn list(&self, _filter: TaskListFilter) -> BoxFuture<Result<TaskListPage, TaskSchedulerError>> {
+        Box::pin(async {
+            Ok(TaskListPage {
+                tasks: Vec::new(),
+                has_next_page: false,
+            })
+        })
     }
 }
 

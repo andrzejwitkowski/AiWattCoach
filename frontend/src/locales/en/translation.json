@@ -15,7 +15,8 @@
     "races": "Races",
     "aiCoach": "AI Coach",
     "workspace": "Workspace",
-    "systemInfo": "System Info"
+    "systemInfo": "System Info",
+    "taskScheduler": "Task Scheduler"
   },
   "appShell": {
     "brand": {
@@ -29,7 +30,60 @@
       "races": "Races",
       "aiCoach": "AI Coach",
       "workspace": "Workspace",
-      "systemInfo": "System Info"
+      "systemInfo": "System Info",
+      "taskScheduler": "Task Scheduler"
+    }
+  },
+  "adminTaskScheduler": {
+    "kicker": "Admin operations",
+    "title": "Task scheduler",
+    "description": "Inspect scheduler tasks, refresh live state, and manually retry failed or timed out work.",
+    "refresh": "Refresh",
+    "actions": "Actions",
+    "retry": "Retry",
+    "retrying": "Retrying...",
+    "previous": "Previous",
+    "next": "Next",
+    "pageSize": "20 tasks per page",
+    "empty": "No scheduler tasks found.",
+    "loading": "Loading scheduler tasks...",
+    "loadError": "Unable to load scheduler tasks right now.",
+    "retryError": "Unable to retry this scheduler task right now.",
+    "selectTask": "Select a task row to inspect scheduler details.",
+    "details": "Task details",
+    "taskRowLabel": "Task {{id}}",
+    "payload": "Payload",
+    "checkpoint": "Checkpoint",
+    "yes": "Yes",
+    "no": "No",
+    "columns": {
+      "id": "ID",
+      "createdAt": "Created",
+      "status": "Status",
+      "taskType": "Type",
+      "userId": "User",
+      "attemptCount": "Attempts",
+      "nextAttemptAt": "Next attempt",
+      "startedAt": "Started",
+      "finishedAt": "Finished",
+      "updatedAt": "Updated",
+      "claimedBy": "Worker",
+      "leaseExpiresAt": "Lease expires",
+      "lastHeartbeatAt": "Heartbeat",
+      "executionTimeout": "Timeout",
+      "timedOutAt": "Timed out",
+      "leaderOnly": "Leader only",
+      "errorMessage": "Error",
+      "dedupeKey": "Dedupe"
+    },
+    "statuses": {
+      "queued": "Queued",
+      "running": "Running",
+      "retry_scheduled": "Retry scheduled",
+      "failed": "Failed",
+      "completed": "Completed",
+      "timed_out": "Timed out",
+      "cancelled": "Cancelled"
     }
   },
   "aiAgents": {

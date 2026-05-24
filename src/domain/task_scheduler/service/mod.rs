@@ -12,10 +12,27 @@ use crate::domain::identity::Clock;
 
 use super::{
     BoxFuture, ScheduledTask, TaskCheckpointRequest, TaskClaimRequest, TaskCompleteRequest,
-    TaskEnqueueResult, TaskFailRequest, TaskHeartbeatRequest, TaskListFilter,
+    TaskEnqueueResult, TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskListPage,
     TaskMarkTimedOutRequest, TaskRecoverRequest, TaskRepository, TaskRetryRequest,
     TaskSchedulerError, TaskStatus, TaskWorker, TaskWorkerRepository,
 };
+
+pub trait AdminTaskSchedulerUseCases: Send + Sync {
+    fn list_tasks(
+        &self,
+        filter: TaskListFilter,
+    ) -> BoxFuture<Result<TaskListPage, TaskSchedulerError>>;
+
+    fn get_task(
+        &self,
+        task_id: &str,
+    ) -> BoxFuture<Result<Option<ScheduledTask>, TaskSchedulerError>>;
+
+    fn retry_task(
+        &self,
+        task_id: &str,
+    ) -> BoxFuture<Result<Option<ScheduledTask>, TaskSchedulerError>>;
+}
 
 pub struct FailTaskInput<'a> {
     pub task_id: &'a str,
@@ -217,7 +234,7 @@ where
     pub fn list_tasks(
         &self,
         filter: TaskListFilter,
-    ) -> BoxFuture<Result<Vec<ScheduledTask>, TaskSchedulerError>> {
+    ) -> BoxFuture<Result<TaskListPage, TaskSchedulerError>> {
         let tasks = self.tasks.clone();
         Box::pin(async move { tasks.list(filter).await })
     }
@@ -254,4 +271,32 @@ fn task_is_terminal(task: &ScheduledTask) -> bool {
         task.status,
         TaskStatus::Completed | TaskStatus::Failed | TaskStatus::TimedOut
     )
+}
+
+impl<Tasks, Workers, Time> AdminTaskSchedulerUseCases for TaskSchedulerService<Tasks, Workers, Time>
+where
+    Tasks: TaskRepository,
+    Workers: TaskWorkerRepository,
+    Time: Clock,
+{
+    fn list_tasks(
+        &self,
+        filter: TaskListFilter,
+    ) -> BoxFuture<Result<TaskListPage, TaskSchedulerError>> {
+        TaskSchedulerService::list_tasks(self, filter)
+    }
+
+    fn get_task(
+        &self,
+        task_id: &str,
+    ) -> BoxFuture<Result<Option<ScheduledTask>, TaskSchedulerError>> {
+        TaskSchedulerService::get_task(self, task_id)
+    }
+
+    fn retry_task(
+        &self,
+        task_id: &str,
+    ) -> BoxFuture<Result<Option<ScheduledTask>, TaskSchedulerError>> {
+        TaskSchedulerService::retry_task(self, task_id)
+    }
 }

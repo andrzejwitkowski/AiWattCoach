@@ -320,9 +320,60 @@ pub struct TaskRetryRequest {
     pub retried_at_epoch_seconds: i64,
 }
 
+pub const DEFAULT_TASK_LIST_LIMIT: usize = 20;
+pub const MAX_TASK_LIST_LIMIT: usize = 20;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TaskSortField {
+    Id,
+    UserId,
+    TaskType,
+    Status,
+    DedupeKey,
+    ErrorMessage,
+    AttemptCount,
+    NextAttemptAt,
+    ClaimedBy,
+    LeaseExpiresAt,
+    LastHeartbeatAt,
+    ExecutionTimeout,
+    TimedOutAt,
+    LeaderOnly,
+    #[default]
+    CreatedAt,
+    UpdatedAt,
+    StartedAt,
+    FinishedAt,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TaskSortDirection {
+    Asc,
+    #[default]
+    Desc,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TaskListFilter {
     pub task_types: Vec<String>,
     pub statuses: Vec<TaskStatus>,
     pub user_id: Option<String>,
+    pub limit: Option<usize>,
+    pub offset: usize,
+    pub sort_field: TaskSortField,
+    pub sort_direction: TaskSortDirection,
+}
+
+impl TaskListFilter {
+    pub fn clamped_limit(&self) -> usize {
+        self.limit
+            .unwrap_or(DEFAULT_TASK_LIST_LIMIT)
+            .clamp(1, MAX_TASK_LIST_LIMIT)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TaskListPage {
+    pub tasks: Vec<ScheduledTask>,
+    pub has_next_page: bool,
 }

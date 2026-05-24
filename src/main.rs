@@ -746,6 +746,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             auth.session.ttl_hours,
         )
         .with_settings_service(settings_service)
+        .with_admin_task_scheduler_service(Arc::new(shared_task_scheduler.clone()))
         .with_training_load_dashboard_service(training_load_dashboard_service)
         .with_calendar_service(calendar_service)
         .with_calendar_coach_service(calendar_coach_service)

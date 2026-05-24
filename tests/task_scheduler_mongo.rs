@@ -13,7 +13,8 @@ use mongodb::{
 use aiwattcoach::{
     adapters::mongo::tasks::MongoTaskRepository,
     domain::task_scheduler::{
-        NewTask, RetryStrategy, ScheduledTask, TaskCompleteRequest, TaskRepository,
+        NewTask, RetryStrategy, ScheduledTask, TaskCompleteRequest, TaskFailRequest,
+        TaskListFilter, TaskRepository, TaskRetryRequest, TaskStatus,
     },
     Settings,
 };
@@ -138,6 +139,104 @@ async fn mongo_task_repository_sets_cleanup_after_for_completed_tasks() {
         .get_datetime("cleanup_after")
         .expect("completed task should have cleanup_after");
     assert_eq!(cleanup_after.timestamp_millis(), 5_184_200_000);
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn mongo_task_repository_lists_tasks_by_created_at_desc_with_limit_and_offset() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoTaskRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    for index in 0..25 {
+        repository
+            .enqueue_if_absent(sample_task(
+                &format!("task-{index:02}"),
+                "user-1",
+                &format!("dedupe-{index:02}"),
+                100 + i64::from(index),
+            ))
+            .await
+            .unwrap();
+    }
+
+    let first_page = repository
+        .list(TaskListFilter {
+            limit: Some(20),
+            ..TaskListFilter::default()
+        })
+        .await
+        .unwrap();
+    let second_page = repository
+        .list(TaskListFilter {
+            limit: Some(20),
+            offset: 20,
+            ..TaskListFilter::default()
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(first_page.tasks.len(), 20);
+    assert!(first_page.has_next_page);
+    assert_eq!(first_page.tasks[0].id, "task-24");
+    assert_eq!(first_page.tasks[19].id, "task-05");
+    assert_eq!(second_page.tasks.len(), 5);
+    assert!(!second_page.has_next_page);
+    assert_eq!(second_page.tasks[0].id, "task-04");
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn mongo_task_repository_retry_requeues_failed_task() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoTaskRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    repository
+        .enqueue_if_absent(sample_task("task-1", "user-1", "dedupe-1", 100))
+        .await
+        .unwrap();
+    repository
+        .claim_next_due(aiwattcoach::domain::task_scheduler::TaskClaimRequest {
+            worker_id: "worker-1".to_string(),
+            enabled_task_types: vec!["summary".to_string()],
+            is_leader: false,
+            now_epoch_seconds: 110,
+            lease_expires_at_epoch_seconds: 140,
+        })
+        .await
+        .unwrap();
+    repository
+        .fail(TaskFailRequest {
+            task_id: "task-1".to_string(),
+            worker_id: "worker-1".to_string(),
+            checkpoint: None,
+            error_message: "provider failed".to_string(),
+            failed_at_epoch_seconds: 120,
+            retry_at_epoch_seconds: None,
+        })
+        .await
+        .unwrap();
+
+    let retried = repository
+        .retry(TaskRetryRequest {
+            task_id: "task-1".to_string(),
+            retried_at_epoch_seconds: 130,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(retried.status, TaskStatus::Queued);
+    assert_eq!(retried.next_attempt_at_epoch_seconds, 130);
+    assert_eq!(retried.error_message, None);
+    assert_eq!(retried.claimed_by, None);
 
     fixture.cleanup().await;
 }

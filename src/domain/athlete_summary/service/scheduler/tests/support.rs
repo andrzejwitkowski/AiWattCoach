@@ -15,7 +15,7 @@ use crate::domain::{
     llm::{LlmCacheUsage, LlmChatResponse, LlmError, LlmProvider, LlmTokenUsage},
     task_scheduler::{
         FailTaskInput, ScheduledTask, SharedTaskHandler, TaskClaimRequest, TaskCompleteRequest,
-        TaskEnqueueResult, TaskFailRequest, TaskHeartbeatRequest, TaskListFilter,
+        TaskEnqueueResult, TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskListPage,
         TaskMarkTimedOutRequest, TaskRecoverRequest, TaskRepository, TaskRetryRequest,
         TaskRunOutcome, TaskSchedulerError, TaskSchedulerService, TaskStatus, TaskWorker,
         TaskWorkerConfig, TaskWorkerRepository,
@@ -432,9 +432,13 @@ impl TaskRepository for InMemoryTaskRepository {
     fn list(
         &self,
         _filter: TaskListFilter,
-    ) -> crate::domain::task_scheduler::BoxFuture<Result<Vec<ScheduledTask>, TaskSchedulerError>>
-    {
-        Box::pin(async { Ok(Vec::new()) })
+    ) -> crate::domain::task_scheduler::BoxFuture<Result<TaskListPage, TaskSchedulerError>> {
+        Box::pin(async {
+            Ok(TaskListPage {
+                tasks: Vec::new(),
+                has_next_page: false,
+            })
+        })
     }
 }
 
