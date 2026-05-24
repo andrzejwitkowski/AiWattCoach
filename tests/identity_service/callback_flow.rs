@@ -5,8 +5,8 @@ use std::{
 
 use aiwattcoach::domain::identity::{
     AppUser, BoxFuture, GoogleLoginOutcome, IdentityError, IdentityService, IdentityServiceConfig,
-    IdentityServiceDependencies, LoginState, SessionRepository, UserRepository, WhitelistEntry,
-    WhitelistRepository,
+    IdentityServiceDependencies, LoginState, Role, SessionRepository, UserRepository,
+    WhitelistEntry, WhitelistRepository,
 };
 
 use crate::shared::{
@@ -480,6 +480,63 @@ async fn handle_google_callback_allows_new_user_when_whitelist_entry_is_approved
     };
     assert_eq!(result.user.email, "admin@example.com");
     assert_eq!(result.session.id, "session-1");
+}
+
+#[tokio::test]
+async fn handle_google_callback_preserves_existing_admin_role_when_admin_emails_no_longer_match() {
+    let login_states = Arc::new(Mutex::new(vec![LoginState::new(
+        "state-1".to_string(),
+        Some("/app".to_string()),
+        200,
+        100,
+    )]));
+    let users = InMemoryUsers::default();
+    users
+        .save(AppUser::new(
+            "user-1".to_string(),
+            "google-subject-1".to_string(),
+            "admin@example.com".to_string(),
+            vec![Role::User, Role::Admin],
+            Some("Existing Admin".to_string()),
+            None,
+            true,
+        ))
+        .await
+        .unwrap();
+    let sessions = InMemorySessions::default();
+    let states = InMemoryLoginStates {
+        items: login_states,
+    };
+    let whitelist = InMemoryWhitelist::default();
+    let service = IdentityService::new(
+        IdentityServiceDependencies {
+            users: users.clone(),
+            sessions,
+            login_states: states,
+            whitelist,
+            google_oauth: TestGoogleOAuthAdapter,
+            clock: TestClock,
+            ids: TestIdGenerator,
+        },
+        IdentityServiceConfig::new(vec![], 24),
+    );
+
+    let result = service
+        .handle_google_callback("state-1", "oauth-code")
+        .await
+        .unwrap();
+
+    let GoogleLoginOutcome::SignedIn(result) = result else {
+        panic!("expected signed in outcome");
+    };
+
+    assert_eq!(result.user.roles, vec![Role::User, Role::Admin]);
+    let saved_user = users
+        .find_by_google_subject("google-subject-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved_user.roles, vec![Role::User, Role::Admin]);
 }
 
 #[tokio::test]
