@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-24 | user | Wahoo summary-only fix missed REST integration expectation
+
+- Problem: after fixing the Wahoo summary-only DTO mapping to use nested `workout.id` as the canonical completed-workout identity, I updated the adapter-level regressions but missed the matching REST integration expectation in `tests/auth_rest/wahoo_webhook.rs`. That left CI red even though the production behavior was intentionally corrected.
+- Fix: updated `wahoo_webhook_accepts_real_summary_only_payload_shape` to expect `workout_id = 451769692` from the nested `workout.id` instead of `402756448` from `workout_summary.id`, then reran the focused REST and DTO regressions.
+- Prevention: when a fix changes a canonical identity field at the transport adapter boundary, grep both unit tests and higher-level REST/integration tests for old literal ids from the previous payload interpretation before calling the change done.
+
 ### 2026-05-24 | user | Wahoo summary-only canonical id repair scope
 
 - Problem: the Wahoo summary-only webhook investigation initially focused on the failed FIT enrichment task payload, but the real impact of mapping `workout_summary.id` into canonical completed-workout identity was broader. It also contaminated completed-workout persistence, Wahoo sync metadata, workout-summary state, and other workflow records keyed by the completed workout id.

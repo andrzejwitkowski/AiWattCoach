@@ -11,6 +11,7 @@
 - When debugging where provider credentials or tokens come from, start from the exact runtime call site and walk the code path back through the service, port, and repository layers before searching storage blindly. For Wahoo FIT issues specifically, trace from `load_file_url(...)` and `get_workout_summary(...)` back to `ensure_token(...)` and then to `user_settings` in Mongo before assuming the OAuth client secrets are also persisted there.
 - When an adapter bug corrupts a canonical entity id, enumerate every persisted store keyed by that id before writing the repair. Fixing only the first failed task or the primary repository row can leave orphaned summaries, sync metadata, or workflow state behind.
 - If local data cannot safely derive the corrected external id, make the repair script mapping-driven with explicit verified bad->good id pairs and dry-run as the default. Prefer blocking on unsupported downstream state over silently applying a partial rewrite that strands related records.
+- When a transport-layer identity mapping changes, grep for old literal ids in REST/integration tests as well as unit tests. Adapter regressions alone are not enough if a higher-level webhook or endpoint test still encodes the pre-fix canonical id.
 
 ## PR Conflict Verification
 

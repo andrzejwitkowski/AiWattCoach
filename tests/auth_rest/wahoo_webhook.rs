@@ -441,7 +441,7 @@ async fn wahoo_webhook_accepts_real_summary_only_payload_shape() {
         vec![WahooWebhookImportCall {
             webhook_token: "secret-token".to_string(),
             wahoo_user_id: 616_126,
-            workout_id: 402_756_448,
+            workout_id: 451_769_692,
             starts: "2026-05-02T08:14:29.000Z".to_string(),
             has_workout_summary: true,
         }]
