@@ -1,7 +1,8 @@
 use super::{
     assign_roles, authorize_admin_access, is_valid_email, normalize_email, AppUser, AuthSession,
     BoxFuture, Clock, GoogleOAuthPort, IdGenerator, IdentityError, LoginState,
-    LoginStateRepository, SessionRepository, UserRepository, WhitelistEntry, WhitelistRepository,
+    LoginStateRepository, Role, SessionRepository, UserRepository, WhitelistEntry,
+    WhitelistRepository,
 };
 use crate::domain::return_to::sanitize_return_to;
 
@@ -281,7 +282,10 @@ where
             }
         }
 
-        let roles = assign_roles(&google_identity.email, &self.admin_emails);
+        let roles = merge_roles(
+            existing_user.as_ref().map(|user| user.roles.as_slice()),
+            assign_roles(&google_identity.email, &self.admin_emails),
+        );
         let user = self
             .users
             .save_google_user_for_identity(self.ids.new_id("user"), google_identity, roles)
@@ -352,6 +356,16 @@ fn compute_session_expiry(
     }
 
     Ok(expires_at)
+}
+
+fn merge_roles(existing_roles: Option<&[Role]>, mut assigned_roles: Vec<Role>) -> Vec<Role> {
+    if existing_roles.is_some_and(|roles| roles.contains(&Role::Admin))
+        && !assigned_roles.contains(&Role::Admin)
+    {
+        assigned_roles.push(Role::Admin);
+    }
+
+    assigned_roles
 }
 
 pub fn validate_session_ttl_against_current_time(

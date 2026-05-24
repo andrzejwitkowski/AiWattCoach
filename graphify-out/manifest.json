@@ -468,8 +468,8 @@
     "hash": "34720c91941cbeb3e0f61f84fa5fb40b"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/identity_service/callback_flow.rs": {
-    "mtime": 1777106174.2067325,
-    "hash": "16eb5dcb70576c18ab8f8f247e7dad60"
+    "mtime": 1779652968.664109,
+    "hash": "14da98cb3deb15d22b15ee6fd054ccda"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/identity_service/login_start.rs": {
     "mtime": 1775675725.008912,
@@ -2624,8 +2624,8 @@
     "hash": "ca02e9802e752c580fd12930e1aa6aaa"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/identity/service.rs": {
-    "mtime": 1777106174.1928267,
-    "hash": "a902297f4e4a98693fdb04aac63890bd"
+    "mtime": 1779652992.6119363,
+    "hash": "cb9993706c7edea980e066495c7b9e07"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/special_days/model.rs": {
     "mtime": 1777106174.1997325,
@@ -3452,8 +3452,8 @@
     "hash": "faf4641d60f84eaebcde39d3060c388a"
   },
   "/home/andrzej/Projects/AiWattCoach/reviewers.md": {
-    "mtime": 1779651252.2948158,
-    "hash": "94ff999d91f2e3f15baf8c8c99c3e217"
+    "mtime": 1779653045.2495496,
+    "hash": "bbebed4eef143313037d8f49e0c60afc"
   },
   "/home/andrzej/Projects/AiWattCoach/docker-compose.yml": {
     "mtime": 1775675724.9767706,
@@ -3472,8 +3472,8 @@
     "hash": "2bbc3892747996176b16ca4b475b564f"
   },
   "/home/andrzej/Projects/AiWattCoach/tasks/lessons.md": {
-    "mtime": 1779650676.928708,
-    "hash": "0919015366e2688c76af8bf18bda91c6"
+    "mtime": 1779653050.7565086,
+    "hash": "7f61b3a165116d3c54712dc33d3f5ab4"
   },
   "/home/andrzej/Projects/AiWattCoach/docs/function_calls_exploration_prompt.md": {
     "mtime": 1777651504.4290388,

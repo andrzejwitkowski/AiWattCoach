@@ -12,6 +12,7 @@
 - When an adapter bug corrupts a canonical entity id, enumerate every persisted store keyed by that id before writing the repair. Fixing only the first failed task or the primary repository row can leave orphaned summaries, sync metadata, or workflow state behind.
 - If local data cannot safely derive the corrected external id, make the repair script mapping-driven with explicit verified bad->good id pairs and dry-run as the default. Prefer blocking on unsupported downstream state over silently applying a partial rewrite that strands related records.
 - When a transport-layer identity mapping changes, grep for old literal ids in REST/integration tests as well as unit tests. Adapter regressions alone are not enough if a higher-level webhook or endpoint test still encodes the pre-fix canonical id.
+- When a login flow recomputes user roles from config on every sign-in, verify whether that write path can unintentionally downgrade already persisted privileged roles. If manual admin grants are part of operations, add a regression where an existing admin logs in after `ADMIN_EMAILS` changed and confirm the persisted `admin` role survives.
 
 ## PR Conflict Verification
 

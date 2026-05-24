@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-24 | user | identity login role overwrite after redeploy
+
+- Problem: `IdentityService::handle_google_callback(...)` recalculated roles from `ADMIN_EMAILS` on every Google login and passed them straight into `save_google_user_for_identity(...)`. That meant a redeploy or env drift could silently remove a manually granted `admin` role from an existing user on the next login.
+- Fix: preserved an existing persisted `Role::Admin` when refreshing a known Google user during login, while still using `assign_roles(...)` for normal role assignment. Added a focused regression proving an existing admin keeps `roles = [user, admin]` even when `ADMIN_EMAILS` no longer contains that email.
+- Prevention: when login or profile-refresh flows recompute derived roles from config, check whether the write path is allowed to downgrade already persisted privileged roles. If role removal is not an explicit product rule, add a regression for the existing-admin login path before shipping.
+
 ### 2026-05-24 | user | Wahoo summary-only fix missed REST integration expectation
 
 - Problem: after fixing the Wahoo summary-only DTO mapping to use nested `workout.id` as the canonical completed-workout identity, I updated the adapter-level regressions but missed the matching REST integration expectation in `tests/auth_rest/wahoo_webhook.rs`. That left CI red even though the production behavior was intentionally corrected.
