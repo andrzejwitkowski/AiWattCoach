@@ -21,6 +21,24 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-24 | user | Wahoo summary-only fix missed REST integration expectation
+
+- Problem: after fixing the Wahoo summary-only DTO mapping to use nested `workout.id` as the canonical completed-workout identity, I updated the adapter-level regressions but missed the matching REST integration expectation in `tests/auth_rest/wahoo_webhook.rs`. That left CI red even though the production behavior was intentionally corrected.
+- Fix: updated `wahoo_webhook_accepts_real_summary_only_payload_shape` to expect `workout_id = 451769692` from the nested `workout.id` instead of `402756448` from `workout_summary.id`, then reran the focused REST and DTO regressions.
+- Prevention: when a fix changes a canonical identity field at the transport adapter boundary, grep both unit tests and higher-level REST/integration tests for old literal ids from the previous payload interpretation before calling the change done.
+
+### 2026-05-24 | user | Wahoo summary-only canonical id repair scope
+
+- Problem: the Wahoo summary-only webhook investigation initially focused on the failed FIT enrichment task payload, but the real impact of mapping `workout_summary.id` into canonical completed-workout identity was broader. It also contaminated completed-workout persistence, Wahoo sync metadata, workout-summary state, and other workflow records keyed by the completed workout id.
+- Fix: corrected `src/adapters/rest/wahoo/dto.rs` so summary-only payloads keep nested `workout.id` as the canonical workout id, added regressions for the real payload shape, and added a conservative Mongo repair script that takes explicit verified bad->good Wahoo id pairs, dry-runs by default, repairs the completed-workout/workout-summary identity stores, and blocks when unsupported training-plan state or unique-key collisions would make a partial rewrite unsafe.
+- Prevention: when an adapter bug changes a canonical entity id, do not stop at the first failing task or repository row. Trace every persisted store keyed by that canonical id, distinguish safe identity rewrites from state that would need a wider migration, and make the repair script mapping-driven when local data alone cannot derive the corrected external id safely.
+
+### 2026-05-24 | user | Wahoo token/debug trace discipline
+
+- Problem: during investigation of a failed `wahoo_fit.enrich` task, I searched Mongo broadly for OAuth client credentials instead of first tracing the runtime call chain from FIT download and Wahoo summary lookup back through the service and repository layers. That wasted time and obscured the real separation between user refresh tokens stored in `user_settings` and app-level Wahoo OAuth client secrets supplied out of band.
+- Fix: walked the code path from `WahooFitEnrichmentService::load_file_url(...)` to `WahooService::get_workout_summary(...)`, `ensure_token(...)`, and `MongoUserSettingsRepository::find_by_user_id(...)`, then used the provided Wahoo client id/secret to refresh the stored user refresh token and verify the live API behavior for workout `409097757`.
+- Prevention: for provider-auth debugging, start from the exact runtime caller and follow the code back to the persistence boundary before searching storage heuristically. Distinguish app-level OAuth client credentials from per-user access/refresh tokens, and only search Mongo for the latter unless the code path proves otherwise.
+
 ### 2026-05-24 | Copilot + CodeRabbit | PR #244 admin task scheduler review follow-up
 
 - Problem: the new admin task-scheduler page still shipped with review gaps: user-facing table/detail labels were hardcoded instead of localized, the Polish locale block mixed English copy and missing diacritics, async row selection could let stale detail responses overwrite a newer choice, the new frontend API exposed only `apiBaseUrl`-bound functions without a feature hook or request validation, REST list defaulting used the max limit instead of the default limit constant, and the in-memory scheduler test repository still had non-deterministic equal-timestamp ordering.

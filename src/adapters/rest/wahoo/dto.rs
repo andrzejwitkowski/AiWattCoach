@@ -332,6 +332,7 @@ impl WahooWebhookWorkoutSummary {
         } = self;
 
         let workout = workout.ok_or("missing workout payload")?;
+        let workout_id = workout.id;
         let file = file
             .and_then(|file| file.url)
             .map(|url| url.trim().to_string())
@@ -363,7 +364,7 @@ impl WahooWebhookWorkoutSummary {
         };
 
         Ok(WahooWorkout {
-            id,
+            id: workout_id,
             starts: started_at.unwrap_or(workout.starts),
             minutes: workout.minutes,
             name: workout.name,
@@ -432,7 +433,7 @@ mod tests {
 
         assert_eq!(event_type.as_deref(), Some("workout_summary"));
         assert_eq!(parts.wahoo_user_id, 616_126);
-        assert_eq!(parts.workout.id, 402_756_448);
+        assert_eq!(parts.workout.id, 451_769_692);
         assert_eq!(parts.workout.starts, "2026-05-02T08:14:29.000Z");
         assert_eq!(parts.workout.minutes, Some(40));
         assert_eq!(parts.workout.name.as_deref(), Some("Race Openers"));
@@ -453,5 +454,40 @@ mod tests {
             summary.file.expect("file should exist").url,
             "https://cdn.wahooligan.com/wahoo-cloud/production/uploads/workout_file/file/test.fit"
         );
+    }
+
+    #[test]
+    fn summary_only_payload_keeps_nested_workout_id_for_canonical_identity() {
+        let payload = r#"{
+            "webhook_token": "secret-token",
+            "user": { "id": 616126 },
+            "workout_summary": {
+                "id": 409097757,
+                "started_at": "2026-05-24T10:39:09.000Z",
+                "power_bike_np_last": "270.0",
+                "power_avg": "209.0",
+                "distance_accum": "37841.3",
+                "duration_total_accum": "3171.0",
+                "file": {
+                    "url": "https://cdn.wahooligan.com/wahoo-cloud/production/uploads/workout_file/file/test.fit"
+                },
+                "workout": {
+                    "id": 459105036,
+                    "starts": "2026-05-24T10:39:09.000Z",
+                    "minutes": 53,
+                    "name": "Cycling",
+                    "plan_id": 1,
+                    "workout_token": "token-459105036",
+                    "workout_type_id": 0
+                }
+            }
+        }"#;
+
+        let request: WahooWebhookRequest = serde_json::from_str(payload).unwrap();
+        let (_, parts) = request.into_domain_parts().unwrap();
+
+        assert_eq!(parts.workout.id, 459_105_036);
+        let summary = parts.workout.workout_summary.expect("summary should exist");
+        assert_eq!(summary.id, 409_097_757);
     }
 }

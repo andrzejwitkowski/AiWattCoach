@@ -292,8 +292,8 @@
     "hash": "03c672f59218c74f0032af52874d05d1"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/task_scheduler/support/repository.rs": {
-    "mtime": 1779644242.0667138,
-    "hash": "fb70f4e78b182b372a3c6266bade5276"
+    "mtime": 1779644561.5041866,
+    "hash": "164ffa39bb932adb690e3ceeacf02fc9"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/settings_rest/main.rs": {
     "mtime": 1775675725.0125616,
@@ -396,8 +396,8 @@
     "hash": "aa025b516a9679bc9f1d5e78c3cf23fa"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/auth_rest/wahoo_webhook.rs": {
-    "mtime": 1778178824.8674972,
-    "hash": "6b051be3c16f39a47d68fdaec1c8b753"
+    "mtime": 1779651528.461227,
+    "hash": "da7c430a2acee12ed0b8a2e62782251a"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/support/tracing_capture.rs": {
     "mtime": 1777106174.2167325,
@@ -1824,8 +1824,8 @@
     "hash": "fa900c9a5d8addc5cae68fc852ab04db"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/rest/wahoo/dto.rs": {
-    "mtime": 1778178824.8494968,
-    "hash": "5887e3a538eaec8750a228b5418fd1dc"
+    "mtime": 1779649100.6249058,
+    "hash": "133e4b40665b49e5a76f5deac5a343d1"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/rest/wahoo/handlers.rs": {
     "mtime": 1778178824.85029,
@@ -3415,6 +3415,10 @@
     "mtime": 1777106174.1760063,
     "hash": "3559d401cf7001f98f167945b6c1b137"
   },
+  "/home/andrzej/Projects/AiWattCoach/scripts/mongo-repair-wahoo-completed-workout-ids.js": {
+    "mtime": 1779650889.8898382,
+    "hash": "9a17486ca9177be03ea3192ad6dad3af"
+  },
   "/home/andrzej/Projects/AiWattCoach/scripts/resolve-release-version.test.mjs": {
     "mtime": 1777106174.1760063,
     "hash": "42d014e4da09e0936836bcd18047aa65"
@@ -3448,8 +3452,8 @@
     "hash": "faf4641d60f84eaebcde39d3060c388a"
   },
   "/home/andrzej/Projects/AiWattCoach/reviewers.md": {
-    "mtime": 1779644242.0697136,
-    "hash": "f641ec3f9dbd14150616901f8796871a"
+    "mtime": 1779651252.2948158,
+    "hash": "94ff999d91f2e3f15baf8c8c99c3e217"
   },
   "/home/andrzej/Projects/AiWattCoach/docker-compose.yml": {
     "mtime": 1775675724.9767706,
@@ -3468,8 +3472,8 @@
     "hash": "2bbc3892747996176b16ca4b475b564f"
   },
   "/home/andrzej/Projects/AiWattCoach/tasks/lessons.md": {
-    "mtime": 1779639842.0363848,
-    "hash": "b1df9b5b4ba6fe46c3744d7a5fc885cc"
+    "mtime": 1779650676.928708,
+    "hash": "0919015366e2688c76af8bf18bda91c6"
   },
   "/home/andrzej/Projects/AiWattCoach/docs/function_calls_exploration_prompt.md": {
     "mtime": 1777651504.4290388,
