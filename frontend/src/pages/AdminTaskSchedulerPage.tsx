@@ -1,13 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { useApiBaseUrl } from '../lib/apiBaseUrl';
-import {
-  loadAdminSchedulerTask,
-  loadAdminSchedulerTasks,
-  retryAdminSchedulerTask,
-} from '../features/admin-task-scheduler/api';
+import { useAdminTaskSchedulerApi } from '../features/admin-task-scheduler/api';
 import type {
   ScheduledTask,
   SortDirection,
@@ -16,30 +11,34 @@ import type {
 
 const PAGE_SIZE = 20;
 
-const columns: Array<{ field: TaskSortField; label: string }> = [
-  { field: 'id', label: 'ID' },
-  { field: 'createdAt', label: 'Created' },
-  { field: 'status', label: 'Status' },
-  { field: 'taskType', label: 'Type' },
-  { field: 'userId', label: 'User' },
-  { field: 'attemptCount', label: 'Attempts' },
-  { field: 'nextAttemptAt', label: 'Next attempt' },
-  { field: 'startedAt', label: 'Started' },
-  { field: 'finishedAt', label: 'Finished' },
-  { field: 'updatedAt', label: 'Updated' },
-  { field: 'claimedBy', label: 'Worker' },
-  { field: 'leaseExpiresAt', label: 'Lease expires' },
-  { field: 'lastHeartbeatAt', label: 'Heartbeat' },
-  { field: 'executionTimeout', label: 'Timeout' },
-  { field: 'timedOutAt', label: 'Timed out' },
-  { field: 'leaderOnly', label: 'Leader only' },
-  { field: 'errorMessage', label: 'Error' },
-  { field: 'dedupeKey', label: 'Dedupe' },
+const columns: Array<{ field: TaskSortField; labelKey: string }> = [
+  { field: 'id', labelKey: 'adminTaskScheduler.columns.id' },
+  { field: 'createdAt', labelKey: 'adminTaskScheduler.columns.createdAt' },
+  { field: 'status', labelKey: 'adminTaskScheduler.columns.status' },
+  { field: 'taskType', labelKey: 'adminTaskScheduler.columns.taskType' },
+  { field: 'userId', labelKey: 'adminTaskScheduler.columns.userId' },
+  { field: 'attemptCount', labelKey: 'adminTaskScheduler.columns.attemptCount' },
+  { field: 'nextAttemptAt', labelKey: 'adminTaskScheduler.columns.nextAttemptAt' },
+  { field: 'startedAt', labelKey: 'adminTaskScheduler.columns.startedAt' },
+  { field: 'finishedAt', labelKey: 'adminTaskScheduler.columns.finishedAt' },
+  { field: 'updatedAt', labelKey: 'adminTaskScheduler.columns.updatedAt' },
+  { field: 'claimedBy', labelKey: 'adminTaskScheduler.columns.claimedBy' },
+  { field: 'leaseExpiresAt', labelKey: 'adminTaskScheduler.columns.leaseExpiresAt' },
+  { field: 'lastHeartbeatAt', labelKey: 'adminTaskScheduler.columns.lastHeartbeatAt' },
+  { field: 'executionTimeout', labelKey: 'adminTaskScheduler.columns.executionTimeout' },
+  { field: 'timedOutAt', labelKey: 'adminTaskScheduler.columns.timedOutAt' },
+  { field: 'leaderOnly', labelKey: 'adminTaskScheduler.columns.leaderOnly' },
+  { field: 'errorMessage', labelKey: 'adminTaskScheduler.columns.errorMessage' },
+  { field: 'dedupeKey', labelKey: 'adminTaskScheduler.columns.dedupeKey' },
 ];
 
 export function AdminTaskSchedulerPage() {
-  const apiBaseUrl = useApiBaseUrl();
   const { t } = useTranslation();
+  const {
+    loadAdminSchedulerTask,
+    loadAdminSchedulerTasks,
+    retryAdminSchedulerTask,
+  } = useAdminTaskSchedulerApi();
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null);
@@ -52,11 +51,23 @@ export function AdminTaskSchedulerPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const selectionRequestIdRef = useRef(0);
+
+  const loadTaskPage = async (
+    pageOffset: number,
+    pageSortField: TaskSortField,
+    pageSortDirection: SortDirection,
+  ) => loadAdminSchedulerTasks({
+    limit: PAGE_SIZE,
+    offset: pageOffset,
+    sortField: pageSortField,
+    sortDirection: pageSortDirection,
+  });
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
-    void loadTaskPage(apiBaseUrl, offset, sortField, sortDirection)
+    void loadTaskPage(offset, sortField, sortDirection)
       .then((page) => {
         if (cancelled) return;
         setTasks(page.items);
@@ -75,14 +86,14 @@ export function AdminTaskSchedulerPage() {
     return () => {
       cancelled = true;
     };
-  }, [apiBaseUrl, offset, sortField, sortDirection]);
+  }, [loadAdminSchedulerTasks, offset, sortField, sortDirection]);
 
   const refresh = async () => {
     setIsRefreshing(true);
     try {
       const [page, detail] = await Promise.all([
-        loadTaskPage(apiBaseUrl, offset, sortField, sortDirection),
-        selectedTaskId ? loadAdminSchedulerTask(apiBaseUrl, selectedTaskId).catch(() => null) : Promise.resolve(null),
+        loadTaskPage(offset, sortField, sortDirection),
+        selectedTaskId ? loadAdminSchedulerTask(selectedTaskId).catch(() => null) : Promise.resolve(null),
       ]);
       setTasks(page.items);
       setNextOffset(page.nextOffset);
@@ -100,11 +111,20 @@ export function AdminTaskSchedulerPage() {
   };
 
   const selectTask = async (task: ScheduledTask) => {
+    selectionRequestIdRef.current += 1;
+    const requestId = selectionRequestIdRef.current;
     setSelectedTaskId(task.id);
     setSelectedTask(task);
     try {
-      setSelectedTask(await loadAdminSchedulerTask(apiBaseUrl, task.id));
+      const detail = await loadAdminSchedulerTask(task.id);
+      if (selectionRequestIdRef.current !== requestId) {
+        return;
+      }
+      setSelectedTask(detail);
     } catch {
+      if (selectionRequestIdRef.current !== requestId) {
+        return;
+      }
       setSelectedTask(task);
     }
   };
@@ -112,7 +132,7 @@ export function AdminTaskSchedulerPage() {
   const retryTask = async (taskId: string) => {
     setRetryingTaskId(taskId);
     try {
-      const task = await retryAdminSchedulerTask(apiBaseUrl, taskId);
+      const task = await retryAdminSchedulerTask(taskId);
       setTasks((current) => current.map((item) => item.id === task.id ? task : item));
       if (selectedTaskId === task.id) {
         setSelectedTask(task);
@@ -177,7 +197,7 @@ export function AdminTaskSchedulerPage() {
                         type="button"
                         onClick={() => changeSort(column.field)}
                       >
-                        {column.label}{sortField === column.field ? ` ${sortDirection === 'asc' ? '↑' : '↓'}` : ''}
+                        {t(column.labelKey)}{sortField === column.field ? ` ${sortDirection === 'asc' ? '↑' : '↓'}` : ''}
                       </button>
                     </th>
                   ))}
@@ -188,7 +208,7 @@ export function AdminTaskSchedulerPage() {
                 {tasks.map((task) => (
                   <tr
                     key={task.id}
-                    aria-label={`Task ${task.id}`}
+                    aria-label={t('adminTaskScheduler.taskRowLabel', { id: task.id })}
                     className={`${rowClassName(task)} cursor-pointer rounded-2xl transition hover:brightness-125`}
                     role="button"
                     tabIndex={0}
@@ -215,7 +235,7 @@ export function AdminTaskSchedulerPage() {
                     <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.lastHeartbeatAtEpochSeconds)}</td>
                     <td className="px-3 py-3 text-slate-300">{task.executionTimeoutSeconds}s</td>
                     <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.timedOutAtEpochSeconds)}</td>
-                    <td className="px-3 py-3 text-slate-300">{task.leaderOnly ? 'yes' : 'no'}</td>
+                    <td className="px-3 py-3 text-slate-300">{t(task.leaderOnly ? 'adminTaskScheduler.yes' : 'adminTaskScheduler.no')}</td>
                     <td className="max-w-64 truncate px-3 py-3 text-slate-400">{task.errorMessage ?? '-'}</td>
                     <td className="max-w-56 truncate px-3 py-3 text-slate-400">{task.dedupeKey}</td>
                     <td className="rounded-r-2xl px-3 py-3">
@@ -273,20 +293,6 @@ export function AdminTaskSchedulerPage() {
   );
 }
 
-async function loadTaskPage(
-  apiBaseUrl: string,
-  offset: number,
-  sortField: TaskSortField,
-  sortDirection: SortDirection,
-) {
-  return loadAdminSchedulerTasks(apiBaseUrl, {
-    limit: PAGE_SIZE,
-    offset,
-    sortField,
-    sortDirection,
-  });
-}
-
 function TaskDetails({ task }: { task: ScheduledTask | null }) {
   const { t } = useTranslation();
   if (!task) {
@@ -304,30 +310,30 @@ function TaskDetails({ task }: { task: ScheduledTask | null }) {
         <h3 className="mt-2 break-all text-lg font-bold text-white">{task.id}</h3>
       </div>
       <dl className="grid gap-3 text-sm">
-        <Detail label="Status" value={task.status} />
-        <Detail label="Task type" value={task.taskType} />
-        <Detail label="User" value={task.userId} />
-        <Detail label="Attempts" value={String(task.attemptCount)} />
-        <Detail label="Created" value={formatEpoch(task.createdAtEpochSeconds)} />
-        <Detail label="Updated" value={formatEpoch(task.updatedAtEpochSeconds)} />
-        <Detail label="Worker" value={task.claimedBy ?? '-'} />
-        <Detail label="Next attempt" value={formatEpoch(task.nextAttemptAtEpochSeconds)} />
-        <Detail label="Started" value={formatOptionalEpoch(task.startedAtEpochSeconds)} />
-        <Detail label="Finished" value={formatOptionalEpoch(task.finishedAtEpochSeconds)} />
-        <Detail label="Lease expires" value={formatOptionalEpoch(task.leaseExpiresAtEpochSeconds)} />
-        <Detail label="Last heartbeat" value={formatOptionalEpoch(task.lastHeartbeatAtEpochSeconds)} />
-        <Detail label="Timed out" value={formatOptionalEpoch(task.timedOutAtEpochSeconds)} />
-        <Detail label="Execution timeout" value={`${task.executionTimeoutSeconds}s`} />
-        <Detail label="Leader only" value={task.leaderOnly ? 'yes' : 'no'} />
-        <Detail label="Dedupe" value={task.dedupeKey} />
+        <Detail label={t('adminTaskScheduler.columns.status')} value={t(`adminTaskScheduler.statuses.${task.status}`)} />
+        <Detail label={t('adminTaskScheduler.columns.taskType')} value={task.taskType} />
+        <Detail label={t('adminTaskScheduler.columns.userId')} value={task.userId} />
+        <Detail label={t('adminTaskScheduler.columns.attemptCount')} value={String(task.attemptCount)} />
+        <Detail label={t('adminTaskScheduler.columns.createdAt')} value={formatEpoch(task.createdAtEpochSeconds)} />
+        <Detail label={t('adminTaskScheduler.columns.updatedAt')} value={formatEpoch(task.updatedAtEpochSeconds)} />
+        <Detail label={t('adminTaskScheduler.columns.claimedBy')} value={task.claimedBy ?? '-'} />
+        <Detail label={t('adminTaskScheduler.columns.nextAttemptAt')} value={formatEpoch(task.nextAttemptAtEpochSeconds)} />
+        <Detail label={t('adminTaskScheduler.columns.startedAt')} value={formatOptionalEpoch(task.startedAtEpochSeconds)} />
+        <Detail label={t('adminTaskScheduler.columns.finishedAt')} value={formatOptionalEpoch(task.finishedAtEpochSeconds)} />
+        <Detail label={t('adminTaskScheduler.columns.leaseExpiresAt')} value={formatOptionalEpoch(task.leaseExpiresAtEpochSeconds)} />
+        <Detail label={t('adminTaskScheduler.columns.lastHeartbeatAt')} value={formatOptionalEpoch(task.lastHeartbeatAtEpochSeconds)} />
+        <Detail label={t('adminTaskScheduler.columns.timedOutAt')} value={formatOptionalEpoch(task.timedOutAtEpochSeconds)} />
+        <Detail label={t('adminTaskScheduler.columns.executionTimeout')} value={`${task.executionTimeoutSeconds}s`} />
+        <Detail label={t('adminTaskScheduler.columns.leaderOnly')} value={t(task.leaderOnly ? 'adminTaskScheduler.yes' : 'adminTaskScheduler.no')} />
+        <Detail label={t('adminTaskScheduler.columns.dedupeKey')} value={task.dedupeKey} />
       </dl>
       {task.errorMessage && (
         <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">
           {task.errorMessage}
         </div>
       )}
-      <JsonBlock title="Payload" value={task.payload} />
-      <JsonBlock title="Checkpoint" value={task.checkpoint} />
+      <JsonBlock title={t('adminTaskScheduler.payload')} value={task.payload} />
+      <JsonBlock title={t('adminTaskScheduler.checkpoint')} value={task.checkpoint} />
     </aside>
   );
 }
@@ -353,9 +359,11 @@ function JsonBlock({ title, value }: { title: string; value: unknown }) {
 }
 
 function StatusBadge({ status }: { status: ScheduledTask['status'] }) {
+  const { t } = useTranslation();
+
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${badgeClassName(status)}`}>
-      {status.replace('_', ' ')}
+      {t(`adminTaskScheduler.statuses.${status}`)}
     </span>
   );
 }

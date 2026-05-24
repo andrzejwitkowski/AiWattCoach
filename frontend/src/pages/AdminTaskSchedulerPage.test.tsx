@@ -61,21 +61,21 @@ describe('AdminTaskSchedulerPage', () => {
     expect(failedRow.closest('tr')?.className).toContain('bg-rose');
     expect(screen.getByText('task-done').closest('tr')?.className).toContain('bg-emerald');
     expect(screen.getByText('task-timeout').closest('tr')?.className).toContain('bg-amber');
-    expect(screen.getByRole('button', { name: /Lease expires/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Heartbeat/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Timeout/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Leader only/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /adminTaskScheduler.columns.leaseExpiresAt/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /adminTaskScheduler.columns.lastHeartbeatAt/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /adminTaskScheduler.columns.executionTimeout/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /adminTaskScheduler.columns.leaderOnly/ })).toBeInTheDocument();
 
     await userEvent.click(failedRow);
-    expect(await screen.findByText('Payload')).toBeInTheDocument();
-    expect(screen.getByText('Execution timeout')).toBeInTheDocument();
+    expect(await screen.findByText('adminTaskScheduler.payload')).toBeInTheDocument();
+    expect(screen.getAllByText('adminTaskScheduler.columns.executionTimeout').length).toBeGreaterThan(0);
 
     const failedTableRow = failedRow.closest('tr');
     expect(failedTableRow).not.toBeNull();
     await userEvent.click(within(failedTableRow as HTMLTableRowElement).getByRole('button', { name: 'adminTaskScheduler.retry' }));
 
     await waitFor(() => {
-      expect(screen.getAllByText('queued').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('adminTaskScheduler.statuses.queued').length).toBeGreaterThan(0);
     });
 
     await userEvent.click(screen.getByRole('button', { name: /adminTaskScheduler.refresh/i }));
@@ -88,10 +88,47 @@ describe('AdminTaskSchedulerPage', () => {
       expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('offset=20'), expect.any(Object));
     });
 
-    await userEvent.click(screen.getByRole('button', { name: /Status/ }));
+    await userEvent.click(screen.getByRole('button', { name: /adminTaskScheduler.columns.status/ }));
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('sortField=status'), expect.any(Object));
     });
+  });
+
+  it('ignores stale detail responses when selection changes quickly', async () => {
+    const firstDetail = deferredResponse();
+    const secondDetail = deferredResponse();
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(jsonResponse({
+        items: [
+          taskPayload('task-first', 'failed', 300),
+          taskPayload('task-second', 'running', 200),
+        ],
+        nextOffset: null,
+        previousOffset: null,
+        limit: 20,
+      }))
+      .mockReturnValueOnce(firstDetail.promise)
+      .mockReturnValueOnce(secondDetail.promise);
+    global.fetch = fetchMock as typeof fetch;
+
+    renderAdminTaskSchedulerPage();
+
+    const firstRow = await screen.findByText('task-first');
+    const secondRow = screen.getByText('task-second');
+
+    await userEvent.click(firstRow);
+    await userEvent.click(secondRow);
+
+    secondDetail.resolve(jsonResponse(taskPayload('task-second', 'running', 200)));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'task-second' })).toBeInTheDocument();
+    });
+
+    firstDetail.resolve(jsonResponse(taskPayload('task-first', 'failed', 300)));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'task-second' })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('heading', { name: 'task-first' })).not.toBeInTheDocument();
   });
 
   it('shows localized load and retry errors instead of raw transport errors', async () => {
@@ -133,6 +170,14 @@ function jsonResponse(payload: unknown) {
     status: 200,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function deferredResponse() {
+  let resolve!: (value: Response) => void;
+  const promise = new Promise<Response>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 function taskPayload(id: string, status: string, createdAt: number) {

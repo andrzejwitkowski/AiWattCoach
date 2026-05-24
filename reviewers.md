@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-24 | Copilot + CodeRabbit | PR #244 admin task scheduler review follow-up
+
+- Problem: the new admin task-scheduler page still shipped with review gaps: user-facing table/detail labels were hardcoded instead of localized, the Polish locale block mixed English copy and missing diacritics, async row selection could let stale detail responses overwrite a newer choice, the new frontend API exposed only `apiBaseUrl`-bound functions without a feature hook or request validation, REST list defaulting used the max limit instead of the default limit constant, and the in-memory scheduler test repository still had non-deterministic equal-timestamp ordering.
+- Fix: added a `useAdminTaskSchedulerApi()` hook plus focused request validation, localized the admin scheduler page labels/statuses and repaired the Polish copy, guarded async selection with a request sequence so older detail loads are ignored, switched the REST default limit to `DEFAULT_TASK_LIST_LIMIT`, and added an `id` tie-breaker to the in-memory list sort. Added focused frontend regressions for the hook path, param validation, and stale detail response handling.
+- Prevention: for new frontend feature APIs, expose a hook wrapper as soon as the API needs `apiBaseUrl`, validate request params before the HTTP call, and scan the page for every visible string including table headers, detail labels, booleans, and status badges. For async detail panels driven by row clicks, add one race-condition regression that proves a slower earlier response cannot overwrite the latest selection. For paged admin list endpoints and in-memory test repos, verify default-limit constants and deterministic tie-breakers before review.
+
 ### 2026-05-24 | self (4-loop review) | issue 127 admin task scheduler view
 
 - Problem: the initial admin scheduler view shipped with review gaps: non-admin/auth behavior could be masked by missing scheduler-service wiring, pagination back links could jump past zero, several sort fields were accepted by the API but not visible as table columns, raw transport errors could leak into the UI, the new page threaded `apiBaseUrl` through props instead of the shared hook/provider pattern, and Mongo sort construction duplicated `_id` when sorting by task id.

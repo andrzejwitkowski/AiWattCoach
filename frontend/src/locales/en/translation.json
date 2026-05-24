@@ -16,7 +16,7 @@
     "aiCoach": "AI Coach",
     "workspace": "Workspace",
     "systemInfo": "System Info",
-    "taskScheduler": "Scheduler"
+    "taskScheduler": "Task Scheduler"
   },
   "appShell": {
     "brand": {
@@ -31,7 +31,7 @@
       "aiCoach": "AI Coach",
       "workspace": "Workspace",
       "systemInfo": "System Info",
-      "taskScheduler": "Scheduler"
+      "taskScheduler": "Task Scheduler"
     }
   },
   "adminTaskScheduler": {
@@ -50,7 +50,41 @@
     "loadError": "Unable to load scheduler tasks right now.",
     "retryError": "Unable to retry this scheduler task right now.",
     "selectTask": "Select a task row to inspect scheduler details.",
-    "details": "Task details"
+    "details": "Task details",
+    "taskRowLabel": "Task {{id}}",
+    "payload": "Payload",
+    "checkpoint": "Checkpoint",
+    "yes": "Yes",
+    "no": "No",
+    "columns": {
+      "id": "ID",
+      "createdAt": "Created",
+      "status": "Status",
+      "taskType": "Type",
+      "userId": "User",
+      "attemptCount": "Attempts",
+      "nextAttemptAt": "Next attempt",
+      "startedAt": "Started",
+      "finishedAt": "Finished",
+      "updatedAt": "Updated",
+      "claimedBy": "Worker",
+      "leaseExpiresAt": "Lease expires",
+      "lastHeartbeatAt": "Heartbeat",
+      "executionTimeout": "Timeout",
+      "timedOutAt": "Timed out",
+      "leaderOnly": "Leader only",
+      "errorMessage": "Error",
+      "dedupeKey": "Dedupe"
+    },
+    "statuses": {
+      "queued": "Queued",
+      "running": "Running",
+      "retry_scheduled": "Retry scheduled",
+      "failed": "Failed",
+      "completed": "Completed",
+      "timed_out": "Timed out",
+      "cancelled": "Cancelled"
+    }
   },
   "aiAgents": {
     "title": "AI Agents",

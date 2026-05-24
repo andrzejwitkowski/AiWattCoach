@@ -292,8 +292,8 @@
     "hash": "03c672f59218c74f0032af52874d05d1"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/task_scheduler/support/repository.rs": {
-    "mtime": 1779641270.3393478,
-    "hash": "d9fcf4818392fab60ec6f56db96ea16b"
+    "mtime": 1779644242.0667138,
+    "hash": "fb70f4e78b182b372a3c6266bade5276"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/settings_rest/main.rs": {
     "mtime": 1775675725.0125616,
@@ -792,8 +792,8 @@
     "hash": "295b7e11f6d8f07b6c3835e1baf77219"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/pages/AdminTaskSchedulerPage.tsx": {
-    "mtime": 1779642085.9876833,
-    "hash": "c7c1dc4db97b7a27505e575b93393c83"
+    "mtime": 1779644276.5554001,
+    "hash": "b2203e31826880cd21f08913dc894eff"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/pages/LandingPage.test.tsx": {
     "mtime": 1777106174.111732,
@@ -820,8 +820,8 @@
     "hash": "22427ee2ca8731c19dd3b2e7ab4049f5"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/pages/AdminTaskSchedulerPage.test.tsx": {
-    "mtime": 1779642127.257932,
-    "hash": "6957674fc8954c97c9e01f80c742e77e"
+    "mtime": 1779644358.5020378,
+    "hash": "2ad1aca39f6cba902f0fd5bd1e5bdd93"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/pages/AdminSystemInfoPage.test.tsx": {
     "mtime": 1775675724.9915767,
@@ -984,12 +984,12 @@
     "hash": "4dcb6c7be930e9887c3b87b6aae6dafe"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/features/admin-task-scheduler/api.test.ts": {
-    "mtime": 1779641005.7936275,
-    "hash": "bf57b46ad4dc2963ffd70a576b48a654"
+    "mtime": 1779644326.1156468,
+    "hash": "e6e14066ef2089d302176b09be0b03f1"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/features/admin-task-scheduler/api.ts": {
-    "mtime": 1779640588.2061188,
-    "hash": "34203b651b44b5b42a39c69cbb012f45"
+    "mtime": 1779644242.060714,
+    "hash": "3a5e4e5577a6940fadcc55a20c3a4117"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/features/admin-task-scheduler/types.ts": {
     "mtime": 1779640569.6390052,
@@ -1776,8 +1776,8 @@
     "hash": "30def27e80159816f77a0da9d9214bd2"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/rest/admin_task_scheduler.rs": {
-    "mtime": 1779642127.256932,
-    "hash": "d00e833dfc9c8b4c0bd2d9cef38bc321"
+    "mtime": 1779644242.065714,
+    "hash": "5199bba905890d09a921e4d92fb05bc0"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/rest/mod.rs": {
     "mtime": 1779640480.341899,
@@ -3448,8 +3448,8 @@
     "hash": "faf4641d60f84eaebcde39d3060c388a"
   },
   "/home/andrzej/Projects/AiWattCoach/reviewers.md": {
-    "mtime": 1779639842.0213852,
-    "hash": "1e2d34cc2c173e841402ab95164c02e9"
+    "mtime": 1779644242.0697136,
+    "hash": "f641ec3f9dbd14150616901f8796871a"
   },
   "/home/andrzej/Projects/AiWattCoach/docker-compose.yml": {
     "mtime": 1775675724.9767706,

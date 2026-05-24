@@ -11,7 +11,7 @@ use crate::config::AppState;
 use crate::domain::identity::IdentityError;
 use crate::domain::task_scheduler::{
     RetryStrategy, ScheduledTask, TaskListFilter, TaskSchedulerError, TaskSortDirection,
-    TaskSortField, TaskStatus, MAX_TASK_LIST_LIMIT,
+    TaskSortField, TaskStatus, DEFAULT_TASK_LIST_LIMIT, MAX_TASK_LIST_LIMIT,
 };
 
 use super::cookies::read_cookie;
@@ -209,7 +209,7 @@ fn build_task_list_filter(query: TaskListQuery) -> Result<TaskListFilter, ()> {
         limit: Some(
             query
                 .limit
-                .unwrap_or(MAX_TASK_LIST_LIMIT)
+                .unwrap_or(DEFAULT_TASK_LIST_LIMIT)
                 .min(MAX_TASK_LIST_LIMIT),
         ),
         offset: query.offset.unwrap_or(0),

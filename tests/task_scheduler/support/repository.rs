@@ -388,9 +388,10 @@ impl TaskRepository for InMemoryTaskRepository {
                             .created_at_epoch_seconds
                             .cmp(&left.created_at_epoch_seconds)
                     })
+                    .then_with(|| right.id.cmp(&left.id))
             });
             let limit = filter.clamped_limit();
-            let has_next_page = listed.len() > filter.offset + limit;
+            let has_next_page = listed.len() > filter.offset.saturating_add(limit);
             Ok(TaskListPage {
                 tasks: listed.into_iter().skip(filter.offset).take(limit).collect(),
                 has_next_page,

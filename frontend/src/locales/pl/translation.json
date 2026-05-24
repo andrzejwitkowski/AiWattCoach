@@ -16,7 +16,7 @@
     "aiCoach": "AI Trener",
     "workspace": "Obszar roboczy",
     "systemInfo": "Info systemowe",
-    "taskScheduler": "Scheduler"
+    "taskScheduler": "Harmonogram zadań"
   },
   "appShell": {
     "brand": {
@@ -31,26 +31,60 @@
       "aiCoach": "AI Trener",
       "workspace": "Obszar roboczy",
       "systemInfo": "Info systemowe",
-      "taskScheduler": "Scheduler"
+      "taskScheduler": "Harmonogram zadań"
     }
   },
   "adminTaskScheduler": {
-    "kicker": "Operacje admina",
-    "title": "Task scheduler",
-    "description": "Przegladaj taski schedulera, odswiezaj aktualny stan i recznie ponawiaj failed albo timed out taski.",
-    "refresh": "Refresh",
+    "kicker": "Operacje administratora",
+    "title": "Harmonogram zadań",
+    "description": "Przeglądaj zadania schedulera, odświeżaj bieżący stan i ręcznie ponawiaj zadania zakończone błędem albo po przekroczeniu limitu czasu.",
+    "refresh": "Odśwież",
     "actions": "Akcje",
-    "retry": "Retry",
-    "retrying": "Retry...",
+    "retry": "Ponów",
+    "retrying": "Ponawianie...",
     "previous": "Poprzednia",
-    "next": "Nastepna",
-    "pageSize": "20 taskow na stronie",
-    "empty": "Nie znaleziono taskow schedulera.",
-    "loading": "Ladowanie taskow schedulera...",
-    "loadError": "Nie udalo sie teraz zaladowac taskow schedulera.",
-    "retryError": "Nie udalo sie teraz ponowic taska schedulera.",
-    "selectTask": "Wybierz wiersz taska, zeby zobaczyc detale.",
-    "details": "Detale taska"
+    "next": "Następna",
+    "pageSize": "20 zadań na stronie",
+    "empty": "Nie znaleziono zadań schedulera.",
+    "loading": "Ładowanie zadań schedulera...",
+    "loadError": "Nie udało się teraz załadować zadań schedulera.",
+    "retryError": "Nie udało się teraz ponowić tego zadania schedulera.",
+    "selectTask": "Wybierz wiersz zadania, aby zobaczyć szczegóły.",
+    "details": "Szczegóły zadania",
+    "taskRowLabel": "Zadanie {{id}}",
+    "payload": "Dane wejściowe",
+    "checkpoint": "Punkt kontrolny",
+    "yes": "Tak",
+    "no": "Nie",
+    "columns": {
+      "id": "ID",
+      "createdAt": "Utworzono",
+      "status": "Status",
+      "taskType": "Typ",
+      "userId": "Użytkownik",
+      "attemptCount": "Próby",
+      "nextAttemptAt": "Następna próba",
+      "startedAt": "Start",
+      "finishedAt": "Koniec",
+      "updatedAt": "Aktualizacja",
+      "claimedBy": "Proces roboczy",
+      "leaseExpiresAt": "Wygaśnięcie dzierżawy",
+      "lastHeartbeatAt": "Ostatni heartbeat",
+      "executionTimeout": "Limit czasu",
+      "timedOutAt": "Przekroczenie czasu",
+      "leaderOnly": "Tylko leader",
+      "errorMessage": "Błąd",
+      "dedupeKey": "Klucz dedupe"
+    },
+    "statuses": {
+      "queued": "W kolejce",
+      "running": "W toku",
+      "retry_scheduled": "Zaplanowano ponowienie",
+      "failed": "Błąd",
+      "completed": "Zakończono",
+      "timed_out": "Przekroczono limit czasu",
+      "cancelled": "Anulowano"
+    }
   },
   "aiAgents": {
     "title": "Agenci AI",
