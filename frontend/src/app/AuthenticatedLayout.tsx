@@ -6,6 +6,7 @@ import {
   Calendar,
   Flag,
   LayoutDashboard,
+  ListChecks,
   Settings,
   ShieldCheck,
 } from 'lucide-react';
@@ -26,6 +27,7 @@ const PAGE_TITLE_KEYS: Record<string, string> = {
   '/calendar': 'appShell.pageTitles.calendar',
   '/races': 'appShell.pageTitles.races',
   '/ai-coach': 'appShell.pageTitles.aiCoach',
+  '/admin/task-scheduler': 'appShell.pageTitles.taskScheduler',
   '/admin/system-info': 'appShell.pageTitles.systemInfo',
 };
 
@@ -57,7 +59,10 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
           <NavItem to="/ai-coach" icon={Bot} label={t('nav.aiCoach')} />
           <NavItem to="/settings" icon={Settings} label={t('nav.settings')} />
           {currentUser && currentUser.roles.includes('admin') && (
-            <NavItem to="/admin/system-info" icon={ShieldCheck} label={t('nav.systemInfo')} />
+            <>
+              <NavItem to="/admin/task-scheduler" icon={ListChecks} label={t('nav.taskScheduler')} />
+              <NavItem to="/admin/system-info" icon={ShieldCheck} label={t('nav.systemInfo')} />
+            </>
           )}
         </nav>
       </aside>

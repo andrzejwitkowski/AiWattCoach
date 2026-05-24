@@ -268,8 +268,13 @@ mod tests {
         fn list(
             &self,
             _filter: TaskListFilter,
-        ) -> BoxFuture<Result<Vec<ScheduledTask>, TaskSchedulerError>> {
-            Box::pin(async { Ok(Vec::new()) })
+        ) -> BoxFuture<Result<TaskListPage, TaskSchedulerError>> {
+            Box::pin(async {
+                Ok(TaskListPage {
+                    tasks: Vec::new(),
+                    has_next_page: false,
+                })
+            })
         }
     }
 

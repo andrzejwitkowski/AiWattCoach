@@ -15,7 +15,8 @@
     "races": "Wyścigi",
     "aiCoach": "AI Trener",
     "workspace": "Obszar roboczy",
-    "systemInfo": "Info systemowe"
+    "systemInfo": "Info systemowe",
+    "taskScheduler": "Scheduler"
   },
   "appShell": {
     "brand": {
@@ -29,8 +30,27 @@
       "races": "Wyścigi",
       "aiCoach": "AI Trener",
       "workspace": "Obszar roboczy",
-      "systemInfo": "Info systemowe"
+      "systemInfo": "Info systemowe",
+      "taskScheduler": "Scheduler"
     }
+  },
+  "adminTaskScheduler": {
+    "kicker": "Operacje admina",
+    "title": "Task scheduler",
+    "description": "Przegladaj taski schedulera, odswiezaj aktualny stan i recznie ponawiaj failed albo timed out taski.",
+    "refresh": "Refresh",
+    "actions": "Akcje",
+    "retry": "Retry",
+    "retrying": "Retry...",
+    "previous": "Poprzednia",
+    "next": "Nastepna",
+    "pageSize": "20 taskow na stronie",
+    "empty": "Nie znaleziono taskow schedulera.",
+    "loading": "Ladowanie taskow schedulera...",
+    "loadError": "Nie udalo sie teraz zaladowac taskow schedulera.",
+    "retryError": "Nie udalo sie teraz ponowic taska schedulera.",
+    "selectTask": "Wybierz wiersz taska, zeby zobaczyc detale.",
+    "details": "Detale taska"
   },
   "aiAgents": {
     "title": "Agenci AI",

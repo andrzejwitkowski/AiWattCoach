@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-24 | self (4-loop review) | issue 127 admin task scheduler view
+
+- Problem: the initial admin scheduler view shipped with review gaps: non-admin/auth behavior could be masked by missing scheduler-service wiring, pagination back links could jump past zero, several sort fields were accepted by the API but not visible as table columns, raw transport errors could leak into the UI, the new page threaded `apiBaseUrl` through props instead of the shared hook/provider pattern, and Mongo sort construction duplicated `_id` when sorting by task id.
+- Fix: required admin auth before service availability checks, clamped previous offsets, added the missing sort columns, mapped page/retry failures to localized messages, wrapped the route in `ApiBaseUrlProvider` and used `useApiBaseUrl()` inside the page, special-cased id sorting, and added focused frontend coverage for columns and error copy.
+- Prevention: for admin operational UIs, verify auth order, pagination edge cases, accepted-vs-rendered sortable fields, user-facing error mapping, and frontend API-base wiring before review. For dynamic Mongo sort builders, check the tie-breaker does not duplicate the primary sort key.
+
 ### 2026-05-22 | user | workout-summary tool guidance evidence hierarchy
 
 - Problem: workout-summary tool guidance listed the available workout tools but did not make the evidence hierarchy explicit enough. It did not clearly say that `get_selected_workout` is the fallback when packed execution evidence (`bl`, `pc`, `c5`) is not enough for a confident judgment, and it did not clearly demote `selected_workout_power_curve` to a supplemental source for duration-specific power facts rather than the primary basis for deciding whether planned interval blocks were hit.

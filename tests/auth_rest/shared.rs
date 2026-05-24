@@ -17,6 +17,7 @@ use aiwattcoach::{
         AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
         SettingsError, UserSettings, UserSettingsUseCases,
     },
+    domain::task_scheduler::AdminTaskSchedulerUseCases,
     domain::wahoo::{
         WahooAuthExchange, WahooAuthStart, WahooCreatePlan, WahooCreateWorkout, WahooError,
         WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, WahooUser,
@@ -167,6 +168,36 @@ pub(crate) async fn auth_test_app_with_settings(
             24,
         )
         .with_settings_service(std::sync::Arc::new(settings_service)),
+        dist_dir,
+    )
+}
+
+pub(crate) async fn auth_test_app_with_admin_task_scheduler(
+    identity_service: TestIdentityService,
+    task_scheduler_service: impl AdminTaskSchedulerUseCases + 'static,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let dist_dir = shared_frontend_fixture().dist_dir();
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_trust_proxy_headers(settings.trust_proxy_headers)
+        .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
+            usize::MAX,
+            std::time::Duration::from_secs(60),
+        ))
+        .with_identity_service(
+            std::sync::Arc::new(identity_service),
+            "aiwattcoach_session",
+            "lax",
+            false,
+            24,
+        )
+        .with_admin_task_scheduler_service(std::sync::Arc::new(task_scheduler_service)),
         dist_dir,
     )
 }

@@ -1,4 +1,5 @@
 mod admin;
+mod admin_task_scheduler;
 mod athlete_summary;
 mod auth;
 mod calendar;
@@ -85,6 +86,18 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                     post(auth::join_whitelist).layer(DefaultBodyLimit::max(4 * 1024)),
                 )
                 .route("/api/admin/system-info", get(admin::system_info))
+                .route(
+                    "/api/admin/task-scheduler/tasks",
+                    get(admin_task_scheduler::list_tasks),
+                )
+                .route(
+                    "/api/admin/task-scheduler/tasks/{task_id}",
+                    get(admin_task_scheduler::get_task),
+                )
+                .route(
+                    "/api/admin/task-scheduler/tasks/{task_id}/retry",
+                    post(admin_task_scheduler::retry_task),
+                )
                 .route(
                     "/api/admin/completed-workouts/{user_id}/backfill-details",
                     post(admin::backfill_completed_workout_details),

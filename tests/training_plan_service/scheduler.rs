@@ -377,7 +377,7 @@ async fn wait_for_only_task_status(
                 .list_tasks(TaskListFilter::default())
                 .await
                 .unwrap();
-            let Some(task) = tasks.into_iter().next() else {
+            let Some(task) = tasks.tasks.into_iter().next() else {
                 tokio::task::yield_now().await;
                 continue;
             };
@@ -402,6 +402,7 @@ async fn only_task(scheduler: &Scheduler) -> ScheduledTask {
         .list_tasks(TaskListFilter::default())
         .await
         .unwrap()
+        .tasks
         .into_iter()
         .next()
         .expect("expected scheduled training plan task")

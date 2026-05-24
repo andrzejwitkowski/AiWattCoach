@@ -2,7 +2,7 @@ use std::{future::Future, pin::Pin};
 
 use super::{
     ScheduledTask, TaskCheckpointRequest, TaskClaimRequest, TaskCompleteRequest, TaskEnqueueResult,
-    TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskMarkTimedOutRequest,
+    TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskListPage, TaskMarkTimedOutRequest,
     TaskRecoverRequest, TaskRetryRequest, TaskSchedulerError, TaskWorker,
 };
 
@@ -62,10 +62,7 @@ pub trait TaskRepository: Clone + Send + Sync + 'static {
         task_id: &str,
     ) -> BoxFuture<Result<Option<ScheduledTask>, TaskSchedulerError>>;
 
-    fn list(
-        &self,
-        filter: TaskListFilter,
-    ) -> BoxFuture<Result<Vec<ScheduledTask>, TaskSchedulerError>>;
+    fn list(&self, filter: TaskListFilter) -> BoxFuture<Result<TaskListPage, TaskSchedulerError>>;
 }
 
 pub trait TaskWorkerRepository: Clone + Send + Sync + 'static {

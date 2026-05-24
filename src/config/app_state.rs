@@ -20,6 +20,7 @@ use crate::domain::intervals::{IntervalsConnectionTester, IntervalsUseCases};
 use crate::domain::llm::{LlmChatPort, UserLlmConfigProvider};
 use crate::domain::races::RaceUseCases;
 use crate::domain::settings::UserSettingsUseCases;
+use crate::domain::task_scheduler::AdminTaskSchedulerUseCases;
 use crate::domain::training_load::TrainingLoadDashboardReadUseCases;
 use crate::domain::wahoo::WahooUseCases;
 use crate::domain::wahoo::WahooWebhookUseCases;
@@ -43,6 +44,7 @@ pub struct AppState {
     pub wahoo_webhook_service: Option<Arc<dyn WahooWebhookUseCases>>,
     pub race_service: Option<Arc<dyn RaceUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
+    pub admin_task_scheduler_service: Option<Arc<dyn AdminTaskSchedulerUseCases>>,
     pub training_load_dashboard_service: Option<Arc<dyn TrainingLoadDashboardReadUseCases>>,
     pub athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
     pub workout_summary_service: Option<Arc<dyn WorkoutSummaryUseCases>>,
@@ -124,6 +126,7 @@ impl AppState {
             wahoo_webhook_service: None,
             race_service: None,
             settings_service: None,
+            admin_task_scheduler_service: None,
             training_load_dashboard_service: None,
             athlete_summary_service: None,
             workout_summary_service: None,
@@ -169,6 +172,14 @@ impl AppState {
         training_load_dashboard_service: Arc<dyn TrainingLoadDashboardReadUseCases>,
     ) -> Self {
         self.training_load_dashboard_service = Some(training_load_dashboard_service);
+        self
+    }
+
+    pub fn with_admin_task_scheduler_service(
+        mut self,
+        admin_task_scheduler_service: Arc<dyn AdminTaskSchedulerUseCases>,
+    ) -> Self {
+        self.admin_task_scheduler_service = Some(admin_task_scheduler_service);
         self
     }
 

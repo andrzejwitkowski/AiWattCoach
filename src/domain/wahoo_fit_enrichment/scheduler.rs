@@ -253,8 +253,9 @@ mod tests {
         task_scheduler::{
             BoxFuture as TaskBoxFuture, NewTask, ScheduledTask, TaskClaimRequest,
             TaskCompleteRequest, TaskEnqueueResult, TaskFailRequest, TaskHeartbeatRequest,
-            TaskListFilter, TaskMarkTimedOutRequest, TaskRecoverRequest, TaskRepository,
-            TaskRetryRequest, TaskSchedulerService, TaskStatus, TaskWorker, TaskWorkerRepository,
+            TaskListFilter, TaskListPage, TaskMarkTimedOutRequest, TaskRecoverRequest,
+            TaskRepository, TaskRetryRequest, TaskSchedulerService, TaskStatus, TaskWorker,
+            TaskWorkerRepository,
         },
     };
 
@@ -416,8 +417,13 @@ mod tests {
         fn list(
             &self,
             _filter: TaskListFilter,
-        ) -> TaskBoxFuture<Result<Vec<ScheduledTask>, TaskSchedulerError>> {
-            Box::pin(async { Ok(Vec::new()) })
+        ) -> TaskBoxFuture<Result<TaskListPage, TaskSchedulerError>> {
+            Box::pin(async {
+                Ok(TaskListPage {
+                    tasks: Vec::new(),
+                    has_next_page: false,
+                })
+            })
         }
     }
 

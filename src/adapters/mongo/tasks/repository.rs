@@ -9,8 +9,9 @@ use super::mapping::{
 use super::MongoTaskRepository;
 use crate::domain::task_scheduler::{
     TaskCheckpointRequest, TaskClaimRequest, TaskCompleteRequest, TaskEnqueueResult,
-    TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskMarkTimedOutRequest,
-    TaskRecoverRequest, TaskRepository, TaskRetryRequest, TaskSchedulerError, TaskStatus,
+    TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskListPage, TaskMarkTimedOutRequest,
+    TaskRecoverRequest, TaskRepository, TaskRetryRequest, TaskSchedulerError, TaskSortDirection,
+    TaskSortField, TaskStatus,
 };
 
 impl TaskRepository for MongoTaskRepository {
@@ -552,11 +553,14 @@ impl TaskRepository for MongoTaskRepository {
     fn list(
         &self,
         filter: TaskListFilter,
-    ) -> crate::domain::task_scheduler::BoxFuture<
-        Result<Vec<crate::domain::task_scheduler::ScheduledTask>, TaskSchedulerError>,
-    > {
+    ) -> crate::domain::task_scheduler::BoxFuture<Result<TaskListPage, TaskSchedulerError>> {
         let collection = self.collection.clone();
         Box::pin(async move {
+            let limit = filter.clamped_limit();
+            let skip = u64::try_from(filter.offset).map_err(|_| {
+                TaskSchedulerError::Validation("task list offset is too large".to_string())
+            })?;
+            let sort = sort_document(filter.sort_field, filter.sort_direction);
             let mut mongo_filter = doc! {};
             if !filter.task_types.is_empty() {
                 mongo_filter.insert("task_type", doc! { "$in": filter.task_types });
@@ -579,19 +583,63 @@ impl TaskRepository for MongoTaskRepository {
 
             let documents = collection
                 .find(mongo_filter)
-                .sort(doc! { "updated_at_epoch_seconds": -1, "created_at_epoch_seconds": -1 })
+                .sort(sort)
+                .skip(skip)
+                .limit(i64::try_from(limit + 1).map_err(|_| {
+                    TaskSchedulerError::Validation("task list limit is too large".to_string())
+                })?)
                 .await
                 .map_err(storage_error)?
                 .try_collect::<Vec<_>>()
                 .await
                 .map_err(storage_error)?;
 
-            documents
+            let has_next_page = documents.len() > limit;
+            let tasks = documents
                 .into_iter()
+                .take(limit)
                 .map(map_document_to_task)
-                .collect::<Result<Vec<_>, _>>()
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(TaskListPage {
+                tasks,
+                has_next_page,
+            })
         })
     }
+}
+
+fn sort_document(field: TaskSortField, direction: TaskSortDirection) -> mongodb::bson::Document {
+    let order = match direction {
+        TaskSortDirection::Asc => 1,
+        TaskSortDirection::Desc => -1,
+    };
+    let field_name = match field {
+        TaskSortField::Id => "_id",
+        TaskSortField::UserId => "user_id",
+        TaskSortField::TaskType => "task_type",
+        TaskSortField::Status => "status",
+        TaskSortField::DedupeKey => "dedupe_key",
+        TaskSortField::ErrorMessage => "error_message",
+        TaskSortField::AttemptCount => "attempt_count",
+        TaskSortField::NextAttemptAt => "next_attempt_at_epoch_seconds",
+        TaskSortField::ClaimedBy => "claimed_by",
+        TaskSortField::LeaseExpiresAt => "lease_expires_at_epoch_seconds",
+        TaskSortField::LastHeartbeatAt => "last_heartbeat_at_epoch_seconds",
+        TaskSortField::ExecutionTimeout => "execution_timeout_seconds",
+        TaskSortField::TimedOutAt => "timed_out_at_epoch_seconds",
+        TaskSortField::LeaderOnly => "leader_only",
+        TaskSortField::CreatedAt => "created_at_epoch_seconds",
+        TaskSortField::UpdatedAt => "updated_at_epoch_seconds",
+        TaskSortField::StartedAt => "started_at_epoch_seconds",
+        TaskSortField::FinishedAt => "finished_at_epoch_seconds",
+    };
+
+    if field == TaskSortField::Id {
+        return doc! { "_id": order };
+    }
+
+    doc! { field_name: order, "_id": order }
 }
 
 fn bson_or_null(value: Option<DateTime>) -> Bson {

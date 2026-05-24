@@ -15,7 +15,8 @@
     "races": "Races",
     "aiCoach": "AI Coach",
     "workspace": "Workspace",
-    "systemInfo": "System Info"
+    "systemInfo": "System Info",
+    "taskScheduler": "Scheduler"
   },
   "appShell": {
     "brand": {
@@ -29,8 +30,27 @@
       "races": "Races",
       "aiCoach": "AI Coach",
       "workspace": "Workspace",
-      "systemInfo": "System Info"
+      "systemInfo": "System Info",
+      "taskScheduler": "Scheduler"
     }
+  },
+  "adminTaskScheduler": {
+    "kicker": "Admin operations",
+    "title": "Task scheduler",
+    "description": "Inspect scheduler tasks, refresh live state, and manually retry failed or timed out work.",
+    "refresh": "Refresh",
+    "actions": "Actions",
+    "retry": "Retry",
+    "retrying": "Retrying...",
+    "previous": "Previous",
+    "next": "Next",
+    "pageSize": "20 tasks per page",
+    "empty": "No scheduler tasks found.",
+    "loading": "Loading scheduler tasks...",
+    "loadError": "Unable to load scheduler tasks right now.",
+    "retryError": "Unable to retry this scheduler task right now.",
+    "selectTask": "Select a task row to inspect scheduler details.",
+    "details": "Task details"
   },
   "aiAgents": {
     "title": "AI Agents",
