@@ -41,6 +41,13 @@ function pathname(url: URL) {
   return url.pathname.replace(/\/+$/, '') || '/';
 }
 
+function toLocalDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function sortTasks(tasks: PreviewPreset['tasks'], sortField: string, sortDirection: string) {
   const direction = sortDirection === 'asc' ? 1 : -1;
   return [...tasks].sort((left, right) => {
@@ -600,7 +607,10 @@ async function handleRequest(state: State, request: Request, url: URL, path: str
   const calendarMessagesMatch = path.match(/^\/api\/calendar\/coach\/conversations\/([^/]+)\/messages$/);
   if (calendarMessagesMatch && request.method === 'POST') {
     const conversationId = decodeURIComponent(calendarMessagesMatch[1] ?? '');
-    const conversation = state.preset.calendarCoach.conversations[conversationId] ?? ensureCalendarConversation(state);
+    const conversation = state.preset.calendarCoach.conversations[conversationId];
+    if (!conversation) {
+      return notFound('Calendar conversation not found');
+    }
     const body = await parseBody(request) as { content?: string } | null;
     if (!body?.content?.trim()) {
       return badRequest('Message content is required');
@@ -746,8 +756,11 @@ async function handleRequest(state: State, request: Request, url: URL, path: str
     }
     if (provider === 'wahoo') {
       const today = new Date();
-      const todayKey = today.toISOString().slice(0, 10);
-      if (date < todayKey) {
+      const maxDate = new Date(today);
+      maxDate.setDate(maxDate.getDate() + 6);
+      const todayKey = toLocalDateKey(today);
+      const maxDateKey = toLocalDateKey(maxDate);
+      if (date < todayKey || date > maxDateKey) {
         return badRequest('Only planned workouts scheduled between today and the next 6 days can sync to Wahoo', 'wahoo_window_out_of_range');
       }
     }

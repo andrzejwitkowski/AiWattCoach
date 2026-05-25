@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-25 | CodeRabbit | PR #248 mobile preview review follow-up
+
+- Problem: `frontend/src/lib/useMediaQuery.ts` assumed `matchMedia(...).addEventListener/removeEventListener` always exist, which can crash in browsers that only expose legacy `addListener/removeListener`. The preview mock server also accepted unknown calendar coach conversation ids on `POST /messages` by falling back to another conversation, and its Wahoo sync validation enforced only the lower date bound even though the API message promises a today-through-plus-6-days window.
+- Fix: added a legacy `addListener/removeListener` fallback in `useMediaQuery` plus a focused regression test, changed the preview calendar message route to return `404` for unknown conversation ids instead of writing into another conversation, and tightened the Wahoo sync check to reject dates both before today and beyond the next 6 local days.
+- Prevention: when adding browser compatibility helpers around `matchMedia`, check both modern and legacy listener APIs and lock the fallback with one focused hook test. For preview or mock endpoints, reject unknown resource ids explicitly instead of silently redirecting writes, and make date-window validation match the full user-facing contract rather than only one edge.
+
 ### 2026-05-25 | user | local mock preview auth flow
 
 - Problem: the first local frontend preview instructions used `VITE_API_BASE_URL=http://127.0.0.1:4010`, which forced authenticated browser requests and websockets onto a cross-origin mock server. The frontend then fell back to the landing page and looked stuck on login even though the mock `/api/auth/me` endpoint itself worked.

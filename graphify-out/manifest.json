@@ -704,12 +704,12 @@
     "hash": "24639e2447063f29a1407c6b5670439f"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/vite.config.ts": {
-    "mtime": 1775675724.9915767,
-    "hash": "46e18b03a4181a16886e7a9517d4f709"
+    "mtime": 1779729518.283458,
+    "hash": "ab4a39ad279ad47972cbb06423880259"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/dev/mock-preview/server.ts": {
-    "mtime": 1779729124.590013,
-    "hash": "682217ec4f1c14dbb64833ed6675a3bc"
+    "mtime": 1779731278.32625,
+    "hash": "d3234221fdc9cac5c808e721c1285b73"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/dev/mock-preview/presets.ts": {
     "mtime": 1779729124.589013,
@@ -752,12 +752,16 @@
     "hash": "fa8f9681d5808a5c6bacd8476803090c"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/lib/useMediaQuery.ts": {
-    "mtime": 1779725863.7635748,
-    "hash": "f53b77d23ac010bacdbd13810aaaefbf"
+    "mtime": 1779731278.32325,
+    "hash": "cda56ce0c8b8a59b4e120028f2380677"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/lib/httpClient.ts": {
     "mtime": 1778610164.4053717,
     "hash": "c3fc01f30808fd45c2911c1c82126276"
+  },
+  "/home/andrzej/Projects/AiWattCoach/frontend/src/lib/useMediaQuery.test.tsx": {
+    "mtime": 1779731278.3252501,
+    "hash": "b05694772feff498bf16f36b5dd61054"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/lib/logger.ts": {
     "mtime": 1775675724.9906142,
@@ -3468,8 +3472,8 @@
     "hash": "faf4641d60f84eaebcde39d3060c388a"
   },
   "/home/andrzej/Projects/AiWattCoach/reviewers.md": {
-    "mtime": 1779726424.783337,
-    "hash": "50be3ee6e53d8da091a85413bdb8adb8"
+    "mtime": 1779731278.32725,
+    "hash": "db016eeea5d05e4d8dea7ff2bb814135"
   },
   "/home/andrzej/Projects/AiWattCoach/docker-compose.yml": {
     "mtime": 1775675724.9767706,
@@ -3488,8 +3492,8 @@
     "hash": "2bbc3892747996176b16ca4b475b564f"
   },
   "/home/andrzej/Projects/AiWattCoach/tasks/lessons.md": {
-    "mtime": 1779724927.8621883,
-    "hash": "e7d33b9bc2bf0814c2b28c3d980ef132"
+    "mtime": 1779729518.297458,
+    "hash": "cd7bd08665bf9107823cea94666aefe6"
   },
   "/home/andrzej/Projects/AiWattCoach/docs/function_calls_exploration_prompt.md": {
     "mtime": 1777651504.4290388,
@@ -3836,8 +3840,8 @@
     "hash": "3e0b18475cc8324e0a68cb0a867061c5"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/dev/mock-preview/README.md": {
-    "mtime": 1779729124.590013,
-    "hash": "3eff60f0dd466e4000fc5217404bb4ee"
+    "mtime": 1779729518.295458,
+    "hash": "a4161906d48fe3a8ec04170a8a286e5f"
   },
   "/home/andrzej/Projects/AiWattCoach/docker/loki-config.yaml": {
     "mtime": 1775675724.9777567,

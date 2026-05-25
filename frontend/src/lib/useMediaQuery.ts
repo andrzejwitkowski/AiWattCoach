@@ -22,10 +22,19 @@ export function useMediaQuery(query: string): boolean {
     };
 
     setMatches(mediaQuery.matches);
-    mediaQuery.addEventListener('change', handleChange);
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+
+      return () => {
+        mediaQuery.removeEventListener('change', handleChange);
+      };
+    }
+
+    mediaQuery.addListener(handleChange);
 
     return () => {
-      mediaQuery.removeEventListener('change', handleChange);
+      mediaQuery.removeListener(handleChange);
     };
   }, [query]);
 
