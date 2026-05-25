@@ -18,7 +18,6 @@ function json(data: unknown, status = 200) {
     headers: {
       'content-type': 'application/json',
       'access-control-allow-origin': '*',
-      'access-control-allow-credentials': 'true',
       'access-control-allow-headers': 'content-type, traceparent',
       'access-control-allow-methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
     },
@@ -166,7 +165,6 @@ function corsResponse() {
     status: 204,
     headers: {
       'access-control-allow-origin': '*',
-      'access-control-allow-credentials': 'true',
       'access-control-allow-headers': 'content-type, traceparent',
       'access-control-allow-methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
     },

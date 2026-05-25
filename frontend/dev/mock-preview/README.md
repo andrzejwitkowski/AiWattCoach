@@ -16,6 +16,12 @@ Terminal 1:
 PREVIEW_PRESET=mobile-focus bun run --cwd frontend mock:preview
 ```
 
+Optional port override:
+
+```bash
+PREVIEW_PORT=4011 PREVIEW_PRESET=mobile-focus bun run --cwd frontend mock:preview
+```
+
 Terminal 2:
 
 ```bash
