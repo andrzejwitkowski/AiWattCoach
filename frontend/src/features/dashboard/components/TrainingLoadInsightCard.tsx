@@ -26,7 +26,7 @@ export function TrainingLoadInsightCard({ report }: TrainingLoadInsightCardProps
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] border border-white/8 bg-[#10161d] p-7 shadow-[0_30px_80px_rgba(2,8,23,0.4)]">
+      <section className="rounded-[1.6rem] border border-white/8 bg-[#10161d] p-4 shadow-[0_30px_80px_rgba(2,8,23,0.4)] sm:rounded-[2rem] sm:p-7">
         <div className="flex items-center gap-4">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-lime-300/10 text-lime-200" aria-hidden="true">
             <span className="text-lg font-black">i</span>
@@ -66,9 +66,9 @@ export function TrainingLoadInsightCard({ report }: TrainingLoadInsightCardProps
         </div>
       </section>
 
-      <section className="rounded-[2rem] border border-lime-300/12 bg-[radial-gradient(circle_at_top,rgba(190,242,100,0.14),transparent_45%),#0f151b] p-7 shadow-[0_24px_70px_rgba(8,47,73,0.32)]">
+      <section className="rounded-[1.6rem] border border-lime-300/12 bg-[radial-gradient(circle_at_top,rgba(190,242,100,0.14),transparent_45%),#0f151b] p-4 shadow-[0_24px_70px_rgba(8,47,73,0.32)] sm:rounded-[2rem] sm:p-7">
         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-lime-300">{t('dashboard.insights.coachInsight.eyebrow')}</p>
-        <h3 className="mt-3 text-3xl font-black tracking-tight text-white">{headline}</h3>
+        <h3 className="mt-3 text-2xl font-black tracking-tight text-white sm:text-3xl">{headline}</h3>
         <p className="mt-4 text-sm leading-7 text-slate-300">{detail}</p>
         <dl className="mt-6 grid grid-cols-2 gap-4 text-sm">
           <Metric label={t('dashboard.insights.coachInsight.metrics.ftp')} value={formatWattsValue(report.summary.ftpWatts, language)} />

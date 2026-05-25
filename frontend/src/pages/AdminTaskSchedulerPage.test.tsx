@@ -5,6 +5,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiBaseUrlProvider } from '../lib/apiBaseUrl';
 import { AdminTaskSchedulerPage } from './AdminTaskSchedulerPage';
 
+function setScreenWidth(width: number) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: query === '(max-width: 767px)' ? width <= 767 : false,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia;
+}
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -17,6 +30,7 @@ afterEach(() => {
   cleanup();
   global.fetch = originalFetch;
   vi.restoreAllMocks();
+  setScreenWidth(1280);
 });
 
 describe('AdminTaskSchedulerPage', () => {
@@ -154,6 +168,28 @@ describe('AdminTaskSchedulerPage', () => {
 
     expect(await screen.findByText('adminTaskScheduler.retryError')).toBeInTheDocument();
     expect(screen.queryByText(/failed: 409/i)).not.toBeInTheDocument();
+  });
+
+  it('renders mobile task cards on narrow screens while keeping details selection', async () => {
+    setScreenWidth(390);
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(jsonResponse({
+        items: [taskPayload('task-mobile', 'failed', 300)],
+        nextOffset: null,
+        previousOffset: null,
+        limit: 20,
+      }))
+      .mockResolvedValueOnce(jsonResponse(taskPayload('task-mobile', 'failed', 300)));
+    global.fetch = fetchMock as typeof fetch;
+
+    renderAdminTaskSchedulerPage();
+
+    const card = await screen.findByText('task-mobile');
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+
+    await userEvent.click(card.closest('button') as HTMLButtonElement);
+
+    expect(await screen.findByRole('heading', { name: 'task-mobile' })).toBeInTheDocument();
   });
 });
 

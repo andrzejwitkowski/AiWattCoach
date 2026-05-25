@@ -127,7 +127,7 @@ export function AvailabilityCard({ settings, apiBaseUrl, onSave }: AvailabilityC
             </div>
           </div>
         </div>
-        <div className="min-w-[14rem] rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3.5 py-2.5 text-right">
+        <div className="w-full rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3.5 py-2.5 text-left sm:w-auto sm:min-w-[14rem] sm:text-right">
           <p className="text-[10px] uppercase tracking-[0.28em] text-emerald-200/70">{t('availability.coachReadiness')}</p>
           <p className="mt-1 text-sm font-medium text-emerald-100">
             {configured ? t('availability.configured') : t('availability.unconfigured')}
@@ -135,7 +135,7 @@ export function AvailabilityCard({ settings, apiBaseUrl, onSave }: AvailabilityC
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2.5 md:grid-cols-4 xl:grid-cols-7">
+      <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
         {days.map((day) => {
           const weekdayLabel = t(WEEKDAY_LABEL_KEYS[day.weekday]);
           const shortWeekdayLabel = t(WEEKDAY_SHORT_KEYS[day.weekday]);

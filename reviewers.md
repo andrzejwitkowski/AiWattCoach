@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-25 | user | local mock preview auth flow
+
+- Problem: the first local frontend preview instructions used `VITE_API_BASE_URL=http://127.0.0.1:4010`, which forced authenticated browser requests and websockets onto a cross-origin mock server. The frontend then fell back to the landing page and looked stuck on login even though the mock `/api/auth/me` endpoint itself worked.
+- Fix: switched the preview setup to same-origin `/api` traffic through Vite proxying, added `/api` proxying with websocket support in `frontend/vite.config.ts`, and updated the preview instructions to use `BACKEND_PROXY_TARGET=http://127.0.0.1:4010` while keeping `VITE_API_BASE_URL` unset.
+- Prevention: for local browser previews that depend on auth cookies, `credentials: include`, or websockets, prefer same-origin proxying through the frontend dev server over a cross-origin API base URL unless real browser CORS behavior has been explicitly verified.
+
+### 2026-05-25 | self | mobile responsive frontend rollout
+
+- Problem: the first mobile calendar-coach modal pass kept both desktop and mobile "New conversation" buttons mounted at once and relied on CSS visibility alone, which made role/name queries ambiguous in tests and created duplicate accessible controls in the DOM. The new mobile calendar navigation test also initially assumed translated labels while the local `useTranslation` mock still returned raw keys for the new strings.
+- Fix: switched the calendar coach modal to render exactly one `New conversation` button based on a runtime mobile media query, and updated the calendar-grid test translation mock to include the new mobile navigation labels.
+- Prevention: when adding breakpoint-specific controls, do not rely on `hidden` classes alone if duplicate accessible labels would remain in the DOM; render only the active control for the current viewport in tests and production. When adding new i18n keys in a component covered by mocked translations, update the local test mock in the same change.
+
 ### 2026-05-25 | Copilot | PR #247 power trace review follow-up
 
 - Problem: the new workout detail SVG used raw `useId()` output for `clipPath` references, which can include `:` and break `url(#...)` lookups in some browsers, and `buildCompletedWorkoutPreviewBars(...)` did a full `buildPowerTraceSeries(...)` extraction only to decide whether preview bars should come from completed power data.

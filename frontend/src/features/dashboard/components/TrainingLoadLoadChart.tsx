@@ -63,8 +63,8 @@ export function TrainingLoadLoadChart({
   strings,
 }: TrainingLoadLoadChartProps) {
   return (
-    <section className="overflow-hidden rounded-[2rem] border border-white/8 bg-[#10161d] p-7 shadow-[0_30px_80px_rgba(2,8,23,0.45)]">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-6">
+    <section className="overflow-hidden rounded-[1.6rem] border border-white/8 bg-[#10161d] p-4 shadow-[0_30px_80px_rgba(2,8,23,0.45)] sm:rounded-[2rem] sm:p-7">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4 sm:gap-6">
         <div className="flex flex-wrap gap-8">
           <Metric label={strings.fitnessLabel} value={currentCtl} tone="cyan" />
           <Metric label={strings.fatigueLabel} value={currentAtl} tone="orange" />
@@ -77,7 +77,7 @@ export function TrainingLoadLoadChart({
           </div>
         ) : null}
       </div>
-      <div className="relative h-72 overflow-hidden rounded-[1.6rem] border border-white/8 bg-[linear-gradient(to_right,rgba(249,250,251,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(249,250,251,0.045)_1px,transparent_1px)] bg-[size:40px_40px] pl-12 pr-4 pt-4">
+      <div className="relative h-64 overflow-hidden rounded-[1.3rem] border border-white/8 bg-[linear-gradient(to_right,rgba(249,250,251,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(249,250,251,0.045)_1px,transparent_1px)] bg-[size:40px_40px] pl-10 pr-3 pt-4 sm:h-72 sm:rounded-[1.6rem] sm:pl-12 sm:pr-4">
         <div className="pointer-events-none absolute inset-y-4 left-4 z-10 w-7 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
           {axisLabels.map((label) => (
             <span
@@ -97,8 +97,8 @@ export function TrainingLoadLoadChart({
           ) : null}
           {hoveredSnapshotDate && hoveredSnapshotMetrics && hoveredPoint ? (
             <div
-              className="pointer-events-none absolute z-20 w-48 -translate-x-1/2 rounded-2xl border border-white/12 bg-[#18212a]/92 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.45)] backdrop-blur"
-              style={{ left: `${Math.min(Math.max(hoveredPoint.x, 20), 80)}%`, top: `${hoveredTooltipTop}%` }}
+              className="pointer-events-none absolute z-20 w-40 -translate-x-1/2 rounded-2xl border border-white/12 bg-[#18212a]/92 px-3 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.45)] backdrop-blur sm:w-48 sm:px-4"
+              style={{ left: `${Math.min(Math.max(hoveredPoint.x, 24), 76)}%`, top: `${hoveredTooltipTop}%` }}
             >
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200/80">{strings.snapshotLabel}</p>
               <p className="mt-2 text-sm font-semibold text-white">{hoveredSnapshotDate}</p>
@@ -121,7 +121,7 @@ export function TrainingLoadLoadChart({
           </svg>
         </div>
       </div>
-      <div className="mt-4 flex justify-between gap-3 px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+      <div className="mt-4 flex justify-between gap-2 px-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 sm:gap-3 sm:text-[10px] sm:tracking-[0.18em]">
         {timelineLabels.map((label, index) => (
           <span key={label.key} className={index === timelineLabels.length - 1 ? 'text-lime-300' : ''}>{label.label}</span>
         ))}
@@ -138,7 +138,7 @@ function Metric({ label, value, tone }: { label: string; value: string; tone: 'c
       <div className={`h-1.5 w-12 rounded-full ${toneClass}`} />
       <div>
         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</p>
-        <p className="text-[2rem] font-black leading-none text-white">{value}</p>
+        <p className="text-[1.55rem] font-black leading-none text-white sm:text-[2rem]">{value}</p>
       </div>
     </div>
   );

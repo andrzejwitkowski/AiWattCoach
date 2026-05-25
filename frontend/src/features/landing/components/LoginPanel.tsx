@@ -43,14 +43,14 @@ export function LoginPanel({
   }
 
   return (
-    <div className="glass-panel w-full max-w-md p-10 rounded-xl shadow-2xl border border-white/5 flex flex-col items-center text-center">
+    <div className="glass-panel flex w-full max-w-md flex-col items-center rounded-xl border border-white/5 p-6 text-center shadow-2xl sm:p-10">
       <div className="mb-8">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#d2ff9a]/10 mb-6">
           <svg className="w-8 h-8 text-[#d2ff9a]" viewBox="0 0 24 24" fill="currentColor">
             <path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z"/>
           </svg>
         </div>
-        <h1 className="text-4xl font-['Manrope'] font-extrabold tracking-tighter text-[#f9f9fd] mb-3">
+        <h1 className="mb-3 text-3xl font-['Manrope'] font-extrabold tracking-tighter text-[#f9f9fd] sm:text-4xl">
           Welcome to <span className="text-neon">Wattly</span>
         </h1>
         <p className="text-[#aaabaf] font-['Inter'] text-sm leading-relaxed max-w-[280px] mx-auto">

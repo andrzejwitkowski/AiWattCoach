@@ -34,7 +34,7 @@ export function WorkoutHistoryItem({ item, isSelected, onSelect }: WorkoutHistor
     <button
       type="button"
       className={[
-        'w-full rounded-2xl border p-4 text-left transition',
+        'w-full min-w-0 rounded-2xl border p-4 text-left transition',
         isSelected
           ? 'border-cyan-300/30 bg-cyan-300/10 shadow-[0_0_0_1px_rgba(103,232,249,0.08)]'
           : 'border-transparent bg-transparent hover:border-white/10 hover:bg-white/5',
@@ -46,7 +46,7 @@ export function WorkoutHistoryItem({ item, isSelected, onSelect }: WorkoutHistor
           <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-cyan-200">
             {isSelected ? t('coach.activeWorkout') : statusLabel}
           </p>
-          <p className="mt-3 text-2xl font-medium text-white">{name}</p>
+          <p className="mt-3 break-words text-xl font-medium text-white sm:text-2xl">{name}</p>
           <p className="mt-1 text-sm text-slate-400">{formatDateLabel(item.startDateLocal)}</p>
         </div>
         <div className={item.hasConversation ? 'text-cyan-300' : 'text-slate-600'}>

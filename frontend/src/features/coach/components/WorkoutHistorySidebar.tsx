@@ -10,6 +10,7 @@ type WorkoutHistorySidebarProps = {
   state: 'loading' | 'ready' | 'error' | 'credentials-required';
   error: string | null;
   weekLabel: string;
+  compact?: boolean;
   canGoToNewerWeek: boolean;
   onOlderWeek: () => void;
   onNewerWeek: () => void;
@@ -22,6 +23,7 @@ export function WorkoutHistorySidebar({
   state,
   error,
   weekLabel,
+  compact = false,
   canGoToNewerWeek,
   onOlderWeek,
   onNewerWeek,
@@ -30,8 +32,14 @@ export function WorkoutHistorySidebar({
   const { t } = useTranslation();
 
   return (
-    <aside className="rounded-2xl border border-white/10 bg-white/5 p-6">
-      <h2 className="mb-6 text-sm font-bold uppercase tracking-[0.28em] text-slate-400">
+    <aside className={[
+      'rounded-2xl border border-white/10 bg-white/5',
+      compact ? 'p-4' : 'p-6',
+    ].join(' ')}>
+      <h2 className={[
+        'text-sm font-bold uppercase tracking-[0.28em] text-slate-400',
+        compact ? 'mb-4' : 'mb-6',
+      ].join(' ')}>
         {t('coach.previousWorkouts')}
       </h2>
       <WorkoutHistoryPagination
@@ -40,7 +48,7 @@ export function WorkoutHistorySidebar({
         onOlderWeek={onOlderWeek}
         onNewerWeek={onNewerWeek}
       />
-      <div className="space-y-3">
+      <div className={compact ? 'grid auto-cols-[16rem] grid-flow-col gap-3 overflow-x-auto pb-1' : 'space-y-3'}>
         {state === 'loading' ? (
           <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-10 text-center text-slate-400">
             {t('coach.loadingWorkouts')}

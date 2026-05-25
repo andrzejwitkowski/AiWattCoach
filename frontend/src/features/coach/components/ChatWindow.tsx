@@ -37,7 +37,7 @@ export function ChatWindow({
   const { t } = useTranslation();
 
   return (
-    <section className="glass-panel flex h-[38rem] flex-col rounded-2xl border border-white/10 bg-[#111417]/80">
+    <section className="glass-panel flex min-h-[28rem] flex-col rounded-2xl border border-white/10 bg-[#111417]/80 md:h-[38rem] md:min-h-0">
       <ChatHeader
         isConnected={isConnected}
         hasSelectedWorkout={hasSelectedWorkout}

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { invalidateCalendarCache } from '../../calendar/hooks/useCalendarData';
 import { useCompletedWorkouts } from '../../intervals/context';
 import { useSettings } from '../../settings/context/SettingsContext';
+import { useMediaQuery } from '../../../lib/useMediaQuery';
 import { isAvailabilityConfigured } from '../../settings/types';
 import { useWorkoutList } from '../hooks/useWorkoutList';
 import { isAvailabilityRequiredChatError, useCoachChat } from '../hooks/useCoachChat';
@@ -21,6 +22,7 @@ type CoachPageLayoutProps = {
 
 export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
   const { t } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 767px)');
   const settingsContext = useSettings();
   const workoutList = useWorkoutList({ apiBaseUrl });
   const completedWorkouts = useCompletedWorkouts();
@@ -126,6 +128,7 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
           state={workoutList.state}
           error={workoutList.error}
           weekLabel={workoutList.weekLabel}
+          compact={isMobile}
           canGoToNewerWeek={workoutList.canGoToNewerWeek}
           onOlderWeek={workoutList.goToOlderWeek}
           onNewerWeek={workoutList.goToNewerWeek}

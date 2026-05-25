@@ -8,6 +8,19 @@ import type { CalendarWeek } from '../types';
 import { makeEvent } from '../testData';
 import { CalendarGrid } from './CalendarGrid';
 
+function setScreenWidth(width: number) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: query === '(max-width: 767px)' ? width <= 767 : false,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia;
+}
+
 vi.mock('react-i18next', async () => {
   const actual = await vi.importActual<typeof import('react-i18next')>('react-i18next');
 
@@ -38,6 +51,10 @@ vi.mock('react-i18next', async () => {
             return 'Close race details';
           case 'calendar.closeWorkoutDetails':
             return 'Close workout details';
+          case 'calendar.mobilePreviousWeeks':
+            return 'Show previous weeks';
+          case 'calendar.mobileNextWeeks':
+            return 'Show next weeks';
           case 'calendar.raceDay':
             return 'Race Day';
           case 'calendar.plannedWorkout':
@@ -83,6 +100,7 @@ import { useCalendarData } from '../hooks/useCalendarData';
 afterEach(() => {
   cleanup();
   vi.mocked(useCalendarData).mockReset();
+  setScreenWidth(1280);
 });
 
 function buildWeek(weekKey: string): CalendarWeek {
@@ -320,6 +338,17 @@ describe('CalendarGrid', () => {
     const raceDialog = screen.getByRole('dialog');
     expect(raceDialog).toHaveTextContent(/grojec/i);
     expect(raceDialog).toHaveTextContent(/cat. b/i);
+  });
+
+  it('renders the mobile list variant without the desktop scroller on narrow screens', () => {
+    setScreenWidth(390);
+    vi.mocked(useCalendarData).mockReturnValue(buildHookState());
+
+    renderCalendarGrid();
+
+    expect(screen.queryByRole('region', { name: /performance calendar/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /show previous weeks/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /show next weeks/i })).toBeInTheDocument();
   });
 
 });

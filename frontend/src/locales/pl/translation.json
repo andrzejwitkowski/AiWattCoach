@@ -22,6 +22,7 @@
     "brand": {
       "subtitle": "Elitarna wydajność"
     },
+    "mobileNavigation": "Główna nawigacja mobilna",
     "notifications": "Powiadomienia",
     "pageTitles": {
       "dashboard": "Dashboard",
@@ -304,7 +305,13 @@
     "coachModalPlaceholder": "Zapytaj o tydzień, trening, strategię wyścigu albo regenerację.",
     "coachModalNote": "Zamknięcie tego modala nie uruchamia przeplanowania. Rozpocznij nową konwersację, gdy chcesz pusty transcript.",
     "coachNewConversation": "Nowa konwersacja",
-    "coachSend": "Wyślij"
+    "coachSend": "Wyślij",
+    "mobilePreviousWeeks": "Pokaż poprzednie tygodnie",
+    "mobileNextWeeks": "Pokaż kolejne tygodnie",
+    "mobileItemsCount_one": "{{count}} element",
+    "mobileItemsCount_few": "{{count}} elementy",
+    "mobileItemsCount_many": "{{count}} elementów",
+    "mobileItemsCount_other": "{{count}} elementu"
   },
   "dashboard": {
     "loading": "Ładowanie dashboardu",

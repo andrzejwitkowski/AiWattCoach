@@ -3,6 +3,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useApiBaseUrl } from '../../../lib/apiBaseUrl';
+import { useMediaQuery } from '../../../lib/useMediaQuery';
 import {
   CALENDAR_BUFFER_WEEKS,
   CALENDAR_PAGINATION_LOCK_RELEASE_DISTANCE,
@@ -20,6 +21,7 @@ import { CalendarPerformanceCards } from './CalendarPerformanceCards';
 import { DayItemsModal } from './DayItemsModal';
 import { RaceDayDetailModal } from './RaceDayDetailModal';
 import { WorkoutDetailModal } from './WorkoutDetailModal';
+import { CalendarMobileList } from './CalendarMobileList';
 import { CalendarWeekDayHeader } from './CalendarWeekDayHeader';
 import { CalendarWeekSection } from './CalendarWeekSection';
 
@@ -30,6 +32,7 @@ type CalendarGridProps = {
 export function CalendarGrid({ refreshVersion = 0 }: CalendarGridProps) {
   const apiBaseUrl = useApiBaseUrl();
   const { t, i18n } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 767px)');
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
   const {
     state,
@@ -208,7 +211,7 @@ export function CalendarGrid({ refreshVersion = 0 }: CalendarGridProps) {
 
   return (
     <section className="space-y-8">
-      <div className="rounded-[1.75rem] border border-white/5 bg-[linear-gradient(180deg,rgba(17,20,23,0.96),rgba(12,14,17,0.92))] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
+      <div className="rounded-[1.4rem] border border-white/5 bg-[linear-gradient(180deg,rgba(17,20,23,0.96),rgba(12,14,17,0.92))] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:rounded-[1.75rem] md:p-8">
         <div className="mb-6 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.35em] text-slate-500">{t('calendar.baseMonth')}</p>
@@ -222,41 +225,59 @@ export function CalendarGrid({ refreshVersion = 0 }: CalendarGridProps) {
           </div>
         </div>
 
-        <div className="overflow-x-auto pb-1">
-          <div className="min-w-[960px]">
-            <div
-              ref={scrollRef}
-              onScroll={handleScroll}
-              tabIndex={0}
-              role="region"
-              aria-label={t('calendar.performanceCalendar')}
-              className="no-scrollbar overflow-y-auto pr-1"
-              style={{
-                maxHeight: `${(CALENDAR_WEEK_BLOCK_HEIGHT * CALENDAR_VISIBLE_WEEKS) - CALENDAR_WEEK_ROW_GAP}px`,
-              }}
-            >
-              <CalendarWeekDayHeader />
-              <div className="mt-8 space-y-10">
-                {renderedWeeks.length > 0 ? (
-                      renderedWeeks.map((week) => (
+        {isMobile ? (
+          <CalendarMobileList
+            weeks={weeks}
+            locale={locale}
+            isLoadingPast={isLoadingPast}
+            isLoadingFuture={isLoadingFuture}
+            onLoadMorePast={() => {
+              void loadMorePast();
+            }}
+            onLoadMoreFuture={() => {
+              void loadMoreFuture();
+            }}
+            onSelectWorkout={handleSelectWorkout}
+            onSelectDayItems={handleSelectDayItems}
+            onSelectRace={handleSelectRace}
+          />
+        ) : (
+          <div className="overflow-x-auto pb-1">
+            <div className="min-w-[960px]">
+              <div
+                ref={scrollRef}
+                onScroll={handleScroll}
+                tabIndex={0}
+                role="region"
+                aria-label={t('calendar.performanceCalendar')}
+                className="no-scrollbar overflow-y-auto pr-1"
+                style={{
+                  maxHeight: `${(CALENDAR_WEEK_BLOCK_HEIGHT * CALENDAR_VISIBLE_WEEKS) - CALENDAR_WEEK_ROW_GAP}px`,
+                }}
+              >
+                <CalendarWeekDayHeader />
+                <div className="mt-8 space-y-10">
+                  {renderedWeeks.length > 0 ? (
+                    renderedWeeks.map((week) => (
                       <div key={week.weekKey} data-week-key={week.weekKey}>
-                      <CalendarWeekSection
-                        week={week}
-                        onSelectWorkout={handleSelectWorkout}
-                        onSelectDayItems={handleSelectDayItems}
-                        onSelectRace={handleSelectRace}
-                      />
+                        <CalendarWeekSection
+                          week={week}
+                          onSelectWorkout={handleSelectWorkout}
+                          onSelectDayItems={handleSelectDayItems}
+                          onSelectRace={handleSelectRace}
+                        />
                       </div>
                     ))
-                ) : (
-                  <div className="rounded-xl border border-white/5 bg-[#171a1d] p-6 text-center text-sm text-slate-400">
-                    {t('calendar.noEvents')}
-                  </div>
-                )}
+                  ) : (
+                    <div className="rounded-xl border border-white/5 bg-[#171a1d] p-6 text-center text-sm text-slate-400">
+                      {t('calendar.noEvents')}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       <CalendarPerformanceCards />
