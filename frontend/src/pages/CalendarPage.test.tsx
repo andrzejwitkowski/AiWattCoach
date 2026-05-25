@@ -6,6 +6,19 @@ import i18n from '../i18n';
 import { useCalendarCoachChat } from '../features/calendar/hooks/useCalendarCoachChat';
 import { CalendarPage } from './CalendarPage';
 
+function setScreenWidth(width: number) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: query === '(max-width: 767px)' ? width <= 767 : false,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia;
+}
+
 vi.mock('../features/calendar/components/CalendarGrid', () => ({
   CalendarGrid: ({ apiBaseUrl }: { apiBaseUrl: string }) => (
     <div data-testid="calendar-grid">Calendar grid {apiBaseUrl}</div>
@@ -28,6 +41,7 @@ vi.mock('../features/calendar/hooks/useCalendarCoachChat', () => ({
 
 describe('CalendarPage', () => {
   beforeEach(async () => {
+    setScreenWidth(1280);
     vi.mocked(useCalendarCoachChat).mockReset();
     vi.mocked(useCalendarCoachChat).mockReturnValue({
       conversation: null,
@@ -59,6 +73,17 @@ describe('CalendarPage', () => {
     expect(openButton.className).toContain('fixed');
     expect(openButton.className).toContain('bottom-4');
     expect(openButton.className).toContain('right-4');
+  });
+
+  it('keeps the mobile-safe coach button spacing on narrow screens', () => {
+    setScreenWidth(390);
+
+    render(<CalendarPage apiBaseUrl="/api" />);
+
+    const openButton = screen.getByRole('button', { name: /open ai coach/i });
+
+    expect(openButton.className).toContain('safe-bottom-inset');
+    expect(openButton.className).toContain('bottom-4');
   });
 
   it('opens and closes the calendar coach modal', async () => {

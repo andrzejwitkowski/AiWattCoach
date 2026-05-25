@@ -22,6 +22,7 @@
     "brand": {
       "subtitle": "Elite Performance"
     },
+    "mobileNavigation": "Primary mobile navigation",
     "notifications": "Notifications",
     "pageTitles": {
       "dashboard": "Dashboard",
@@ -300,7 +301,11 @@
     "coachModalPlaceholder": "Ask about this week, a workout, race strategy, or recovery.",
     "coachModalNote": "Closing this modal does not trigger replanning. Start a new conversation when you want a clean transcript.",
     "coachNewConversation": "New conversation",
-    "coachSend": "Send"
+    "coachSend": "Send",
+    "mobilePreviousWeeks": "Show previous weeks",
+    "mobileNextWeeks": "Show next weeks",
+    "mobileItemsCount_one": "{{count}} item",
+    "mobileItemsCount_other": "{{count}} items"
   },
   "dashboard": {
     "loading": "Loading dashboard",

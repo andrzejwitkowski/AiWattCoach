@@ -21,7 +21,7 @@ export function TrainingLoadReport({ report, range, onRangeChange }: TrainingLoa
         <div className="space-y-3">
           <p className="text-[11px] font-black uppercase tracking-[0.28em] text-lime-300/80">{t('dashboard.report.eyebrow')}</p>
           <div>
-            <h2 className="text-4xl font-black tracking-[-0.04em] text-white sm:text-5xl">{t('dashboard.report.title')}</h2>
+            <h2 className="text-3xl font-black tracking-[-0.04em] text-white sm:text-5xl">{t('dashboard.report.title')}</h2>
             <p className="mt-3 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
               {t('dashboard.report.subtitle')}
             </p>

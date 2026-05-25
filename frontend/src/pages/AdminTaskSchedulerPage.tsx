@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useAdminTaskSchedulerApi } from '../features/admin-task-scheduler/api';
+import { useMediaQuery } from '../lib/useMediaQuery';
 import type {
   ScheduledTask,
   SortDirection,
@@ -34,6 +35,7 @@ const columns: Array<{ field: TaskSortField; labelKey: string }> = [
 
 export function AdminTaskSchedulerPage() {
   const { t } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 767px)');
   const {
     loadAdminSchedulerTask,
     loadAdminSchedulerTasks,
@@ -186,78 +188,127 @@ export function AdminTaskSchedulerPage() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.75fr)]">
         <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-4">
-          <div className="overflow-x-auto">
-            <table className="min-w-[1120px] w-full border-separate border-spacing-y-2 text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  {columns.map((column) => (
-                    <th key={column.field} className="px-3 py-2">
-                      <button
-                        className="font-semibold transition hover:text-cyan-300"
-                        type="button"
-                        onClick={() => changeSort(column.field)}
-                      >
-                        {t(column.labelKey)}{sortField === column.field ? ` ${sortDirection === 'asc' ? '↑' : '↓'}` : ''}
-                      </button>
-                    </th>
-                  ))}
-                  <th className="px-3 py-2">{t('adminTaskScheduler.actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tasks.map((task) => (
-                  <tr
-                    key={task.id}
+          {isMobile ? (
+            <div className="space-y-3">
+              {tasks.map((task) => (
+                <div
+                  key={task.id}
+                  className={`${rowClassName(task)} w-full rounded-2xl border px-4 py-4 transition hover:brightness-125`}
+                >
+                  <button
+                    type="button"
                     aria-label={t('adminTaskScheduler.taskRowLabel', { id: task.id })}
-                    className={`${rowClassName(task)} cursor-pointer rounded-2xl transition hover:brightness-125`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { void selectTask(task); }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        void selectTask(task);
-                      }
+                    className="w-full text-left"
+                    onClick={() => {
+                      void selectTask(task);
                     }}
                   >
-                    <td className="rounded-l-2xl max-w-56 truncate px-3 py-3 font-medium text-slate-100">{task.id}</td>
-                    <td className="px-3 py-3 font-medium text-slate-100">{formatEpoch(task.createdAtEpochSeconds)}</td>
-                    <td className="px-3 py-3"><StatusBadge status={task.status} /></td>
-                    <td className="px-3 py-3 text-slate-200">{task.taskType}</td>
-                    <td className="px-3 py-3 text-slate-300">{task.userId}</td>
-                    <td className="px-3 py-3 text-slate-300">{task.attemptCount}</td>
-                    <td className="px-3 py-3 text-slate-300">{formatEpoch(task.nextAttemptAtEpochSeconds)}</td>
-                    <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.startedAtEpochSeconds)}</td>
-                    <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.finishedAtEpochSeconds)}</td>
-                    <td className="px-3 py-3 text-slate-300">{formatEpoch(task.updatedAtEpochSeconds)}</td>
-                    <td className="px-3 py-3 text-slate-300">{task.claimedBy ?? '-'}</td>
-                    <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.leaseExpiresAtEpochSeconds)}</td>
-                    <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.lastHeartbeatAtEpochSeconds)}</td>
-                    <td className="px-3 py-3 text-slate-300">{task.executionTimeoutSeconds}s</td>
-                    <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.timedOutAtEpochSeconds)}</td>
-                    <td className="px-3 py-3 text-slate-300">{t(task.leaderOnly ? 'adminTaskScheduler.yes' : 'adminTaskScheduler.no')}</td>
-                    <td className="max-w-64 truncate px-3 py-3 text-slate-400">{task.errorMessage ?? '-'}</td>
-                    <td className="max-w-56 truncate px-3 py-3 text-slate-400">{task.dedupeKey}</td>
-                    <td className="rounded-r-2xl px-3 py-3">
-                      {canRetry(task) && (
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-white">{task.id}</p>
+                        <p className="mt-1 text-xs text-slate-400">{task.taskType}</p>
+                      </div>
+                      <StatusBadge status={task.status} />
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-300">
+                      <MobileTaskMeta label={t('adminTaskScheduler.columns.createdAt')} value={formatEpoch(task.createdAtEpochSeconds)} />
+                      <MobileTaskMeta label={t('adminTaskScheduler.columns.updatedAt')} value={formatEpoch(task.updatedAtEpochSeconds)} />
+                      <MobileTaskMeta label={t('adminTaskScheduler.columns.userId')} value={task.userId} />
+                      <MobileTaskMeta label={t('adminTaskScheduler.columns.attemptCount')} value={String(task.attemptCount)} />
+                    </div>
+                  </button>
+                  {canRetry(task) ? (
+                    <div className="mt-4">
+                      <button
+                        className="rounded-lg border border-white/20 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
+                        disabled={retryingTaskId === task.id}
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void retryTask(task.id);
+                        }}
+                      >
+                        {retryingTaskId === task.id ? t('adminTaskScheduler.retrying') : t('adminTaskScheduler.retry')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-[1120px] w-full border-separate border-spacing-y-2 text-left text-sm">
+                <thead className="text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    {columns.map((column) => (
+                      <th key={column.field} className="px-3 py-2">
                         <button
-                          className="rounded-lg border border-white/20 px-3 py-1 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
-                          disabled={retryingTaskId === task.id}
+                          className="font-semibold transition hover:text-cyan-300"
                           type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void retryTask(task.id);
-                          }}
+                          onClick={() => changeSort(column.field)}
                         >
-                          {retryingTaskId === task.id ? t('adminTaskScheduler.retrying') : t('adminTaskScheduler.retry')}
+                          {t(column.labelKey)}{sortField === column.field ? ` ${sortDirection === 'asc' ? '↑' : '↓'}` : ''}
                         </button>
-                      )}
-                    </td>
+                      </th>
+                    ))}
+                    <th className="px-3 py-2">{t('adminTaskScheduler.actions')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {tasks.map((task) => (
+                    <tr
+                      key={task.id}
+                      aria-label={t('adminTaskScheduler.taskRowLabel', { id: task.id })}
+                      className={`${rowClassName(task)} cursor-pointer rounded-2xl transition hover:brightness-125`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => { void selectTask(task); }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          void selectTask(task);
+                        }
+                      }}
+                    >
+                      <td className="rounded-l-2xl max-w-56 truncate px-3 py-3 font-medium text-slate-100">{task.id}</td>
+                      <td className="px-3 py-3 font-medium text-slate-100">{formatEpoch(task.createdAtEpochSeconds)}</td>
+                      <td className="px-3 py-3"><StatusBadge status={task.status} /></td>
+                      <td className="px-3 py-3 text-slate-200">{task.taskType}</td>
+                      <td className="px-3 py-3 text-slate-300">{task.userId}</td>
+                      <td className="px-3 py-3 text-slate-300">{task.attemptCount}</td>
+                      <td className="px-3 py-3 text-slate-300">{formatEpoch(task.nextAttemptAtEpochSeconds)}</td>
+                      <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.startedAtEpochSeconds)}</td>
+                      <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.finishedAtEpochSeconds)}</td>
+                      <td className="px-3 py-3 text-slate-300">{formatEpoch(task.updatedAtEpochSeconds)}</td>
+                      <td className="px-3 py-3 text-slate-300">{task.claimedBy ?? '-'}</td>
+                      <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.leaseExpiresAtEpochSeconds)}</td>
+                      <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.lastHeartbeatAtEpochSeconds)}</td>
+                      <td className="px-3 py-3 text-slate-300">{task.executionTimeoutSeconds}s</td>
+                      <td className="px-3 py-3 text-slate-300">{formatOptionalEpoch(task.timedOutAtEpochSeconds)}</td>
+                      <td className="px-3 py-3 text-slate-300">{t(task.leaderOnly ? 'adminTaskScheduler.yes' : 'adminTaskScheduler.no')}</td>
+                      <td className="max-w-64 truncate px-3 py-3 text-slate-400">{task.errorMessage ?? '-'}</td>
+                      <td className="max-w-56 truncate px-3 py-3 text-slate-400">{task.dedupeKey}</td>
+                      <td className="rounded-r-2xl px-3 py-3">
+                        {canRetry(task) && (
+                          <button
+                            className="rounded-lg border border-white/20 px-3 py-1 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
+                            disabled={retryingTaskId === task.id}
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void retryTask(task.id);
+                            }}
+                          >
+                            {retryingTaskId === task.id ? t('adminTaskScheduler.retrying') : t('adminTaskScheduler.retry')}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {!isLoading && tasks.length === 0 && (
             <p className="py-10 text-center text-sm text-slate-400">{t('adminTaskScheduler.empty')}</p>
           )}
@@ -290,6 +341,15 @@ export function AdminTaskSchedulerPage() {
         <TaskDetails task={selectedTask} />
       </div>
     </section>
+  );
+}
+
+function MobileTaskMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</p>
+      <p className="mt-1 break-all text-sm text-slate-200">{value}</p>
+    </div>
   );
 }
 

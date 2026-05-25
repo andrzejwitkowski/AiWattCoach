@@ -21,6 +21,24 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-25 | CodeRabbit | PR #248 mobile preview review follow-up
+
+- Problem: `frontend/src/lib/useMediaQuery.ts` assumed `matchMedia(...).addEventListener/removeEventListener` always exist, which can crash in browsers that only expose legacy `addListener/removeListener`. The preview mock server also accepted unknown calendar coach conversation ids on `POST /messages` by falling back to another conversation, and its Wahoo sync validation enforced only the lower date bound even though the API message promises a today-through-plus-6-days window.
+- Fix: added a legacy `addListener/removeListener` fallback in `useMediaQuery` plus a focused regression test, changed the preview calendar message route to return `404` for unknown conversation ids instead of writing into another conversation, and tightened the Wahoo sync check to reject dates both before today and beyond the next 6 local days.
+- Prevention: when adding browser compatibility helpers around `matchMedia`, check both modern and legacy listener APIs and lock the fallback with one focused hook test. For preview or mock endpoints, reject unknown resource ids explicitly instead of silently redirecting writes, make date-window validation match the full user-facing contract rather than only one edge, and do not combine `Access-Control-Allow-Origin: *` with `Access-Control-Allow-Credentials: true`. For cross-platform Bun scripts, keep shell-specific env-default expansion out of `package.json` and let the runtime code own defaults.
+
+### 2026-05-25 | user | local mock preview auth flow
+
+- Problem: the first local frontend preview instructions used `VITE_API_BASE_URL=http://127.0.0.1:4010`, which forced authenticated browser requests and websockets onto a cross-origin mock server. The frontend then fell back to the landing page and looked stuck on login even though the mock `/api/auth/me` endpoint itself worked.
+- Fix: switched the preview setup to same-origin `/api` traffic through Vite proxying, added `/api` proxying with websocket support in `frontend/vite.config.ts`, and updated the preview instructions to use `BACKEND_PROXY_TARGET=http://127.0.0.1:4010` while keeping `VITE_API_BASE_URL` unset.
+- Prevention: for local browser previews that depend on auth cookies, `credentials: include`, or websockets, prefer same-origin proxying through the frontend dev server over a cross-origin API base URL unless real browser CORS behavior has been explicitly verified.
+
+### 2026-05-25 | self | mobile responsive frontend rollout
+
+- Problem: the first mobile calendar-coach modal pass kept both desktop and mobile "New conversation" buttons mounted at once and relied on CSS visibility alone, which made role/name queries ambiguous in tests and created duplicate accessible controls in the DOM. The new mobile calendar navigation test also initially assumed translated labels while the local `useTranslation` mock still returned raw keys for the new strings.
+- Fix: switched the calendar coach modal to render exactly one `New conversation` button based on a runtime mobile media query, and updated the calendar-grid test translation mock to include the new mobile navigation labels.
+- Prevention: when adding breakpoint-specific controls, do not rely on `hidden` classes alone if duplicate accessible labels would remain in the DOM; render only the active control for the current viewport in tests and production. When adding new i18n keys in a component covered by mocked translations, update the local test mock in the same change.
+
 ### 2026-05-25 | Copilot | PR #247 power trace review follow-up
 
 - Problem: the new workout detail SVG used raw `useId()` output for `clipPath` references, which can include `:` and break `url(#...)` lookups in some browsers, and `buildCompletedWorkoutPreviewBars(...)` did a full `buildPowerTraceSeries(...)` extraction only to decide whether preview bars should come from completed power data.

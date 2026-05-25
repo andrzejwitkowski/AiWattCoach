@@ -71,8 +71,8 @@ export function TrainingLoadTsbChart({
   strings,
 }: TrainingLoadTsbChartProps) {
   return (
-    <section className="overflow-hidden rounded-[2rem] border border-white/8 bg-[#10161d] p-7 shadow-[0_30px_80px_rgba(2,8,23,0.45)]">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-6">
+    <section className="overflow-hidden rounded-[1.6rem] border border-white/8 bg-[#10161d] p-4 shadow-[0_30px_80px_rgba(2,8,23,0.45)] sm:rounded-[2rem] sm:p-7">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4 sm:gap-6">
         <Metric label={strings.formLabel} value={currentTsb} tone="lime" />
         {latestSnapshotDate && latestSnapshotValue ? (
           <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-right">
@@ -87,7 +87,7 @@ export function TrainingLoadTsbChart({
           <LegendDot label={strings.highRiskLabel} tone="red" />
         </div>
       </div>
-      <div className="relative h-72 overflow-hidden rounded-[1.6rem] border border-white/8 bg-[#0b1117] pl-12 pr-4 pt-4">
+      <div className="relative h-64 overflow-hidden rounded-[1.3rem] border border-white/8 bg-[#0b1117] pl-10 pr-3 pt-4 sm:h-72 sm:rounded-[1.6rem] sm:pl-12 sm:pr-4">
         <div className="absolute inset-0 flex flex-col">
           <div className="relative border-b border-cyan-300/10 bg-cyan-300/6" style={{ height: `${freshnessHeight}%` }}>
             <span className="absolute bottom-3 right-4 text-[9px] font-black uppercase tracking-[0.22em] text-cyan-300/45">{strings.freshnessPeakLabel}</span>
@@ -139,9 +139,9 @@ export function TrainingLoadTsbChart({
           </svg>
           {hoveredSnapshotDate && hoveredSnapshotValue && hoveredPoint ? (
             <div
-              className="pointer-events-none absolute z-20 w-44 -translate-x-1/2 rounded-2xl border border-lime-300/20 bg-[#1a232c]/90 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.45)] backdrop-blur"
-              style={{ left: `${Math.min(Math.max(hoveredPoint.x, 18), 82)}%`, top: `${hoveredTooltipTop}%` }}
-            >
+                className="pointer-events-none absolute z-20 w-40 -translate-x-1/2 rounded-2xl border border-lime-300/20 bg-[#1a232c]/90 px-3 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.45)] backdrop-blur sm:w-44 sm:px-4"
+                style={{ left: `${Math.min(Math.max(hoveredPoint.x, 24), 76)}%`, top: `${hoveredTooltipTop}%` }}
+              >
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-lime-300">{strings.snapshotLabel}</p>
               <p className="mt-2 text-sm font-semibold text-white">{hoveredSnapshotDate}</p>
               <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-400">{strings.formLabel}</p>
@@ -150,7 +150,7 @@ export function TrainingLoadTsbChart({
           ) : null}
         </div>
       </div>
-      <div className="mt-4 flex justify-between gap-3 px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+      <div className="mt-4 flex justify-between gap-2 px-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 sm:gap-3 sm:text-[10px] sm:tracking-[0.18em]">
         {timelineLabels.map((label, index) => (
           <span key={label.key} className={index === timelineLabels.length - 1 ? 'text-lime-300' : ''}>{label.label}</span>
         ))}
@@ -178,7 +178,7 @@ function Metric({ label, value, tone }: { label: string; value: string; tone: 'l
       <div className={`h-1.5 w-12 rounded-full ${toneClass}`} />
       <div>
         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</p>
-        <p className="text-[2rem] font-black leading-none text-lime-200">{value}</p>
+        <p className="text-[1.55rem] font-black leading-none text-lime-200 sm:text-[2rem]">{value}</p>
       </div>
     </div>
   );

@@ -44,17 +44,17 @@ export function RaceDayDetailModal({ selection, onClose }: RaceDayDetailModalPro
   const race = selection.payload;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-3 py-3 backdrop-blur-sm md:px-4 md:py-6" onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="race-day-title"
         tabIndex={-1}
-        className="w-full max-w-3xl overflow-hidden rounded-[1.5rem] border border-white/8 bg-[#111417] shadow-[0_24px_80px_rgba(0,0,0,0.5)]"
+        className="w-full max-w-3xl overflow-hidden rounded-[1.25rem] border border-white/8 bg-[#111417] shadow-[0_24px_80px_rgba(0,0,0,0.5)] md:rounded-[1.5rem]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/6 px-6 py-4 md:px-8">
+        <div className="flex items-center justify-between border-b border-white/6 px-4 py-4 md:px-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#f2c98e]">{t('calendar.raceDay')}</p>
             <h2 id="race-day-title" className="mt-2 text-2xl font-black uppercase tracking-tight text-[#f9f9fd] md:text-3xl">
@@ -73,7 +73,7 @@ export function RaceDayDetailModal({ selection, onClose }: RaceDayDetailModalPro
           </button>
         </div>
 
-        <div className="space-y-6 px-6 py-6 md:px-8">
+        <div className="space-y-4 px-4 py-4 md:space-y-6 md:px-8 md:py-6">
           <div className="flex items-center gap-3 rounded-2xl border border-[#cda56b]/20 bg-[#201810]/70 px-4 py-4 text-[#f6deb1]">
             <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#cda56b]/20 bg-[#2d2115]">
               <Trophy size={18} />

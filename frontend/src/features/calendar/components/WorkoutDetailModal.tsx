@@ -130,23 +130,23 @@ export function WorkoutDetailModal({selection, onClose, onEventSynced}: WorkoutD
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-6 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-3 py-3 backdrop-blur-sm md:px-4 md:py-6">
             <div
-                className="w-full max-w-5xl overflow-hidden rounded-[1.5rem] border border-white/8 bg-[#111417] shadow-[0_24px_80px_rgba(0,0,0,0.5)]">
-                <div className="flex items-center justify-between border-b border-white/6 px-6 py-4 md:px-8">
+                className="w-full max-w-5xl overflow-hidden rounded-[1.2rem] border border-white/8 bg-[#111417] shadow-[0_24px_80px_rgba(0,0,0,0.5)] md:rounded-[1.5rem]">
+                <div className="flex items-start justify-between gap-3 border-b border-white/6 px-4 py-4 md:items-center md:px-8">
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">
                             {isCompleted ? t('calendar.completedWorkout') : t('calendar.plannedWorkout')}
                         </p>
-                        <h2 className="mt-2 text-2xl font-black uppercase tracking-tight text-[#f9f9fd] md:text-3xl">{title}</h2>
+                        <h2 className="mt-2 text-xl font-black uppercase tracking-tight text-[#f9f9fd] md:text-3xl">{title}</h2>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex shrink-0 items-center gap-2 md:gap-3">
                         {showFitDownload ? (
                             <button
                                 type="button"
                                 onClick={() => void handleDownloadFit()}
                                 disabled={downloadingFit}
-                                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10 hover:text-white disabled:cursor-wait disabled:opacity-60"
+                                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-200 transition hover:bg-white/10 hover:text-white disabled:cursor-wait disabled:opacity-60 md:px-4 md:text-xs md:tracking-[0.2em]"
                             >
                                 {downloadingFit ? t('calendar.downloadingFit') : t('calendar.downloadFit')}
                             </button>
@@ -162,7 +162,7 @@ export function WorkoutDetailModal({selection, onClose, onEventSynced}: WorkoutD
                     </div>
                 </div>
 
-                <div className="max-h-[80vh] overflow-y-auto px-6 py-6 md:px-8">
+                <div className="max-h-[calc(100dvh-7rem)] overflow-y-auto px-4 py-4 md:max-h-[80vh] md:px-8 md:py-6">
                     {state.loading ? (
                         <p className="text-sm text-slate-400">{t('calendar.loadingWorkoutDetails')}</p>
                     ) : isCompleted ? (

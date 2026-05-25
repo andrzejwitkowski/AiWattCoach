@@ -40,17 +40,17 @@ export function DayItemsModal({ selection, onClose, onSelectItem }: DayItemsModa
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-3 py-3 backdrop-blur-sm md:px-4 md:py-6" onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="day-items-title"
         tabIndex={-1}
-        className="w-full max-w-2xl overflow-hidden rounded-[1.5rem] border border-white/8 bg-[#111417] shadow-[0_24px_80px_rgba(0,0,0,0.5)]"
+        className="w-full max-w-2xl overflow-hidden rounded-[1.25rem] border border-white/8 bg-[#111417] shadow-[0_24px_80px_rgba(0,0,0,0.5)] md:rounded-[1.5rem]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/6 px-6 py-4 md:px-8">
+        <div className="flex items-center justify-between border-b border-white/6 px-4 py-4 md:px-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">{t('calendar.dayItems')}</p>
             <h2 id="day-items-title" className="mt-2 text-2xl font-black uppercase tracking-tight text-[#f9f9fd] md:text-3xl">
@@ -68,14 +68,14 @@ export function DayItemsModal({ selection, onClose, onSelectItem }: DayItemsModa
           </button>
         </div>
 
-        <div className="max-h-[70vh] space-y-3 overflow-y-auto px-6 py-6 md:px-8">
+        <div className="max-h-[min(100dvh-8rem,70vh)] space-y-3 overflow-y-auto px-4 py-4 md:px-8 md:py-6">
           {selection.items.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={item.kind === 'event' ? undefined : () => onSelectItem(item)}
               disabled={item.kind === 'event'}
-              className="flex w-full items-center justify-between gap-4 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4 text-left transition hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-75"
+              className="flex w-full flex-col items-start justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4 text-left transition hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-75 sm:flex-row sm:items-center sm:gap-4"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.04] text-slate-200">
@@ -87,7 +87,7 @@ export function DayItemsModal({ selection, onClose, onSelectItem }: DayItemsModa
                 </div>
               </div>
               {item.subtitle ? (
-                <p className="shrink-0 text-xs font-semibold text-slate-300">{item.subtitle}</p>
+                <p className="text-xs font-semibold text-slate-300 sm:shrink-0">{item.subtitle}</p>
               ) : null}
             </button>
           ))}
