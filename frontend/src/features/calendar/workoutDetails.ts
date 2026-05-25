@@ -483,7 +483,11 @@ export function extractCompletedPowerValues(activity: IntervalActivity): number[
 
 function hasCompletedPowerStream(activity: IntervalActivity): boolean {
   const stream = activity.details.streams.find((item) => item.streamType === 'watts');
-  return Boolean(stream?.data.some((value) => typeof value === 'number' && Number.isFinite(value)));
+  if (!stream || !Array.isArray(stream.data)) {
+    return false;
+  }
+
+  return stream.data.some((value: unknown) => typeof value === 'number' && Number.isFinite(value));
 }
 
 export function buildPowerTraceSeries(

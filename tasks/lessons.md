@@ -6,6 +6,7 @@
 - Each `reviewers.md` entry must state both the problem that was identified and the fix that was applied.
 - The purpose of this loop is to reduce repeated PR and review mistakes over time.
 - I must read `reviewers.md` before writing a plan and before starting implementation work.
+- When a frontend Zod schema intentionally leaves API payload fields as `unknown` or JSON-like values, any new helper that inspects nested data must narrow with `Array.isArray(...)` or another explicit type guard before calling array methods. Do not rely on optional chaining like `stream?.data.some(...)` because TypeScript will still reject `unknown` in CI/release builds.
 - When repo instructions point at an Obsidian vault on Windows, store the exact subtree that contains the handbook notes, not only the vault root. A too-broad path wastes time and leads to false "file not found" lookups.
 - Before any commit or push, explicitly verify the current branch name against the user's requested target branch. Do not rely on conversational memory when the user references "this branch" or another already-existing branch by name.
 - When debugging where provider credentials or tokens come from, start from the exact runtime call site and walk the code path back through the service, port, and repository layers before searching storage blindly. For Wahoo FIT issues specifically, trace from `load_file_url(...)` and `get_workout_summary(...)` back to `ensure_token(...)` and then to `user_settings` in Mongo before assuming the OAuth client secrets are also persisted there.
