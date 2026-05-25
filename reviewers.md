@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-25 | Copilot | PR #247 power trace review follow-up
+
+- Problem: the new workout detail SVG used raw `useId()` output for `clipPath` references, which can include `:` and break `url(#...)` lookups in some browsers, and `buildCompletedWorkoutPreviewBars(...)` did a full `buildPowerTraceSeries(...)` extraction only to decide whether preview bars should come from completed power data.
+- Fix: sanitized the `PowerChart` clip-path id with `.replace(/:/g, '')`, added a focused chart regression that asserts the rendered `clipPath` id/reference are colon-free, and replaced the preview-bar guard with a cheap `hasCompletedPowerStream(...)` presence check so preview selection no longer parses and rounds the full watts stream twice.
+- Prevention: when wiring SVG defs from `useId()`, sanitize ids before using them in `url(#...)` references and add one DOM-level regression if the chart relies on `clipPath` or gradients. When a preview/fallback decision only needs stream presence, do not call the full extraction path just to branch; add a small presence helper instead.
+
 ### 2026-05-24 | user | identity login role overwrite after redeploy
 
 - Problem: `IdentityService::handle_google_callback(...)` recalculated roles from `ADMIN_EMAILS` on every Google login and passed them straight into `save_google_user_for_identity(...)`. That meant a redeploy or env drift could silently remove a manually granted `admin` role from an existing user on the next login.

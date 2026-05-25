@@ -195,8 +195,7 @@ export function buildCompletedWorkoutBars(activity: IntervalActivity): WorkoutBa
 }
 
 export function buildCompletedWorkoutPreviewBars(activity: IntervalActivity): WorkoutBar[] {
-  const powerTrace = buildPowerTraceSeries(activity);
-  if (powerTrace) {
+  if (hasCompletedPowerStream(activity)) {
     return buildCompletedWorkoutBars(activity);
   }
 
@@ -480,6 +479,11 @@ export function extractCompletedPowerValues(activity: IntervalActivity): number[
   }
 
   return stream.data.flatMap((value) => (typeof value === 'number' ? [Math.round(value)] : []));
+}
+
+function hasCompletedPowerStream(activity: IntervalActivity): boolean {
+  const stream = activity.details.streams.find((item) => item.streamType === 'watts');
+  return Boolean(stream?.data.some((value) => typeof value === 'number' && Number.isFinite(value)));
 }
 
 export function buildPowerTraceSeries(

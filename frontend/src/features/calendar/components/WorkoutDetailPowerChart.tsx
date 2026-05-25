@@ -43,7 +43,7 @@ export function PowerChart({
   title,
   values,
 }: PowerChartProps) {
-  const areaClipId = useId();
+  const areaClipId = useId().replace(/:/g, '');
   const totalSeconds = Math.max(
     values.length * sampleDurationSeconds,
     intervals.reduce((max, interval) => Math.max(max, interval.endSecond), 0),
