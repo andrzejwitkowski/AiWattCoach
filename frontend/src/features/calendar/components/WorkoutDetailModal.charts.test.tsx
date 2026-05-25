@@ -81,6 +81,8 @@ describe('WorkoutDetailModal charts and interaction', () => {
     expect(detailBars[0].style.flexGrow).toBe('1200');
     expect(detailBars[1].style.flexGrow).toBe('1200');
     expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    expect(container.querySelector('[data-power-zone-area-chart="true"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-power-zone-area="true"]')).toBeInTheDocument();
     expect(screen.getByText('226 W max (5s avg)')).toBeInTheDocument();
     expect(container.querySelectorAll('[data-interval-overlay="true"]')).toHaveLength(2);
   });
@@ -205,6 +207,33 @@ describe('WorkoutDetailModal charts and interaction', () => {
     expect(screen.getByText('0 W max (5s avg)')).toBeInTheDocument();
   });
 
+  it('sanitizes the SVG clip path id used by the power zone area', async () => {
+    mockedLoadEvent.mockResolvedValue(undefined as never);
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'a-clip-id',
+        details: {
+          streams: [makeActivityStream({ data: [180, 220, 245, 235, 250] })],
+        },
+      }),
+    );
+
+    const { container } = render(
+      <WorkoutDetailModal
+        selection={makeSelection({ dateKey: '2026-03-30', activity: makeActivity({ id: 'a-clip-id' }) })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
+
+    const clipPath = container.querySelector('clipPath');
+    const zoneArea = container.querySelector('[data-power-zone-area-chart="true"]');
+
+    expect(clipPath?.getAttribute('id')).not.toContain(':');
+    expect(zoneArea?.getAttribute('clip-path')).not.toContain(':');
+  });
+
   it('shows hovered power readout next to the max power label', async () => {
     mockedLoadEvent.mockResolvedValue(
       makeEvent({
@@ -231,7 +260,7 @@ describe('WorkoutDetailModal charts and interaction', () => {
     fireEvent.mouseMove(chart, { clientX: 500, clientY: 80 });
 
     expect(screen.getByText('200 W max (5s avg)')).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes('0:02') && content.includes('150') && content.includes('W'))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('0:02') && content.includes('200') && content.includes('W'))).toBeInTheDocument();
   });
 
   it('renders comparison workout bars with width proportional to matched interval durations', async () => {

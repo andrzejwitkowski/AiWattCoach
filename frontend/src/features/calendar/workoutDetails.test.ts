@@ -1,9 +1,43 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
-import { buildCompletedWorkoutBars, buildCompletedWorkoutPreviewBars, buildFiveSecondAveragePowerSeries, buildMatchedWorkoutBars, buildPlannedWorkoutBars, buildPlannedWorkoutChartIntervals, buildPlannedWorkoutPowerSeries, buildPlannedWorkoutStructureItems, buildPlannedWorkoutStructureSections, extractCompletedPowerValues, formatDurationLabel, formatPlannedWorkoutIntervalLabel, isPlannedWorkoutEvent, selectWorkoutDetail } from './workoutDetails';
+import { makeActivity, makeActivityStream } from './testData';
+import { buildCompletedWorkoutBars, buildCompletedWorkoutPreviewBars, buildFiveSecondAveragePowerSeries, buildMatchedWorkoutBars, buildPlannedWorkoutBars, buildPlannedWorkoutChartIntervals, buildPlannedWorkoutPowerSeries, buildPlannedWorkoutStructureItems, buildPlannedWorkoutStructureSections, buildPowerTraceSeries, extractCompletedPowerValues, formatDurationLabel, formatPlannedWorkoutIntervalLabel, isPlannedWorkoutEvent, resolvePowerZoneColor, selectWorkoutDetail } from './workoutDetails';
 
 describe('workoutDetails', () => {
+  it('blends high zone two power toward zone three color before crossing the boundary', () => {
+    expect(resolvePowerZoneColor(100, 340)).toBe('rgb(34, 212, 236)');
+    expect(resolvePowerZoneColor(220, 340)).toBe('rgb(80, 209, 31)');
+    expect(resolvePowerZoneColor(255, 340)).toBe('rgb(255, 225, 74)');
+  });
+
+  it('builds power trace from watts stream before legacy skyline preview data', () => {
+    const activity = makeActivity({
+      metrics: { ftpWatts: 340 },
+      details: {
+        streams: [makeActivityStream({ data: [180, 250, 290, 310] })],
+        skylineChart: ['CAcSAtJFGgFAIgECKAE='],
+      },
+    });
+
+    const trace = buildPowerTraceSeries(activity);
+
+    expect(trace?.source).toBe('stream');
+    expect(trace?.rawValues).toEqual([180, 250, 290, 310]);
+    expect(trace?.ftpWatts).toBe(340);
+  });
+
+  it('keeps skyline chart only as a legacy fallback when watts stream is missing', () => {
+    const activity = makeActivity({
+      details: {
+        skylineChart: ['CAcSAtJFGgFAIgECKAE='],
+      },
+    });
+
+    expect(buildPowerTraceSeries(activity)).toBeNull();
+    expect(buildCompletedWorkoutPreviewBars(activity).length).toBeGreaterThan(0);
+  });
+
   it('builds planned bars from parsed workout segments with zone colors', () => {
     const event: IntervalEvent = {
       id: 1,

@@ -5,6 +5,7 @@ import '../../../i18n';
 import {
   makeActivity,
   makeActivityDetails,
+  makeActivityStream,
   makeCalendarDay,
   makeEvent,
   makeEventDefinition,
@@ -65,7 +66,7 @@ describe('CalendarDayCell charts', () => {
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
 
     expect(container).toHaveTextContent('Morning Ride');
-    expect(container.querySelectorAll('[data-chart-bar="mini"]').length).toBeGreaterThan(0);
+    expect(container.querySelector('[data-calendar-power-trace="true"]')).toBeInTheDocument();
   });
 
   it('renders completed mini-chart bars from skyline chart payloads', () => {
@@ -91,6 +92,30 @@ describe('CalendarDayCell charts', () => {
     expect(bar.style.flexGrow).toBe('9');
     expect(bar.style.height).toBe('64%');
     expect(bar.style.backgroundColor).toBe('rgb(0, 227, 253)');
+  });
+
+  it('renders completed mini power trace from watts stream before legacy bars', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 2, 30),
+      dateKey: '2026-03-30',
+      activities: [
+        makeActivity({
+          id: 'a-stream',
+          name: 'Power Trace Ride',
+          details: makeActivityDetails({
+            streams: [makeActivityStream({ data: [180, 220, 255, 290, 240, 190] })],
+            skylineChart: ['CAcSAtJFGgFAIgECKAE='],
+          }),
+          metrics: { trainingStressScore: 88, ftpWatts: 340 },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+
+    expect(container.querySelector('[data-calendar-power-trace="true"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-calendar-power-zone-area="true"]')).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-chart-bar="mini"]')).toHaveLength(0);
   });
 
   it('renders planned mini-chart bars with their workout zone colors', () => {
