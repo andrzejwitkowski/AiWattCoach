@@ -81,6 +81,8 @@ describe('WorkoutDetailModal charts and interaction', () => {
     expect(detailBars[0].style.flexGrow).toBe('1200');
     expect(detailBars[1].style.flexGrow).toBe('1200');
     expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    expect(container.querySelector('[data-power-zone-area-chart="true"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-power-zone-area="true"]')).toBeInTheDocument();
     expect(screen.getByText('226 W max (5s avg)')).toBeInTheDocument();
     expect(container.querySelectorAll('[data-interval-overlay="true"]')).toHaveLength(2);
   });
@@ -231,7 +233,7 @@ describe('WorkoutDetailModal charts and interaction', () => {
     fireEvent.mouseMove(chart, { clientX: 500, clientY: 80 });
 
     expect(screen.getByText('200 W max (5s avg)')).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes('0:02') && content.includes('150') && content.includes('W'))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('0:02') && content.includes('200') && content.includes('W'))).toBeInTheDocument();
   });
 
   it('renders comparison workout bars with width proportional to matched interval durations', async () => {

@@ -131,9 +131,9 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
       ? getTone(visibleActivity, primaryEvent)
       : 'muted';
   const bars = hasCompactRacePrep
-    ? buildPlannedWorkoutBars(compactPlannedEvent)
+    ? {kind: 'bars' as const, bars: buildPlannedWorkoutBars(compactPlannedEvent)}
     : raceLabel
-      ? buildRaceBars(raceLabel)
+      ? {kind: 'bars' as const, bars: buildRaceBars(raceLabel)}
       : buildBars(visibleActivity, primaryPlannedWorkoutEvent);
   const Icon = raceLabel
     ? getRaceIcon(raceLabel.payload.discipline)
@@ -198,7 +198,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
 
       {hasTraining ? (
         <div className="mt-auto">
-          <CalendarMiniChart bars={bars} tone={tone} />
+          <CalendarMiniChart chart={bars} tone={tone} />
           {raceLabel ? (
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#f2c98e]">

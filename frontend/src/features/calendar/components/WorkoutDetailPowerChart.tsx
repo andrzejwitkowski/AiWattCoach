@@ -1,4 +1,6 @@
-import {type MouseEvent, useRef, useState} from 'react';
+import {type MouseEvent, useId, useRef, useState} from 'react';
+
+import {resolvePowerZoneColor} from '../workoutDetails';
 
 export type ChartIntervalOverlay = {
   id: string;
@@ -17,6 +19,7 @@ type PowerChartProps = {
   activeIntervalKey: string | null;
   formatMaxValueLabel?: (value: number) => string;
   formatValueLabel?: (value: number) => string;
+  ftpWatts?: number | null;
   intervals: ChartIntervalOverlay[];
   onHoverIntervalChange: (intervalKey: string | null) => void;
   onSelectIntervalChange: (intervalKey: string | null) => void;
@@ -31,6 +34,7 @@ export function PowerChart({
   activeIntervalKey,
   formatMaxValueLabel = (value) => `${value} W max (5s avg)`,
   formatValueLabel = (value) => `${value} W`,
+  ftpWatts = null,
   intervals,
   onHoverIntervalChange,
   onSelectIntervalChange,
@@ -39,12 +43,15 @@ export function PowerChart({
   title,
   values,
 }: PowerChartProps) {
+  const areaClipId = useId();
   const totalSeconds = Math.max(
     values.length * sampleDurationSeconds,
     intervals.reduce((max, interval) => Math.max(max, interval.endSecond), 0),
     1,
   );
+  const smoothedValues = buildMovingAverageSeries(values, 5);
   const sampledPoints = samplePowerValues(values, 180, sampleDurationSeconds);
+  const smoothedPoints = samplePowerValues(smoothedValues, 180, sampleDurationSeconds);
   const [hoveredSampleIndex, setHoveredSampleIndex] = useState<number | null>(null);
   const hoveredChipIntervalIdRef = useRef<string | null>(null);
   const focusedChipIntervalIdRef = useRef<string | null>(null);
@@ -56,13 +63,21 @@ export function PowerChart({
   const hoveredSample = hoveredSampleIndex !== null ? sampledPoints[hoveredSampleIndex] : null;
   const pinnedSample = activeInterval ? samplePointForInterval(sampledPoints, activeInterval) : null;
   const displayedSample = hoveredSample ?? pinnedSample;
-  const displayMaxValue = values.reduce((max, value) => Math.max(max, value), 0);
+  const displayMaxValue = smoothedValues.reduce((max, value) => Math.max(max, value), 0);
   const chartMaxValue = Math.max(...sampledPoints.map((point) => Math.max(0, point.value)), 1);
   const chartHeight = 220;
   const chartWidth = 1000;
-  const points = sampledPoints
+  const rawPoints = sampledPoints
     .map((point, index) => {
       const x = sampledPoints.length === 1 ? 0 : (index / (sampledPoints.length - 1)) * chartWidth;
+      const normalized = Math.max(0, point.value) / chartMaxValue;
+      const y = chartHeight - (normalized * chartHeight);
+      return `${x},${y}`;
+    })
+    .join(' ');
+  const points = smoothedPoints
+    .map((point, index) => {
+      const x = smoothedPoints.length === 1 ? 0 : (index / (smoothedPoints.length - 1)) * chartWidth;
       const normalized = Math.max(0, point.value) / chartMaxValue;
       const y = chartHeight - (normalized * chartHeight);
       return `${x},${y}`;
@@ -130,6 +145,9 @@ export function PowerChart({
               <stop offset="55%" stopColor="#d2ff9a" />
               <stop offset="100%" stopColor="#facc15" />
             </linearGradient>
+            <clipPath id={areaClipId}>
+              <path d={`M 0 ${chartHeight} L ${points} L ${chartWidth} ${chartHeight} Z`} />
+            </clipPath>
           </defs>
           {intervals.map((interval, index) => {
             const startX = (Math.max(0, interval.startSecond) / totalSeconds) * chartWidth;
@@ -158,7 +176,32 @@ export function PowerChart({
               </g>
             );
           })}
-          <path d={`M 0 ${chartHeight} L ${points} L ${chartWidth} ${chartHeight} Z`} fill="rgba(210,255,154,0.18)" />
+          <g data-power-zone-area-chart="true" clipPath={`url(#${areaClipId})`}>
+            {smoothedPoints.map((point, index) => {
+              const x = smoothedPoints.length === 1 ? 0 : (index / (smoothedPoints.length - 1)) * chartWidth;
+              const nextX = smoothedPoints.length === 1 ? chartWidth : (((index + 1) / (smoothedPoints.length - 1)) * chartWidth);
+              return (
+                <rect
+                  key={`${point.second}-${index}`}
+                  data-power-zone-area="true"
+                  x={Math.max(0, x)}
+                  y={0}
+                  width={Math.max(1, Math.min(chartWidth, nextX) - x)}
+                  height={chartHeight}
+                  fill={resolvePowerZoneColor(point.value, ftpWatts)}
+                  opacity="0.44"
+                />
+              );
+            })}
+          </g>
+          <polyline
+            fill="none"
+            points={rawPoints}
+            stroke="rgba(245,252,255,0.20)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+          />
           <polyline
             fill="none"
             points={points}
@@ -250,6 +293,21 @@ function samplePowerValues(values: number[], maxPoints: number, sampleDurationSe
   }
 
   return sampled;
+}
+
+function buildMovingAverageSeries(values: number[], windowSize: number): number[] {
+  const averaged: number[] = [];
+  let rollingSum = 0;
+
+  for (let index = 0; index < values.length; index += 1) {
+    rollingSum += values[index];
+    if (index >= windowSize) {
+      rollingSum -= values[index - windowSize];
+    }
+    averaged.push(Math.round(rollingSum / Math.min(index + 1, windowSize)));
+  }
+
+  return averaged;
 }
 
 function samplePointForInterval(points: ChartSamplePoint[], interval: ChartIntervalOverlay): ChartSamplePoint | null {

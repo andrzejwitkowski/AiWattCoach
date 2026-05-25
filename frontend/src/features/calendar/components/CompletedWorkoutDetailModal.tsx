@@ -4,9 +4,8 @@ import {useTranslation} from 'react-i18next';
 import type {CompletedWorkoutSummary, IntervalActivity, IntervalEvent} from '../../intervals/types';
 import {
   buildCompletedWorkoutPreviewBars,
-  buildFiveSecondAveragePowerSeries,
+  buildPowerTraceSeries,
   buildMatchedWorkoutBars,
-  extractCompletedPowerValues,
   formatDurationLabel,
 } from '../workoutDetails';
 import {
@@ -42,11 +41,9 @@ export function CompletedWorkoutDetailModal({
   const isCompletedActivityOnly = Boolean(!event && activity);
   const isPlannedVsActual = Boolean(event && actualWorkout);
   const detailsUnavailableMessage = !actualWorkout ? activity?.detailsUnavailableReason : null;
-  const powerSeries = actualWorkout?.powerValues.length
-    ? buildFiveSecondAveragePowerSeries(actualWorkout.powerValues)
-    : activity
-      ? buildFiveSecondAveragePowerSeries(extractCompletedPowerValues(activity))
-      : [];
+  const powerTrace = buildPowerTraceSeries(activity, actualWorkout?.powerValues ?? null);
+  const powerSeries = powerTrace?.rawValues ?? [];
+  const ftpWatts = powerTrace?.ftpWatts ?? null;
 
   const bars = isCompletedActivityOnly && activity
     ? buildCompletedWorkoutPreviewBars(activity)
@@ -106,6 +103,7 @@ export function CompletedWorkoutDetailModal({
           activeInterval={activeInterval}
           activeIntervalKey={highlightedIntervalKey}
           intervals={chartIntervalOverlays}
+          ftpWatts={ftpWatts}
           onHoverIntervalChange={setHoveredIntervalKey}
           onSelectIntervalChange={setSelectedIntervalKey}
           selectedIntervalKey={selectedIntervalKey}

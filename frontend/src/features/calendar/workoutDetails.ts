@@ -21,6 +21,12 @@ export type WorkoutBar = {
   widthUnits: number;
 };
 
+export type PowerTraceSeries = {
+  source: 'stream' | 'actualWorkout';
+  rawValues: number[];
+  ftpWatts: number | null;
+};
+
 export type PlannedWorkoutStructureItem = {
   id: string;
   label: string;
@@ -82,6 +88,19 @@ const POWER_ZONE_COLORS: Record<number, string> = {
   6: '#ff7351',
   7: '#800020',
 };
+
+const POWER_ZONE_GRADIENT_BANDS: Array<{
+  startRatio: number;
+  endRatio: number;
+  color: [number, number, number];
+  nextColor: [number, number, number];
+}> = [
+  { startRatio: 0, endRatio: 0.55, color: [34, 212, 236], nextColor: [80, 209, 31] },
+  { startRatio: 0.55, endRatio: 0.75, color: [80, 209, 31], nextColor: [255, 225, 74] },
+  { startRatio: 0.75, endRatio: 0.90, color: [255, 225, 74], nextColor: [255, 154, 61] },
+  { startRatio: 0.90, endRatio: 1.05, color: [255, 154, 61], nextColor: [255, 77, 97] },
+  { startRatio: 1.05, endRatio: 1.20, color: [255, 77, 97], nextColor: [220, 90, 255] },
+];
 
 const DEFAULT_ZONE_TARGET_PERCENT: Record<number, number> = {
   1: 55,
@@ -176,6 +195,11 @@ export function buildCompletedWorkoutBars(activity: IntervalActivity): WorkoutBa
 }
 
 export function buildCompletedWorkoutPreviewBars(activity: IntervalActivity): WorkoutBar[] {
+  const powerTrace = buildPowerTraceSeries(activity);
+  if (powerTrace) {
+    return buildCompletedWorkoutBars(activity);
+  }
+
   const skylineBars = buildSkylineChartBars(activity.details.skylineChart);
   if (skylineBars.length > 0) {
     return normalizeBarHeights(skylineBars);
@@ -456,6 +480,64 @@ export function extractCompletedPowerValues(activity: IntervalActivity): number[
   }
 
   return stream.data.flatMap((value) => (typeof value === 'number' ? [Math.round(value)] : []));
+}
+
+export function buildPowerTraceSeries(
+  activity: IntervalActivity | null,
+  actualPowerValues: number[] | null = null,
+): PowerTraceSeries | null {
+  const actualValues = actualPowerValues?.filter((value) => Number.isFinite(value)).map((value) => Math.round(value)) ?? [];
+  if (actualValues.length > 0) {
+    return {
+      source: 'actualWorkout',
+      rawValues: actualValues,
+      ftpWatts: activity?.metrics.ftpWatts ?? null,
+    };
+  }
+
+  if (!activity) {
+    return null;
+  }
+
+  const streamValues = extractCompletedPowerValues(activity);
+  if (streamValues.length === 0) {
+    return null;
+  }
+
+  return {
+    source: 'stream',
+    rawValues: streamValues,
+    ftpWatts: activity.metrics.ftpWatts,
+  };
+}
+
+export function resolvePowerZoneColor(powerWatts: number, ftpWatts: number | null | undefined): string {
+  if (!ftpWatts || ftpWatts <= 0 || !Number.isFinite(powerWatts)) {
+    return 'rgb(107, 114, 128)';
+  }
+
+  const ftpRatio = Math.max(0, powerWatts / ftpWatts);
+  for (const band of POWER_ZONE_GRADIENT_BANDS) {
+    if (ftpRatio <= band.endRatio) {
+      const progress = Math.max(0, Math.min(1, (ftpRatio - band.startRatio) / Math.max(0.001, band.endRatio - band.startRatio)));
+      const boundaryProgress = progress < 0.85 ? 0 : Math.min(1, (progress - 0.85) / 0.15);
+      return rgbString(blendRgb(band.color, band.nextColor, boundaryProgress));
+    }
+  }
+
+  return 'rgb(220, 90, 255)';
+}
+
+function blendRgb(
+  start: [number, number, number],
+  end: [number, number, number],
+  progress: number,
+): [number, number, number] {
+  return start.map((value, index) => Math.round(value + ((end[index] - value) * progress))) as [number, number, number];
+}
+
+function rgbString(color: [number, number, number]): string {
+  return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 }
 
 export function buildFiveSecondAveragePowerSeries(values: number[]): number[] {
