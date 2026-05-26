@@ -135,13 +135,6 @@ describe('WorkoutDetailModal charts and interaction', () => {
   });
 
   it('does not render duplicate top summary bars when completed workout already has a power chart', async () => {
-    const { container } = render(
-      <WorkoutDetailModal
-        selection={makeSelection({ dateKey: '2026-03-30', event: makeEvent({ id: 44, startDateLocal: '2026-03-30', name: 'Tempo Build', indoor: false }) })}
-        onClose={vi.fn()}
-      />,
-    );
-
     mockedLoadEvent.mockResolvedValue(
       makeEvent({
         id: 44,
@@ -175,10 +168,56 @@ describe('WorkoutDetailModal charts and interaction', () => {
     );
     mockedLoadActivity.mockResolvedValue(undefined as never);
 
+    const { container } = render(
+      <WorkoutDetailModal
+        selection={makeSelection({ dateKey: '2026-03-30', event: makeEvent({ id: 44, startDateLocal: '2026-03-30', name: 'Tempo Build', indoor: false }) })}
+        onClose={vi.fn()}
+      />,
+    );
+
     await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
 
     expect(container.querySelectorAll('[data-chart-bar="detail"]')).toHaveLength(0);
     expect(container.querySelector('[data-power-zone-area-chart="true"]')).toBeInTheDocument();
+  });
+
+  it('keeps top summary bars for comparison workouts without overlay context', async () => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 47,
+        startDateLocal: '2026-04-01',
+        name: 'Unstructured Outside Ride',
+        indoor: false,
+        eventDefinition: makeEventDefinition({
+          summary: makeWorkoutSummary({ totalDurationSeconds: 1200 }),
+        }),
+        actualWorkout: makeActualWorkout({
+          activityId: 'a47',
+          activityName: 'Outside Ride',
+          startDateLocal: '2026-04-01T07:00:00',
+          powerValues: [180, 220, 260, 240],
+          averagePowerWatts: 225,
+          normalizedPowerWatts: 233,
+          trainingStressScore: 32,
+          intensityFactor: 0.8,
+          complianceScore: 0.9,
+          matchedIntervals: [],
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    const { container } = render(
+      <WorkoutDetailModal
+        selection={makeSelection({ dateKey: '2026-04-01', event: makeEvent({ id: 47, startDateLocal: '2026-04-01', name: 'Unstructured Outside Ride', indoor: false }) })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
+
+    expect(container.querySelectorAll('[data-chart-bar="detail"]')).toHaveLength(4);
+    expect(container.querySelectorAll('[data-interval-overlay="true"]')).toHaveLength(0);
   });
 
   it('renders power chart from 5 second average activity values', async () => {
@@ -310,7 +349,7 @@ describe('WorkoutDetailModal charts and interaction', () => {
     expect(screen.getByText((content) => content.includes('0:02') && content.includes('200') && content.includes('W'))).toBeInTheDocument();
   });
 
-  it('renders comparison workout interval overlays without duplicate top bars', async () => {
+  it('renders comparison workout interval overlays with widths proportional to matched interval durations', async () => {
     mockedLoadEvent.mockResolvedValue(
       makeEvent({
         id: 45,
@@ -342,7 +381,9 @@ describe('WorkoutDetailModal charts and interaction', () => {
     await waitFor(() => expect(screen.getByText(/completed workout/i)).toBeInTheDocument());
 
     const detailBars = Array.from(document.querySelectorAll('[data-chart-bar="detail"]')) as HTMLDivElement[];
+    const overlays = Array.from(document.querySelectorAll('[data-interval-overlay="true"]'));
     expect(detailBars).toHaveLength(0);
-    expect(document.querySelectorAll('[data-interval-overlay="true"]')).toHaveLength(2);
+    expect(overlays).toHaveLength(2);
+    expect(Number.parseFloat(overlays[0]?.getAttribute('width') ?? '0')).toBeGreaterThan(Number.parseFloat(overlays[1]?.getAttribute('width') ?? '0'));
   });
 });

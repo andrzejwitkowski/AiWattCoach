@@ -139,9 +139,9 @@ describe('WorkoutDetailModal completed mode', () => {
     expect(screen.getAllByText(/91% compliance/i)).toHaveLength(2);
     expect(screen.getByText('Strong aerobic control with only a small fade near the end.')).toBeInTheDocument();
     expect(screen.getByText('openai / gpt-4.1')).toBeInTheDocument();
-    expect(document.querySelectorAll('[data-chart-bar="detail"]')).toHaveLength(1);
-    const [bar] = Array.from(document.querySelectorAll('[data-chart-bar="detail"]')) as HTMLDivElement[];
-    expect(bar.style.flexGrow).toBe('1200');
+    expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-chart-bar="detail"]')).toHaveLength(0);
+    expect(document.querySelectorAll('[data-interval-overlay="true"]')).toHaveLength(1);
 
     await screen.getByRole('button', { name: /close workout details/i }).click();
     expect(onClose).toHaveBeenCalledTimes(1);
