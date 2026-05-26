@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-26 | user | training plan validation log assertion follow-up
+
+- Problem: `generation_and_correction_log_bounded_description_metadata` in `tests/training_plan_service/validation.rs` still asserted escaped JSON fragments like `\"phase\"` even though `capture_tracing_logs(...)` returns raw JSON log lines. The production log metadata was correct, but the stale escaped-string expectation made the focused `training_plan_service` test fail.
+- Fix: updated the log assertions to match the raw JSON fragments actually emitted by the tracing capture helper, keeping the same bounded-description contract checks for `phase`, `has_description`, `description_chars`, and both preview values.
+- Prevention: when asserting structured logs captured as plain text, first inspect one real captured line and match its actual quoting/escaping shape. Do not assume the helper returns a JSON string literal when it really returns newline-joined JSON objects.
+
 ### 2026-05-26 | Copilot + CodeRabbit | PR #250 training plan review follow-up
 
 - Problem: after the training-plan JSON-envelope refactor, one adapter test still asserted the pre-envelope grammar text, the shared `tests/llm_adapters/support.rs` stub switched into training-plan mode by matching scenario-specific prompt copy, `split_into_day_blocks(...)` still cloned accumulated lines when flushing a completed day block, and merging `main` into the PR branch introduced a `reviewers.md` conflict.
