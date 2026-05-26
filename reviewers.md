@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-26 | Copilot + CI | PR #249 completed workout top bars follow-up
+
+- Problem: the first duplicate-top-bars fix hid `WorkoutBars` for every planned-vs-actual completed workout with a power series, which also changed comparison views that had no interval overlay context. The new regression test also configured API mocks after `render(...)`, making it order-dependent, and one older completed-workout test still asserted the pre-fix top-bar contract so CI failed.
+- Fix: narrowed the UI condition so top bars are hidden only when the comparison view has both a power chart and interval overlays, moved the new chart test mocks before `render(...)`, restored explicit coverage for comparison workouts without overlay context, and updated the completed/comparison tests to assert the new overlay-driven behavior.
+- Prevention: when removing a duplicated visualization from a detail view, check whether the suppression condition also changes adjacent sub-modes that still need a fallback summary. In React Testing Library tests, always configure async API mocks before `render(...)` if the component loads in `useEffect`, and after changing a UI contract grep sibling test files for stale assertions that still encode the old visualization.
+
 ### 2026-05-25 | CodeRabbit | PR #248 mobile preview review follow-up
 
 - Problem: `frontend/src/lib/useMediaQuery.ts` assumed `matchMedia(...).addEventListener/removeEventListener` always exist, which can crash in browsers that only expose legacy `addListener/removeListener`. The preview mock server also accepted unknown calendar coach conversation ids on `POST /messages` by falling back to another conversation, and its Wahoo sync validation enforced only the lower date bound even though the API message promises a today-through-plus-6-days window.
