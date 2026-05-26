@@ -68,6 +68,7 @@ export function CompletedWorkoutDetailModal({
   const completedIntervalTotalDurationSeconds = completedIntervalsTotalDuration(completedIntervals, durationSeconds);
   const matchedIntervalTotalDurationSeconds = matchedIntervalsTotalDuration(actualWorkout?.matchedIntervals ?? [], durationSeconds);
   const chartIntervalOverlays = buildChartIntervals(event, actualWorkout, activity);
+  const hideTopBars = isPlannedVsActual && powerSeries.length > 0 && chartIntervalOverlays.length > 0;
   const intervalRowRefs = useRef(new Map<string, HTMLButtonElement>());
   const [hoveredIntervalKey, setHoveredIntervalKey] = useState<string | null>(null);
   const [selectedIntervalKey, setSelectedIntervalKey] = useState<string | null>(null);
@@ -97,7 +98,7 @@ export function CompletedWorkoutDetailModal({
 
   return (
     <div className="space-y-6">
-      <WorkoutBars bars={bars} />
+      {hideTopBars ? null : <WorkoutBars bars={bars} />}
       {powerSeries.length ? (
         <PowerChart
           activeInterval={activeInterval}

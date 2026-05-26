@@ -261,8 +261,9 @@ async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts()
     assert!(initial_prompt.contains("Put the workout-builder text only in the `plan` field"));
     assert!(initial_prompt
         .contains("Put any coach commentary only in the optional `description` field"));
-    assert!(initial_prompt
-        .contains("Every actionable workout step MUST begin with a hyphen followed by a space"));
+    assert!(initial_prompt.contains(
+        "Every actionable workout step in `plan` MUST begin with a hyphen followed by a space"
+    ));
     assert!(initial_prompt.contains("Output grammar"));
     assert!(initial_prompt.contains("YYYY-MM-DD"));
     assert!(initial_prompt.contains("One dated section per day"));
@@ -307,7 +308,9 @@ async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts()
     assert!(correction_prompt.contains("Output grammar"));
     assert!(correction_prompt.contains("YYYY-MM-DD"));
     assert!(correction_prompt.contains("One dated section per day"));
-    assert!(correction_prompt.contains("Only output corrected dated sections"));
+    assert!(correction_prompt.contains(
+        "only output corrected dated sections for the invalid dates you are fixing inside the `plan` field"
+    ));
     assert!(correction_prompt
         .contains("Earlier assistant-role messages are your own earlier coach statements"));
     assert!(

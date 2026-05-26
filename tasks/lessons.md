@@ -117,6 +117,7 @@
 - In a dual-read/dual-write timestamp migration, every field that is required at the domain level must be verified against a `DateTime`-only persisted document, not just legacy-plus-new mixed documents. If the persistence struct still uses a non-optional legacy epoch field, the migration is incomplete even when normal writes succeed.
 - When promising a staged migration with a later backfill step, complete the backfill before calling the rollout done. Readability improvements are not actually delivered for existing Mongo rows until the historical documents are updated too.
 - For dense UI mini-charts, keep the canonical sequence intact and apply any width compression only in the rendering layer. Sampling or equal-width fallbacks are likely to destroy either temporal order or duration meaning.
+- When a UI bugfix intentionally removes one visualization in favor of another, grep sibling test files for stale assertions of the old visual contract before pushing. In React Testing Library, configure async API mocks before `render(...)` whenever the component fetches in `useEffect`, or the new regression test can become order-dependent and flaky.
 - When frontend UX explicitly wants to use stylized planned-workout zone heights, do not silently revert to raw `%FTP` heights to make old tests pass. Update the tests to the intended visual contract instead.
 - If a Docker/Podman Rust build fails on a normal crates.io dependency with an impossible manifest error, suspect a corrupted BuildKit cache before changing dependencies. Cache `cargo/registry/cache` and `cargo/registry/index`, but do not persist `cargo/registry/src` across builds because partially extracted crate sources can poison later container builds.
 
@@ -185,6 +186,7 @@
 ## Test Stability Diagnosis
 
 - When diagnosing suite-level `SIGKILL` or memory-pressure failures, never launch multiple heavy `cargo test` targets in parallel. Those runs create artificial contention and make the results non-diagnostic.
+- On this machine, do not launch multiple verification commands that compile the same Rust workspace in parallel. Shared Cargo package/artifact locks can turn normal checks into long `Blocking waiting for file lock` stalls and misleading timeout failures.
 - For flaky test-harness failures, prefer sequential reruns of the exact binary order from the failing suite, then inspect test helpers for leaked servers, background tasks, or retained global fixtures before changing production code.
 - In parallel Rust test binaries, do not assert that a shared global capture registry is completely empty unless the helper truly owns every concurrent capture. Assert that the current test's capture was deregistered instead.
 - Do not reuse `mongodb::Client` or similar async driver clients across separate `#[tokio::test]` runtimes via `OnceLock` or other process-global singletons. A client tied to a runtime that has already shut down can fail later with cancelled-task or runtime-shutdown errors.

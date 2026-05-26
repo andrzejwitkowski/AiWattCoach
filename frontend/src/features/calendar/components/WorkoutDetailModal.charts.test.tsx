@@ -134,6 +134,92 @@ describe('WorkoutDetailModal charts and interaction', () => {
     expect(screen.getByText('19:59')).toBeInTheDocument();
   });
 
+  it('does not render duplicate top summary bars when completed workout already has a power chart', async () => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 44,
+        startDateLocal: '2026-03-30',
+        name: 'Tempo Build',
+        indoor: false,
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 15m ramp 55-75%\n- 3m 105% #1\n- 1m 120% #1\n- 3m 105% #2',
+        }),
+        actualWorkout: makeActualWorkout({
+          activityId: 'a44',
+          activityName: 'Tempo Build Outside',
+          startDateLocal: '2026-03-30T07:00:00',
+          powerValues: [160, 210, 245, 265, 238, 180, 200, 225],
+          cadenceValues: [80, 85, 90, 88, 86],
+          heartRateValues: [128, 138, 149, 153, 151],
+          speedValues: [8.1, 9.0, 9.8, 9.7, 9.5],
+          averagePowerWatts: 224,
+          normalizedPowerWatts: 239,
+          trainingStressScore: 36,
+          intensityFactor: 0.82,
+          complianceScore: 0.88,
+          matchedIntervals: [
+            makeMatchedInterval({ plannedLabel: '15M RAMP 55-75%', plannedDurationSeconds: 900, actualStartTimeSeconds: 0, actualEndTimeSeconds: 900, zoneId: 1 }),
+            makeMatchedInterval({ plannedSegmentOrder: 1, plannedLabel: '3M 105% #1', plannedDurationSeconds: 180, actualStartTimeSeconds: 900, actualEndTimeSeconds: 1080, zoneId: 4 }),
+            makeMatchedInterval({ plannedSegmentOrder: 2, plannedLabel: '1M 120% #1', plannedDurationSeconds: 60, actualStartTimeSeconds: 1080, actualEndTimeSeconds: 1140, zoneId: 5 }),
+            makeMatchedInterval({ plannedSegmentOrder: 3, plannedLabel: '3M 105% #2', plannedDurationSeconds: 180, actualStartTimeSeconds: 1140, actualEndTimeSeconds: 1320, zoneId: 4 }),
+          ],
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    const { container } = render(
+      <WorkoutDetailModal
+        selection={makeSelection({ dateKey: '2026-03-30', event: makeEvent({ id: 44, startDateLocal: '2026-03-30', name: 'Tempo Build', indoor: false }) })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
+
+    expect(container.querySelectorAll('[data-chart-bar="detail"]')).toHaveLength(0);
+    expect(container.querySelector('[data-power-zone-area-chart="true"]')).toBeInTheDocument();
+  });
+
+  it('keeps top summary bars for comparison workouts without overlay context', async () => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 47,
+        startDateLocal: '2026-04-01',
+        name: 'Unstructured Outside Ride',
+        indoor: false,
+        eventDefinition: makeEventDefinition({
+          summary: makeWorkoutSummary({ totalDurationSeconds: 1200 }),
+        }),
+        actualWorkout: makeActualWorkout({
+          activityId: 'a47',
+          activityName: 'Outside Ride',
+          startDateLocal: '2026-04-01T07:00:00',
+          powerValues: [180, 220, 260, 240],
+          averagePowerWatts: 225,
+          normalizedPowerWatts: 233,
+          trainingStressScore: 32,
+          intensityFactor: 0.8,
+          complianceScore: 0.9,
+          matchedIntervals: [],
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    const { container } = render(
+      <WorkoutDetailModal
+        selection={makeSelection({ dateKey: '2026-04-01', event: makeEvent({ id: 47, startDateLocal: '2026-04-01', name: 'Unstructured Outside Ride', indoor: false }) })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
+
+    expect(container.querySelectorAll('[data-chart-bar="detail"]')).toHaveLength(4);
+    expect(container.querySelectorAll('[data-interval-overlay="true"]')).toHaveLength(0);
+  });
+
   it('renders power chart from 5 second average activity values', async () => {
     mockedLoadEvent.mockResolvedValue(undefined as never);
     mockedLoadActivity.mockResolvedValue(
@@ -263,7 +349,7 @@ describe('WorkoutDetailModal charts and interaction', () => {
     expect(screen.getByText((content) => content.includes('0:02') && content.includes('200') && content.includes('W'))).toBeInTheDocument();
   });
 
-  it('renders comparison workout bars with width proportional to matched interval durations', async () => {
+  it('renders comparison workout interval overlays with widths proportional to matched interval durations', async () => {
     mockedLoadEvent.mockResolvedValue(
       makeEvent({
         id: 45,
@@ -295,9 +381,9 @@ describe('WorkoutDetailModal charts and interaction', () => {
     await waitFor(() => expect(screen.getByText(/completed workout/i)).toBeInTheDocument());
 
     const detailBars = Array.from(document.querySelectorAll('[data-chart-bar="detail"]')) as HTMLDivElement[];
-    expect(detailBars).toHaveLength(2);
-    expect(detailBars[0].style.flexGrow).toBe('1200');
-    expect(detailBars[1].style.flexGrow).toBe('300');
-    expect(document.querySelectorAll('[data-interval-overlay="true"]')).toHaveLength(2);
+    const overlays = Array.from(document.querySelectorAll('[data-interval-overlay="true"]'));
+    expect(detailBars).toHaveLength(0);
+    expect(overlays).toHaveLength(2);
+    expect(Number.parseFloat(overlays[0]?.getAttribute('width') ?? '0')).toBeGreaterThan(Number.parseFloat(overlays[1]?.getAttribute('width') ?? '0'));
   });
 });
