@@ -41,6 +41,7 @@ pub struct TrainingPlanPlanningContext {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrainingPlanPhaseOutput {
     pub raw_response: String,
+    pub description: Option<String>,
     pub tool_loop_state: LlmToolLoopState,
 }
 
@@ -115,8 +116,10 @@ pub struct TrainingPlanGenerationOperation {
     pub workout_recap_generated_at_epoch_seconds: Option<i64>,
     pub projection_persisted_at_epoch_seconds: Option<i64>,
     pub raw_plan_response: Option<String>,
+    pub raw_plan_description: Option<String>,
     pub initial_plan_tool_loop_state: Option<LlmToolLoopState>,
     pub raw_correction_response: Option<String>,
+    pub raw_correction_description: Option<String>,
     pub correction_tool_loop_state: Option<LlmToolLoopState>,
     pub validation_issues: Vec<ValidationIssue>,
     pub attempts: Vec<AttemptRecord>,
@@ -148,8 +151,10 @@ impl TrainingPlanGenerationOperation {
             workout_recap_generated_at_epoch_seconds: None,
             projection_persisted_at_epoch_seconds: None,
             raw_plan_response: None,
+            raw_plan_description: None,
             initial_plan_tool_loop_state: None,
             raw_correction_response: None,
+            raw_correction_description: None,
             correction_tool_loop_state: None,
             validation_issues: Vec::new(),
             attempts: Vec::new(),
@@ -175,8 +180,10 @@ impl TrainingPlanGenerationOperation {
             workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
             projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
             raw_plan_response: self.raw_plan_response.clone(),
+            raw_plan_description: self.raw_plan_description.clone(),
             initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
             raw_correction_response: self.raw_correction_response.clone(),
+            raw_correction_description: self.raw_correction_description.clone(),
             correction_tool_loop_state: self.correction_tool_loop_state.clone(),
             validation_issues: self.validation_issues.clone(),
             attempts: self.attempts.clone(),
@@ -202,8 +209,10 @@ impl TrainingPlanGenerationOperation {
             workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
             projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
             raw_plan_response: self.raw_plan_response.clone(),
+            raw_plan_description: self.raw_plan_description.clone(),
             initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
             raw_correction_response: self.raw_correction_response.clone(),
+            raw_correction_description: self.raw_correction_description.clone(),
             correction_tool_loop_state: self.correction_tool_loop_state.clone(),
             validation_issues: self.validation_issues.clone(),
             attempts: self.attempts.clone(),
@@ -235,15 +244,6 @@ impl TrainingPlanGenerationOperation {
                 recorded_at_epoch_seconds,
             });
         }
-        attempts.push(AttemptRecord {
-            phase: WorkflowPhase::InitialGeneration,
-            attempt_number: attempts
-                .iter()
-                .filter(|attempt| attempt.phase == WorkflowPhase::InitialGeneration)
-                .count() as u32
-                + 1,
-            recorded_at_epoch_seconds,
-        });
 
         let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
         updated.workout_recap_text = Some(text);
@@ -260,9 +260,38 @@ impl TrainingPlanGenerationOperation {
         tool_loop_state: LlmToolLoopState,
         recorded_at_epoch_seconds: i64,
     ) -> Self {
+        self.with_raw_plan_payload(
+            raw_plan_response,
+            None,
+            tool_loop_state,
+            recorded_at_epoch_seconds,
+        )
+    }
+
+    pub fn with_raw_plan_payload(
+        &self,
+        raw_plan_response: String,
+        raw_plan_description: Option<String>,
+        tool_loop_state: LlmToolLoopState,
+        recorded_at_epoch_seconds: i64,
+    ) -> Self {
+        let mut attempts = self.attempts.clone();
+        let initial_generation_attempt_number = attempts
+            .iter()
+            .filter(|attempt| attempt.phase == WorkflowPhase::InitialGeneration)
+            .count() as u32
+            + 1;
+        attempts.push(AttemptRecord {
+            phase: WorkflowPhase::InitialGeneration,
+            attempt_number: initial_generation_attempt_number,
+            recorded_at_epoch_seconds,
+        });
+
         let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
         updated.raw_plan_response = Some(raw_plan_response);
+        updated.raw_plan_description = raw_plan_description;
         updated.initial_plan_tool_loop_state = Some(tool_loop_state);
+        updated.attempts = attempts;
         updated
     }
 
@@ -292,6 +321,21 @@ impl TrainingPlanGenerationOperation {
         tool_loop_state: LlmToolLoopState,
         recorded_at_epoch_seconds: i64,
     ) -> Self {
+        self.with_correction_payload(
+            raw_correction_response,
+            None,
+            tool_loop_state,
+            recorded_at_epoch_seconds,
+        )
+    }
+
+    pub fn with_correction_payload(
+        &self,
+        raw_correction_response: String,
+        raw_correction_description: Option<String>,
+        tool_loop_state: LlmToolLoopState,
+        recorded_at_epoch_seconds: i64,
+    ) -> Self {
         let mut attempts = self.attempts.clone();
         let correction_attempt_number = attempts
             .iter()
@@ -306,6 +350,7 @@ impl TrainingPlanGenerationOperation {
 
         let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
         updated.raw_correction_response = Some(raw_correction_response);
+        updated.raw_correction_description = raw_correction_description;
         updated.correction_tool_loop_state = Some(tool_loop_state);
         updated.attempts = attempts;
         updated
@@ -358,8 +403,10 @@ impl TrainingPlanGenerationOperation {
             workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
             projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
             raw_plan_response: self.raw_plan_response.clone(),
+            raw_plan_description: self.raw_plan_description.clone(),
             initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
             raw_correction_response: self.raw_correction_response.clone(),
+            raw_correction_description: self.raw_correction_description.clone(),
             correction_tool_loop_state: self.correction_tool_loop_state.clone(),
             validation_issues: self.validation_issues.clone(),
             attempts: self.attempts.clone(),
@@ -391,8 +438,10 @@ impl TrainingPlanGenerationOperation {
             workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
             projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
             raw_plan_response: self.raw_plan_response.clone(),
+            raw_plan_description: self.raw_plan_description.clone(),
             initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
             raw_correction_response: self.raw_correction_response.clone(),
+            raw_correction_description: self.raw_correction_description.clone(),
             correction_tool_loop_state: self.correction_tool_loop_state.clone(),
             validation_issues,
             attempts: self.attempts.clone(),

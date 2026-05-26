@@ -14,8 +14,9 @@ use aiwattcoach::{
         CALENDAR_OVERVIEW_FOCUS_ID,
     },
     domain::training_plan::{
-        TrainingPlanConversationMessage, TrainingPlanConversationRole, TrainingPlanGenerator,
-        TrainingPlanPlanningContext, TrainingPlanToolLoopCheckpoint,
+        training_plan_llm_envelope_json_schema, TrainingPlanConversationMessage,
+        TrainingPlanConversationRole, TrainingPlanGenerator, TrainingPlanPlanningContext,
+        TrainingPlanToolLoopCheckpoint,
     },
     domain::workout_summary::WorkoutRecap,
 };
@@ -148,6 +149,14 @@ fn sample_planning_context() -> TrainingPlanPlanningContext {
     }
 }
 
+fn sample_training_plan_envelope(plan: &str, description: Option<&str>) -> String {
+    serde_json::json!({
+        "plan": plan,
+        "description": description,
+    })
+    .to_string()
+}
+
 #[tokio::test]
 async fn training_plan_generator_builds_workout_recap_request_from_training_context() {
     let chat_port = Arc::new(CapturingChatPort::default());
@@ -247,7 +256,11 @@ async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts()
 
     let initial_prompt = &chat_port.requests()[0].system_prompt;
     assert!(initial_prompt.contains("strict syntax generator"));
-    assert!(initial_prompt.contains("Output ONLY the raw workout text"));
+    assert!(initial_prompt.contains("Output ONLY valid JSON matching this schema"));
+    assert!(initial_prompt.contains(&training_plan_llm_envelope_json_schema()));
+    assert!(initial_prompt.contains("Put the workout-builder text only in the `plan` field"));
+    assert!(initial_prompt
+        .contains("Put any coach commentary only in the optional `description` field"));
     assert!(initial_prompt
         .contains("Every actionable workout step MUST begin with a hyphen followed by a space"));
     assert!(initial_prompt.contains("Output grammar"));
@@ -286,7 +299,11 @@ async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts()
 
     let correction_prompt = &chat_port.requests()[1].system_prompt;
     assert!(correction_prompt.contains("strict syntax generator"));
-    assert!(correction_prompt.contains("Output ONLY the raw workout text"));
+    assert!(correction_prompt.contains("Output ONLY valid JSON matching this schema"));
+    assert!(correction_prompt.contains(&training_plan_llm_envelope_json_schema()));
+    assert!(correction_prompt.contains("Put the workout-builder text only in the `plan` field"));
+    assert!(correction_prompt
+        .contains("Put any coach commentary only in the optional `description` field"));
     assert!(correction_prompt.contains("Output grammar"));
     assert!(correction_prompt.contains("YYYY-MM-DD"));
     assert!(correction_prompt.contains("One dated section per day"));
@@ -324,7 +341,8 @@ async fn training_plan_generator_builds_initial_window_request_with_recap() {
         .await
         .unwrap();
 
-    assert_eq!(response.raw_response, "Gemini coach reply");
+    assert_eq!(response.raw_response, "2023-11-15\nRest Day");
+    assert_eq!(response.description.as_deref(), Some("Gemini coach reply"));
 
     let requests = chat_port.requests();
     assert_eq!(requests.len(), 1);
@@ -417,7 +435,8 @@ async fn training_plan_generator_builds_correction_request_with_issues_and_inval
         .await
         .unwrap();
 
-    assert_eq!(response.raw_response, "Gemini coach reply");
+    assert_eq!(response.raw_response, "2023-11-15\nRest Day");
+    assert_eq!(response.description.as_deref(), Some("Gemini coach reply"));
 
     let requests = chat_port.requests();
     assert_eq!(requests.len(), 1);
@@ -513,7 +532,10 @@ impl LlmChatPort for ToolCallingChatPort {
             Ok(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "gpt-4o-mini".to_string(),
-                message: LlmChatMessage::assistant("2023-11-15\nRest Day"),
+                message: LlmChatMessage::assistant(sample_training_plan_envelope(
+                    "2023-11-15\nRest Day",
+                    Some("Recovery day after the simulation."),
+                )),
                 finish_reason: Some(LlmFinishReason::Stop),
                 provider_request_id: Some("req-tool-2".to_string()),
                 usage: LlmTokenUsage::default(),
@@ -565,6 +587,62 @@ async fn training_plan_generator_fails_when_llm_returns_blank_assistant_text() {
     );
 }
 
+#[derive(Clone, Default)]
+struct EmptyPlanTrainingPlanEnvelopeChatPort;
+
+impl LlmChatPort for EmptyPlanTrainingPlanEnvelopeChatPort {
+    fn chat(
+        &self,
+        _config: LlmProviderConfig,
+        _request: LlmChatRequest,
+    ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        Box::pin(async move {
+            Ok(LlmChatResponse {
+                provider: LlmProvider::Gemini,
+                model: "gemini-3.1-pro".to_string(),
+                message: LlmChatMessage::assistant(r#"{"plan":"   ","description":"bad payload"}"#),
+                finish_reason: None,
+                provider_request_id: Some("req-empty-plan".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: Default::default(),
+            })
+        })
+    }
+}
+
+#[tokio::test]
+async fn training_plan_generator_fails_when_plan_generation_returns_empty_plan_envelope() {
+    let generator = TrainingPlanLlmGenerator::new(
+        Arc::new(EmptyPlanTrainingPlanEnvelopeChatPort),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    let error = generator
+        .generate_initial_plan_window(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "gemini",
+                "gemini-3.1-pro",
+                1_700_000_000,
+            ),
+            Some(&sample_planning_context()),
+        )
+        .await
+        .expect_err("empty plan envelope should fail");
+
+    assert_eq!(
+        error,
+        aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
+            "training plan llm json missing non-empty plan".to_string(),
+        )
+    );
+}
+
 #[tokio::test]
 async fn training_plan_generator_checkpoints_final_no_tool_response_before_returning() {
     let chat_port = Arc::new(CapturingChatPort::default());
@@ -586,7 +664,7 @@ async fn training_plan_generator_checkpoints_final_no_tool_response_before_retur
         }
     });
 
-    let response = generator
+    generator
         .generate_initial_plan_window_with_state(
             "user-1",
             "workout-1",
@@ -611,7 +689,7 @@ async fn training_plan_generator_checkpoints_final_no_tool_response_before_retur
             .completed_response
             .as_ref()
             .map(|response| response.message.content.as_str()),
-        Some(response.raw_response.as_str())
+        Some(r#"{"plan":"2023-11-15\nRest Day","description":"Gemini coach reply"}"#)
     );
     assert_eq!(chat_port.requests().len(), 1);
 }
@@ -674,7 +752,10 @@ async fn training_plan_generator_reuses_completed_tool_loop_state_without_second
     let restored_state = LlmToolLoopOutput::from_response(LlmChatResponse {
         provider: LlmProvider::Gemini,
         model: "gemini-3.1-pro".to_string(),
-        message: LlmChatMessage::assistant("2023-11-15\nRest Day"),
+        message: LlmChatMessage::assistant(sample_training_plan_envelope(
+            "2023-11-15\nRest Day",
+            Some("Recovered state description."),
+        )),
         finish_reason: Some(LlmFinishReason::Stop),
         provider_request_id: Some("req-restored".to_string()),
         usage: LlmTokenUsage::default(),
@@ -701,6 +782,10 @@ async fn training_plan_generator_reuses_completed_tool_loop_state_without_second
         .unwrap();
 
     assert_eq!(response.raw_response, "2023-11-15\nRest Day");
+    assert_eq!(
+        response.description.as_deref(),
+        Some("Recovered state description.")
+    );
     assert_eq!(response.tool_loop_state.round_count, 1);
     assert!(chat_port.requests().is_empty());
 }
@@ -732,6 +817,10 @@ async fn training_plan_generator_runs_shared_tool_loop_for_openai_plan_generatio
         .unwrap();
 
     assert_eq!(response.raw_response, "2023-11-15\nRest Day");
+    assert_eq!(
+        response.description.as_deref(),
+        Some("Recovery day after the simulation.")
+    );
     assert_eq!(response.tool_loop_state.round_count, 2);
     assert_eq!(response.tool_loop_state.public_tool_calls.len(), 1);
     assert_eq!(

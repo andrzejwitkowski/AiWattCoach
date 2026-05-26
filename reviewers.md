@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-26 | user | training plan json-envelope Task 4 review fixes
+
+- Problem: the shared `tests/llm_adapters/support.rs` chat stub was changed to always return a training-plan JSON envelope, which broke workout recap tests that still depend on plain assistant text. The Task 4 service path also still persisted training-plan outputs through `with_raw_plan_response(...)` and `with_correction_response(...)`, silently dropping the new `description` field from durable operation state.
+- Fix: changed the shared chat stub to return plain text for recap requests and a JSON envelope only for training-plan generation/correction requests, restored the blank recap failure expectation and added a plan-path blank-payload regression, and switched the service persistence call sites to `with_raw_plan_payload(...)` / `with_correction_payload(...)` so raw plan and correction descriptions are stored.
+- Prevention: when a shared LLM test stub starts returning a new structured payload shape, verify every caller still matches that contract instead of changing the stub globally. When adding a field to `TrainingPlanPhaseOutput`, grep the service persistence path for older convenience setters that still drop the new data before assuming the value is durable.
+
 ### 2026-05-25 | CodeRabbit | PR #248 mobile preview review follow-up
 
 - Problem: `frontend/src/lib/useMediaQuery.ts` assumed `matchMedia(...).addEventListener/removeEventListener` always exist, which can crash in browsers that only expose legacy `addListener/removeListener`. The preview mock server also accepted unknown calendar coach conversation ids on `POST /messages` by falling back to another conversation, and its Wahoo sync validation enforced only the lower date bound even though the API message promises a today-through-plus-6-days window.

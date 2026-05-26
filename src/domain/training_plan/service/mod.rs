@@ -26,6 +26,24 @@ use super::{
 pub use scheduler::{training_plan_generate_task_handler, SchedulerBackedTrainingPlanService};
 
 const TRAINING_PLAN_STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
+const TRAINING_PLAN_DESCRIPTION_PREVIEW_LIMIT: usize = 120;
+
+fn description_log_metadata(description: Option<&str>) -> (bool, usize, String) {
+    let has_description = description.is_some();
+    let description_chars = description.map(|value| value.chars().count()).unwrap_or(0);
+    let description_preview = description
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            value
+                .chars()
+                .take(TRAINING_PLAN_DESCRIPTION_PREVIEW_LIMIT)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    (has_description, description_chars, description_preview)
+}
 
 pub trait TrainingPlanUseCases: Send + Sync + 'static {
     fn generate_recap_for_saved_workout(
@@ -643,15 +661,28 @@ where
                         }
                     };
                     let raw_plan_tool_loop_state = raw_plan_response.tool_loop_state;
+                    let raw_plan_description = raw_plan_response.description;
                     let raw_plan_response = raw_plan_response.raw_response;
+                    let (has_description, description_chars, description_preview) =
+                        description_log_metadata(raw_plan_description.as_deref());
                     operation = service
                         .operations
-                        .upsert(operation.with_raw_plan_response(
+                        .upsert(operation.with_raw_plan_payload(
                             raw_plan_response.clone(),
+                            raw_plan_description,
                             raw_plan_tool_loop_state,
                             service.clock.now_epoch_seconds(),
                         ))
                         .await?;
+                    tracing::info!(
+                        operation_key = %operation.operation_key,
+                        phase = "initial_generation",
+                        has_description,
+                        description_chars,
+                        plan_chars = raw_plan_response.chars().count(),
+                        description_preview,
+                        "stored training plan llm envelope"
+                    );
                     raw_plan_response
                 };
 
@@ -807,15 +838,28 @@ where
                         }
                     };
                     let correction_tool_loop_state = correction_response.tool_loop_state;
+                    let correction_description = correction_response.description;
                     let correction_response = correction_response.raw_response;
+                    let (has_description, description_chars, description_preview) =
+                        description_log_metadata(correction_description.as_deref());
                     operation = service
                         .operations
-                        .upsert(operation.with_correction_response(
+                        .upsert(operation.with_correction_payload(
                             correction_response.clone(),
+                            correction_description,
                             correction_tool_loop_state,
                             service.clock.now_epoch_seconds(),
                         ))
                         .await?;
+                    tracing::info!(
+                        operation_key = %operation.operation_key,
+                        phase = "correction",
+                        has_description,
+                        description_chars,
+                        plan_chars = correction_response.chars().count(),
+                        description_preview,
+                        "stored training plan llm envelope"
+                    );
 
                     let corrected = match service.parse_window(&correction_response) {
                         Ok(corrected) => corrected,
@@ -922,5 +966,32 @@ where
 
             service.persist_projection(snapshot, operation).await
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::description_log_metadata;
+
+    #[test]
+    fn description_log_metadata_trims_and_bounds_preview() {
+        let description = format!("  {}  ", "A".repeat(140));
+
+        let (has_description, description_chars, description_preview) =
+            description_log_metadata(Some(&description));
+
+        assert!(has_description);
+        assert_eq!(description_chars, 144);
+        assert_eq!(description_preview, "A".repeat(120));
+    }
+
+    #[test]
+    fn description_log_metadata_uses_empty_preview_for_blank_text() {
+        let (has_description, description_chars, description_preview) =
+            description_log_metadata(Some("  \n  "));
+
+        assert!(has_description);
+        assert_eq!(description_chars, 5);
+        assert!(description_preview.is_empty());
     }
 }

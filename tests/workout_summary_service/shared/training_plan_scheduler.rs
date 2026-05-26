@@ -309,6 +309,7 @@ impl TrainingPlanGenerator for SaveFlowTrainingPlanGenerator {
                     })
                     .collect::<Vec<_>>()
                     .join("\n\n"),
+                description: None,
                 tool_loop_state: aiwattcoach::domain::llm_tools::LlmToolLoopState::default(),
             })
         })

@@ -70,12 +70,24 @@ impl LlmChatPort for CapturingChatPort {
         _config: LlmProviderConfig,
         request: LlmChatRequest,
     ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        let is_training_plan_generation = request
+            .system_prompt
+            .contains("14-day internal cycling plan window")
+            || request
+                .system_prompt
+                .contains("correct invalid dated workout sections");
         self.requests.lock().unwrap().push(request);
         Box::pin(async move {
             Ok(LlmChatResponse {
                 provider: LlmProvider::Gemini,
                 model: "gemini-3.1-pro".to_string(),
-                message: LlmChatMessage::assistant("Gemini coach reply"),
+                message: if is_training_plan_generation {
+                    LlmChatMessage::assistant(
+                        r#"{"plan":"2023-11-15\nRest Day","description":"Gemini coach reply"}"#,
+                    )
+                } else {
+                    LlmChatMessage::assistant("Gemini coach reply")
+                },
                 finish_reason: None,
                 provider_request_id: Some("req-1".to_string()),
                 usage: LlmTokenUsage::default(),

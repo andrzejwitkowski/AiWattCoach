@@ -14,6 +14,64 @@ use crate::domain::training_plan::{
     TrainingPlanWorkoutSummaryPort,
 };
 
+fn is_exact_date(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 10
+        && bytes[0..4].iter().all(u8::is_ascii_digit)
+        && bytes[4] == b'-'
+        && bytes[5..7].iter().all(u8::is_ascii_digit)
+        && bytes[7] == b'-'
+        && bytes[8..10].iter().all(u8::is_ascii_digit)
+}
+
+fn split_into_day_blocks(input: &str) -> Result<Vec<(String, String)>, TrainingPlanError> {
+    let mut blocks = Vec::new();
+    let mut current_date: Option<String> = None;
+    let mut current_lines = Vec::new();
+    let mut saw_non_empty_line = false;
+
+    for raw_line in input.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        saw_non_empty_line = true;
+
+        if is_exact_date(line) {
+            if let Some(date) = current_date.take() {
+                let mut block = Vec::with_capacity(current_lines.len() + 1);
+                block.push(date.clone());
+                block.extend(current_lines.clone());
+                blocks.push((date, block.join("\n")));
+                current_lines.clear();
+            }
+            current_date = Some(line.to_string());
+            continue;
+        }
+
+        if current_date.is_none() {
+            continue;
+        }
+
+        current_lines.push(line.to_string());
+    }
+
+    if let Some(date) = current_date {
+        let mut block = Vec::with_capacity(current_lines.len() + 1);
+        block.push(date.clone());
+        block.extend(current_lines);
+        blocks.push((date, block.join("\n")));
+    }
+
+    if blocks.is_empty() && saw_non_empty_line {
+        return Err(TrainingPlanError::Validation(
+            "content before first date header".to_string(),
+        ));
+    }
+
+    Ok(blocks)
+}
+
 impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
     TrainingPlanGenerationService<
         Snapshots,
@@ -50,55 +108,7 @@ where
         &self,
         input: &str,
     ) -> Result<Vec<(String, String)>, TrainingPlanError> {
-        let mut blocks = Vec::new();
-        let mut current_date: Option<String> = None;
-        let mut current_lines = Vec::new();
-
-        for raw_line in input.lines() {
-            let line = raw_line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            if Self::is_exact_date(line) {
-                if let Some(date) = current_date.take() {
-                    let mut block = Vec::with_capacity(current_lines.len() + 1);
-                    block.push(date.clone());
-                    block.extend(current_lines.clone());
-                    blocks.push((date, block.join("\n")));
-                    current_lines.clear();
-                }
-                current_date = Some(line.to_string());
-                continue;
-            }
-
-            if current_date.is_none() {
-                return Err(TrainingPlanError::Validation(
-                    "content before first date header".to_string(),
-                ));
-            }
-
-            current_lines.push(line.to_string());
-        }
-
-        if let Some(date) = current_date {
-            let mut block = Vec::with_capacity(current_lines.len() + 1);
-            block.push(date.clone());
-            block.extend(current_lines);
-            blocks.push((date, block.join("\n")));
-        }
-
-        Ok(blocks)
-    }
-
-    pub(super) fn is_exact_date(value: &str) -> bool {
-        let bytes = value.as_bytes();
-        bytes.len() == 10
-            && bytes[0..4].iter().all(u8::is_ascii_digit)
-            && bytes[4] == b'-'
-            && bytes[5..7].iter().all(u8::is_ascii_digit)
-            && bytes[7] == b'-'
-            && bytes[8..10].iter().all(u8::is_ascii_digit)
+        split_into_day_blocks(input)
     }
 
     pub(super) fn parse_window(
@@ -151,5 +161,41 @@ where
                 base_days.insert(date, day);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_into_day_blocks;
+    use crate::domain::training_plan::TrainingPlanError;
+
+    #[test]
+    fn split_into_day_blocks_skips_preamble_before_first_date_header() {
+        let blocks = split_into_day_blocks(
+            "Symulacja potwierdza zdrowa progresje.\n\n2026-04-06\nRest Day\n\n2026-04-07\nEndurance\n- 45m 65%",
+        )
+        .expect("expected parsed day blocks");
+
+        assert_eq!(
+            blocks,
+            vec![
+                ("2026-04-06".to_string(), "2026-04-06\nRest Day".to_string()),
+                (
+                    "2026-04-07".to_string(),
+                    "2026-04-07\nEndurance\n- 45m 65%".to_string(),
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn split_into_day_blocks_still_errors_when_no_date_header_exists() {
+        let error = split_into_day_blocks("Symulacja potwierdza zdrowa progresje.")
+            .expect_err("expected missing date header to fail");
+
+        assert_eq!(
+            error,
+            TrainingPlanError::Validation("content before first date header".to_string())
+        );
     }
 }

@@ -121,17 +121,45 @@ async fn training_plan_generation_operation_repository_round_trips_completed_too
         cache: Default::default(),
     })
     .state;
-    let operation = sample_operation(operation_key)
-        .with_raw_plan_response(
-            "2026-04-06\nRest Day".to_string(),
-            initial_tool_loop_state.clone(),
-            1_700_000_050,
-        )
-        .with_correction_response(
-            "2026-04-07\nEndurance\n- 45m 65%".to_string(),
-            correction_tool_loop_state.clone(),
-            1_700_000_060,
-        );
+    let recap_only = TrainingPlanGenerationOperation::pending(
+        operation_key.to_string(),
+        "user-1".to_string(),
+        "workout-1".to_string(),
+        1_700_000_000,
+        1_700_000_000,
+    )
+    .with_workout_recap(
+        "Strong day".to_string(),
+        "gemini".to_string(),
+        "gemini-3.1-pro".to_string(),
+        1_700_000_040,
+    );
+    assert_eq!(recap_only.attempts.len(), 1);
+    assert_eq!(recap_only.attempts[0].phase, WorkflowPhase::WorkoutRecap);
+
+    let initial = recap_only.with_raw_plan_payload(
+        "2026-04-06\nRest Day".to_string(),
+        Some("Initial plan description".to_string()),
+        initial_tool_loop_state.clone(),
+        1_700_000_050,
+    );
+    assert_eq!(initial.attempts.len(), 2);
+    assert_eq!(initial.attempts[0].phase, WorkflowPhase::WorkoutRecap);
+    assert_eq!(initial.attempts[1].phase, WorkflowPhase::InitialGeneration);
+
+    let operation = initial.with_correction_payload(
+        "2026-04-07\nEndurance\n- 45m 65%".to_string(),
+        Some("Correction description".to_string()),
+        correction_tool_loop_state.clone(),
+        1_700_000_060,
+    );
+    assert_eq!(operation.attempts.len(), 3);
+    assert_eq!(operation.attempts[0].phase, WorkflowPhase::WorkoutRecap);
+    assert_eq!(
+        operation.attempts[1].phase,
+        WorkflowPhase::InitialGeneration
+    );
+    assert_eq!(operation.attempts[2].phase, WorkflowPhase::Correction);
     repository.upsert(operation.clone()).await.unwrap();
 
     let found = repository
@@ -180,6 +208,21 @@ async fn training_plan_generation_operation_repository_round_trips_completed_too
             .map(|state| state.round_count),
         Some(1)
     );
+    assert_eq!(
+        found.raw_plan_description.as_deref(),
+        Some("Initial plan description")
+    );
+    assert_eq!(
+        found.raw_correction_description.as_deref(),
+        Some("Correction description")
+    );
+    assert_eq!(found.attempts.len(), 3);
+    assert_eq!(found.attempts[0].phase, WorkflowPhase::WorkoutRecap);
+    assert_eq!(found.attempts[0].attempt_number, 1);
+    assert_eq!(found.attempts[1].phase, WorkflowPhase::InitialGeneration);
+    assert_eq!(found.attempts[1].attempt_number, 1);
+    assert_eq!(found.attempts[2].phase, WorkflowPhase::Correction);
+    assert_eq!(found.attempts[2].attempt_number, 1);
 
     fixture.cleanup().await;
 }
@@ -215,6 +258,71 @@ async fn training_plan_generation_operation_repository_round_trips_recap_timesta
         found.workout_recap_generated_at_epoch_seconds,
         Some(1_699_999_400)
     );
+    assert_eq!(found.updated_at_epoch_seconds, 1_700_000_000);
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn training_plan_generation_operation_repository_reads_legacy_document_without_new_fields() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoTrainingPlanGenerationOperationRepository::new(
+        fixture.client.clone(),
+        &fixture.database,
+    );
+    repository.ensure_indexes().await.unwrap();
+
+    fixture
+        .client
+        .database(&fixture.database)
+        .collection::<Document>("training_plan_generation_operations")
+        .insert_one(doc! {
+            "operation_key": "training-plan:user-1:legacy-operation",
+            "user_id": "user-1",
+            "workout_id": "workout-1",
+            "saved_at_epoch_seconds": 1_700_000_000_i64,
+            "status": "completed",
+            "workout_recap_text": "Strong day",
+            "workout_recap_provider": "gemini",
+            "workout_recap_model": "gemini-3.1-pro",
+            "workout_recap_generated_at_epoch_seconds": 1_699_999_400_i64,
+            "projection_persisted_at_epoch_seconds": mongodb::bson::Bson::Null,
+            "raw_plan_response": "2026-04-06\nRest Day",
+            "raw_correction_response": mongodb::bson::Bson::Null,
+            "failure": mongodb::bson::Bson::Null,
+            "started_at_epoch_seconds": 1_700_000_000_i64,
+            "last_attempt_at_epoch_seconds": 1_700_000_000_i64,
+            "attempt_count": 1_i64,
+            "created_at_epoch_seconds": 1_700_000_000_i64,
+            "updated_at_epoch_seconds": 1_700_000_000_i64,
+        })
+        .await
+        .unwrap();
+
+    let found = repository
+        .find_by_operation_key("training-plan:user-1:legacy-operation")
+        .await
+        .unwrap()
+        .expect("expected stored operation");
+
+    assert_eq!(found.operation_key, "training-plan:user-1:legacy-operation");
+    assert_eq!(found.status, WorkflowStatus::Completed);
+    assert_eq!(
+        found.raw_plan_response.as_deref(),
+        Some("2026-04-06\nRest Day")
+    );
+    assert_eq!(found.raw_plan_description, None);
+    assert_eq!(found.raw_correction_description, None);
+    assert_eq!(found.initial_plan_tool_loop_state, None);
+    assert_eq!(found.correction_tool_loop_state, None);
+    assert!(found.validation_issues.is_empty());
+    assert!(found.attempts.is_empty());
+    assert_eq!(found.saved_at_epoch_seconds, 1_700_000_000);
+    assert_eq!(found.started_at_epoch_seconds, 1_700_000_000);
+    assert_eq!(found.last_attempt_at_epoch_seconds, 1_700_000_000);
+    assert_eq!(found.created_at_epoch_seconds, 1_700_000_000);
     assert_eq!(found.updated_at_epoch_seconds, 1_700_000_000);
 
     fixture.cleanup().await;
@@ -747,8 +855,10 @@ fn sample_operation(operation_key: &str) -> TrainingPlanGenerationOperation {
         workout_recap_generated_at_epoch_seconds: Some(1_699_999_400),
         projection_persisted_at_epoch_seconds: None,
         raw_plan_response: Some("2026-04-06\nrest day".to_string()),
+        raw_plan_description: Some("Draft plan description".to_string()),
         initial_plan_tool_loop_state: None,
         raw_correction_response: None,
+        raw_correction_description: None,
         correction_tool_loop_state: None,
         validation_issues: Vec::new(),
         attempts: Vec::new(),
