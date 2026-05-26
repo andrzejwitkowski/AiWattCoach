@@ -97,7 +97,7 @@ export function CompletedWorkoutDetailModal({
 
   return (
     <div className="space-y-6">
-      <WorkoutBars bars={bars} />
+      {(!isPlannedVsActual || powerSeries.length === 0) ? <WorkoutBars bars={bars} /> : null}
       {powerSeries.length ? (
         <PowerChart
           activeInterval={activeInterval}
