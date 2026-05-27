@@ -45,8 +45,8 @@ function formatCheckedAtLabel(date: Date): string {
 
 export async function loadBackendStatus(apiBaseUrl: string): Promise<BackendStatus> {
   const [healthResponse, readinessResponse] = await Promise.all([
-    getJsonResponse<HealthPayload>(buildApiUrl(apiBaseUrl, '/health')),
-    getJsonResponse<ReadinessPayload>(buildApiUrl(apiBaseUrl, '/ready'))
+    getJsonResponse<unknown>(buildApiUrl(apiBaseUrl, '/health')),
+    getJsonResponse<unknown>(buildApiUrl(apiBaseUrl, '/ready'))
   ]);
 
   if (!healthResponse.ok) {

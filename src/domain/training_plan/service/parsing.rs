@@ -39,11 +39,11 @@ fn split_into_day_blocks(input: &str) -> Result<Vec<(String, String)>, TrainingP
 
         if is_exact_date(line) {
             if let Some(date) = current_date.take() {
-                let mut block = Vec::with_capacity(current_lines.len() + 1);
+                let lines = std::mem::take(&mut current_lines);
+                let mut block = Vec::with_capacity(lines.len() + 1);
                 block.push(date.clone());
-                block.extend(current_lines.clone());
+                block.extend(lines);
                 blocks.push((date, block.join("\n")));
-                current_lines.clear();
             }
             current_date = Some(line.to_string());
             continue;

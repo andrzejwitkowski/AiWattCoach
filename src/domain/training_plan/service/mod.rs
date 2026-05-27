@@ -663,7 +663,7 @@ where
                     let raw_plan_tool_loop_state = raw_plan_response.tool_loop_state;
                     let raw_plan_description = raw_plan_response.description;
                     let raw_plan_response = raw_plan_response.raw_response;
-                    let (has_description, description_chars, description_preview) =
+                    let (has_description, description_chars, _) =
                         description_log_metadata(raw_plan_description.as_deref());
                     operation = service
                         .operations
@@ -680,7 +680,6 @@ where
                         has_description,
                         description_chars,
                         plan_chars = raw_plan_response.chars().count(),
-                        description_preview,
                         "stored training plan llm envelope"
                     );
                     raw_plan_response
@@ -840,7 +839,7 @@ where
                     let correction_tool_loop_state = correction_response.tool_loop_state;
                     let correction_description = correction_response.description;
                     let correction_response = correction_response.raw_response;
-                    let (has_description, description_chars, description_preview) =
+                    let (has_description, description_chars, _) =
                         description_log_metadata(correction_description.as_deref());
                     operation = service
                         .operations
@@ -857,7 +856,6 @@ where
                         has_description,
                         description_chars,
                         plan_chars = correction_response.chars().count(),
-                        description_preview,
                         "stored training plan llm envelope"
                     );
 

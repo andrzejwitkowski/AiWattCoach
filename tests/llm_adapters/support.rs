@@ -18,6 +18,7 @@ use aiwattcoach::{
             TrainingContextBuildResult, TrainingContextBuilder, ATHLETE_SUMMARY_FOCUS_ID,
             CALENDAR_OVERVIEW_FOCUS_ID,
         },
+        training_plan::training_plan_llm_envelope_json_schema,
         workout_summary::WorkoutSummary,
     },
 };
@@ -72,10 +73,7 @@ impl LlmChatPort for CapturingChatPort {
     ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
         let is_training_plan_generation = request
             .system_prompt
-            .contains("14-day internal cycling plan window")
-            || request
-                .system_prompt
-                .contains("correct invalid dated workout sections");
+            .contains(&training_plan_llm_envelope_json_schema());
         self.requests.lock().unwrap().push(request);
         Box::pin(async move {
             Ok(LlmChatResponse {

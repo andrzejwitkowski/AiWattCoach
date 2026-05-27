@@ -21,11 +21,29 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-26 | user | training plan validation log assertion follow-up
+
+- Problem: `generation_and_correction_log_bounded_description_metadata` in `tests/training_plan_service/validation.rs` still asserted escaped JSON fragments like `\"phase\"` even though `capture_tracing_logs(...)` returns raw JSON log lines. The production log metadata was correct, but the stale escaped-string expectation made the focused `training_plan_service` test fail.
+- Fix: updated the log assertions to match the raw JSON fragments actually emitted by the tracing capture helper, keeping the same bounded-description contract checks for `phase`, `has_description`, `description_chars`, and both preview values.
+- Prevention: when asserting structured logs captured as plain text, first inspect one real captured line and match its actual quoting/escaping shape. Do not assume the helper returns a JSON string literal when it really returns newline-joined JSON objects.
+
+### 2026-05-26 | Copilot + CodeRabbit | PR #250 training plan review follow-up
+
+- Problem: after the training-plan JSON-envelope refactor, one adapter test still asserted the pre-envelope grammar text, the shared `tests/llm_adapters/support.rs` stub switched into training-plan mode by matching scenario-specific prompt copy, `split_into_day_blocks(...)` still cloned accumulated lines when flushing a completed day block, and merging `main` into the PR branch introduced a `reviewers.md` conflict.
+- Fix: updated the adapter prompt assertion to the current `plan`-field wording, changed the shared chat stub to detect training-plan requests via the embedded envelope schema instead of scenario text, replaced the day-block flush clone with `std::mem::take(...)`, and kept both `reviewers.md` histories in newest-first order while resolving the merge conflict.
+- Prevention: when prompt contracts change, update transport-path assertions to the new narrow wording instead of leaving stale generic text checks behind. For shared LLM test stubs, key structured-response behavior off the exact schema or another structural marker rather than scenario prose, and when flushing buffered Rust collections, prefer moving with `std::mem::take(...)` over clone-and-clear patterns.
+
 ### 2026-05-26 | user | training plan json-envelope Task 4 review fixes
 
 - Problem: the shared `tests/llm_adapters/support.rs` chat stub was changed to always return a training-plan JSON envelope, which broke workout recap tests that still depend on plain assistant text. The Task 4 service path also still persisted training-plan outputs through `with_raw_plan_response(...)` and `with_correction_response(...)`, silently dropping the new `description` field from durable operation state.
 - Fix: changed the shared chat stub to return plain text for recap requests and a JSON envelope only for training-plan generation/correction requests, restored the blank recap failure expectation and added a plan-path blank-payload regression, and switched the service persistence call sites to `with_raw_plan_payload(...)` / `with_correction_payload(...)` so raw plan and correction descriptions are stored.
 - Prevention: when a shared LLM test stub starts returning a new structured payload shape, verify every caller still matches that contract instead of changing the stub globally. When adding a field to `TrainingPlanPhaseOutput`, grep the service persistence path for older convenience setters that still drop the new data before assuming the value is durable.
+
+### 2026-05-26 | Copilot + CI | PR #249 completed workout top bars follow-up
+
+- Problem: the first duplicate-top-bars fix hid `WorkoutBars` for every planned-vs-actual completed workout with a power series, which also changed comparison views that had no interval overlay context. The new regression test also configured API mocks after `render(...)`, making it order-dependent, and one older completed-workout test still asserted the pre-fix top-bar contract so CI failed.
+- Fix: narrowed the UI condition so top bars are hidden only when the comparison view has both a power chart and interval overlays, moved the new chart test mocks before `render(...)`, restored explicit coverage for comparison workouts without overlay context, and updated the completed/comparison tests to assert the new overlay-driven behavior.
+- Prevention: when removing a duplicated visualization from a detail view, check whether the suppression condition also changes adjacent sub-modes that still need a fallback summary. In React Testing Library tests, always configure async API mocks before `render(...)` if the component loads in `useEffect`, and after changing a UI contract grep sibling test files for stale assertions that still encode the old visualization.
 
 ### 2026-05-25 | CodeRabbit | PR #248 mobile preview review follow-up
 

@@ -1,4 +1,5 @@
 use chrono::{Datelike, TimeZone, Utc, Weekday};
+use tracing::warn;
 
 use crate::domain::identity::Clock;
 
@@ -277,7 +278,14 @@ where
                     error.to_string(),
                     self.clock.now_epoch_seconds(),
                 );
-                self.operations.upsert(failed).await?;
+                if let Err(operation_error) = self.operations.upsert(failed).await {
+                    warn!(
+                        user_id = %operation.user_id,
+                        summary_error = %error,
+                        operation_error = %operation_error,
+                        "failed to persist athlete summary failed operation state"
+                    );
+                }
                 Err(error)
             }
         }
@@ -348,12 +356,7 @@ where
 
                             operation
                         }
-                        AthleteSummaryGenerationOperationStatus::Failed => {
-                            return Err(AthleteSummaryError::Unavailable(
-                                "athlete summary generation failed and could not be reclaimed"
-                                    .to_string(),
-                            ));
-                        }
+                        AthleteSummaryGenerationOperationStatus::Failed => operation,
                         AthleteSummaryGenerationOperationStatus::Pending => {
                             return Err(AthleteSummaryError::Unavailable(
                                 GENERATION_ALREADY_PENDING_MESSAGE.to_string(),
