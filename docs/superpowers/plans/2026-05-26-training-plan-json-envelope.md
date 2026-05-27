@@ -10,7 +10,7 @@
 
 ---
 
-### Scope Summary
+## Scope Summary
 
 This implementation should change only the training-plan LLM response contract and the related parsing/persistence/logging/test surfaces.
 
@@ -36,7 +36,7 @@ Non-goals:
 
 ---
 
-### Task 1: Add The Training Plan JSON Output Contract
+## Task 1: Add The Training Plan JSON Output Contract
 
 **Files:**
 - Create: `src/domain/training_plan/llm_output.rs`
@@ -156,7 +156,7 @@ Expected:
 
 ---
 
-### Task 2: Extend The Training Plan Domain Model For Optional Descriptions
+## Task 2: Extend The Training Plan Domain Model For Optional Descriptions
 
 **Files:**
 - Modify: `src/domain/training_plan/model.rs`
@@ -243,7 +243,7 @@ Expected:
 
 ---
 
-### Task 3: Persist The New Description Fields In Mongo
+## Task 3: Persist The New Description Fields In Mongo
 
 **Files:**
 - Modify: `src/adapters/mongo/training_plan_generation_operations.rs`
@@ -291,7 +291,7 @@ Expected:
 
 ---
 
-### Task 4: Change The LLM Adapter To Use The JSON Envelope
+## Task 4: Change The LLM Adapter To Use The JSON Envelope
 
 **Files:**
 - Modify: `src/adapters/llm/training_plan_generator.rs`
@@ -414,7 +414,7 @@ Expected:
 
 ---
 
-### Task 5: Preserve Descriptions In The Training Plan Service
+## Task 5: Preserve Descriptions In The Training Plan Service
 
 **Files:**
 - Modify: `src/domain/training_plan/service/mod.rs`
@@ -515,7 +515,7 @@ Expected:
 
 ---
 
-### Task 6: Update The Training Plan Test Doubles To Model Descriptions
+## Task 6: Update The Training Plan Test Doubles To Model Descriptions
 
 **Files:**
 - Modify: `tests/training_plan_service/support/mod.rs`
@@ -561,7 +561,7 @@ Expected:
 
 ---
 
-### Task 7: Final Verification And Review Loop
+## Task 7: Final Verification And Review Loop
 
 **Files:**
 - Review: all touched files

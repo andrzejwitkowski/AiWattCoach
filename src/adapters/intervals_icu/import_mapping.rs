@@ -30,7 +30,7 @@ pub fn map_event_to_import_command(
         EventCategory::Note
         | EventCategory::Target
         | EventCategory::Season
-        | EventCategory::Other => Ok(Some(map_special_day_event_import(user_id, event))),
+        | EventCategory::Other => Ok(map_special_day_event_import(user_id, event)),
     }
 }
 
@@ -81,21 +81,25 @@ fn map_race_event_import(user_id: &str, event: &Event) -> ExternalImportCommand 
     })
 }
 
-fn map_special_day_event_import(user_id: &str, event: &Event) -> ExternalImportCommand {
-    ExternalImportCommand::UpsertSpecialDay(ExternalSpecialDayImport {
-        provider: ExternalProvider::Intervals,
-        external_id: event.id.to_string(),
-        normalized_payload_hash: hash_event(event),
-        special_day: SpecialDay::new(
-            format!("intervals-special-day:{}", event.id),
-            user_id.to_string(),
-            event_date(&event.start_date_local).to_string(),
-            map_special_day_kind(&event.category),
-            event.name.clone(),
-            event.description.clone(),
-        )
-        .expect("intervals special day import should always produce canonical YYYY-MM-DD date"),
-    })
+fn map_special_day_event_import(user_id: &str, event: &Event) -> Option<ExternalImportCommand> {
+    let special_day = SpecialDay::new(
+        format!("intervals-special-day:{}", event.id),
+        user_id.to_string(),
+        event_date(&event.start_date_local).to_string(),
+        map_special_day_kind(&event.category),
+        event.name.clone(),
+        event.description.clone(),
+    )
+    .ok()?;
+
+    Some(ExternalImportCommand::UpsertSpecialDay(
+        ExternalSpecialDayImport {
+            provider: ExternalProvider::Intervals,
+            external_id: event.id.to_string(),
+            normalized_payload_hash: hash_event(event),
+            special_day,
+        },
+    ))
 }
 
 pub fn map_activity_to_import_command(user_id: &str, activity: &Activity) -> ExternalImportCommand {
@@ -726,6 +730,28 @@ mod tests {
             command.special_day.description.as_deref(),
             Some("Keep easy")
         );
+    }
+
+    #[test]
+    fn skips_special_day_event_when_date_cannot_be_normalized() {
+        let command = map_event_to_import_command(
+            "user-1",
+            &crate::domain::intervals::Event {
+                id: 89,
+                start_date_local: "not-a-valid-date".to_string(),
+                event_type: None,
+                name: Some("Broken Note".to_string()),
+                category: crate::domain::intervals::EventCategory::Note,
+                description: None,
+                indoor: false,
+                color: None,
+                workout_doc: None,
+            },
+            &FixedIdGenerator,
+        )
+        .unwrap();
+
+        assert!(command.is_none());
     }
 
     #[test]

@@ -30,11 +30,8 @@ pub fn optional_epoch_seconds_to_bson_datetime(
 pub fn required_epoch_seconds_to_bson_datetime(
     epoch_seconds: i64,
     field_name: &str,
-) -> Option<DateTime> {
-    Some(
-        epoch_seconds_to_bson_datetime_with_field(epoch_seconds, field_name)
-            .unwrap_or_else(|error| panic!("{error}")),
-    )
+) -> Result<Option<DateTime>, String> {
+    epoch_seconds_to_bson_datetime_with_field(epoch_seconds, field_name).map(Some)
 }
 
 pub fn bson_datetime_to_epoch_seconds(datetime: DateTime) -> i64 {
@@ -145,12 +142,21 @@ mod tests {
 
     #[test]
     fn converts_required_epoch_seconds_to_bson_datetime() {
-        let datetime = required_epoch_seconds_to_bson_datetime(1_700_000_000, "created_at");
+        let datetime =
+            required_epoch_seconds_to_bson_datetime(1_700_000_000, "created_at").expect("valid");
 
         assert_eq!(
             optional_bson_datetime_to_epoch_seconds(datetime),
             Some(1_700_000_000)
         );
+    }
+
+    #[test]
+    fn rejects_required_epoch_seconds_that_overflow_bson_millis() {
+        let error =
+            required_epoch_seconds_to_bson_datetime(i64::MAX / 1000 + 1, "created_at").unwrap_err();
+
+        assert!(error.contains("created_at timestamp exceeds BSON DateTime range"));
     }
 
     #[test]

@@ -1,7 +1,10 @@
 import { getJsonResponse } from '../../../lib/api/client';
 import { post } from '../../../lib/httpClient';
 import {
+  AdminSystemInfoSchema,
+  CurrentUserResponseSchema,
   JoinWhitelistResponseSchema,
+  type AdminSystemInfo,
   type CurrentUserResponse,
   type JoinWhitelistResponse
 } from '../types';
@@ -15,11 +18,11 @@ function buildAuthUrl(apiBaseUrl: string, path: string): string {
 }
 
 export async function loadCurrentUser(apiBaseUrl: string): Promise<CurrentUserResponse> {
-  const response = await getJsonResponse<CurrentUserResponse>(buildAuthUrl(apiBaseUrl, '/api/auth/me'), {
+  const response = await getJsonResponse<unknown>(buildAuthUrl(apiBaseUrl, '/api/auth/me'), {
     credentials: 'include'
   });
 
-  return response.body;
+  return CurrentUserResponseSchema.parse(response.body);
 }
 
 export function buildGoogleLoginUrl(apiBaseUrl: string, returnTo = '/calendar'): string {
@@ -47,18 +50,15 @@ export async function joinWhitelist(apiBaseUrl: string, email: string): Promise<
   return JoinWhitelistResponseSchema.parse(response);
 }
 
-export type AdminSystemInfo = {
-  appName: string;
-  mongoDatabase: string;
-};
+export type { AdminSystemInfo } from '../types';
 
 export async function loadAdminSystemInfo(apiBaseUrl: string): Promise<AdminSystemInfo> {
-  const response = await getJsonResponse<AdminSystemInfo>(
+  const response = await getJsonResponse<unknown>(
     buildAuthUrl(apiBaseUrl, '/api/admin/system-info'),
     {
       credentials: 'include'
     }
   );
 
-  return response.body;
+  return AdminSystemInfoSchema.parse(response.body);
 }

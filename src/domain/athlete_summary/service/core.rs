@@ -1,4 +1,5 @@
 use chrono::{Datelike, TimeZone, Utc, Weekday};
+use tracing::warn;
 
 use crate::domain::identity::Clock;
 
@@ -272,7 +273,19 @@ where
                 Ok(summary)
             }
             Err(error) => {
-                let _ = self.operations.upsert(completed).await;
+                let failed = self.failed_operation(
+                    &operation,
+                    error.to_string(),
+                    self.clock.now_epoch_seconds(),
+                );
+                if let Err(operation_error) = self.operations.upsert(failed).await {
+                    warn!(
+                        user_id = %operation.user_id,
+                        summary_error = %error,
+                        operation_error = %operation_error,
+                        "failed to persist athlete summary failed operation state"
+                    );
+                }
                 Err(error)
             }
         }
@@ -343,12 +356,7 @@ where
 
                             operation
                         }
-                        AthleteSummaryGenerationOperationStatus::Failed => {
-                            return Err(AthleteSummaryError::Unavailable(
-                                "athlete summary generation failed and could not be reclaimed"
-                                    .to_string(),
-                            ));
-                        }
+                        AthleteSummaryGenerationOperationStatus::Failed => operation,
                         AthleteSummaryGenerationOperationStatus::Pending => {
                             return Err(AthleteSummaryError::Unavailable(
                                 GENERATION_ALREADY_PENDING_MESSAGE.to_string(),
@@ -401,5 +409,153 @@ where
                 was_regenerated: true,
             })
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use crate::domain::{
+        athlete_summary::{
+            AthleteSummary, AthleteSummaryError, AthleteSummaryGenerationClaimResult,
+            AthleteSummaryGenerationOperation, AthleteSummaryGenerationOperationRepository,
+            AthleteSummaryGenerationOperationStatus, AthleteSummaryGenerator,
+            AthleteSummaryRepository, BoxFuture,
+        },
+        identity::Clock,
+        llm::{
+            LlmCacheUsage, LlmChatMessage, LlmChatResponse, LlmError, LlmProvider, LlmTokenUsage,
+        },
+    };
+
+    use super::{AthleteSummaryService, AthleteSummaryUseCases};
+
+    #[derive(Clone)]
+    struct FixedClock {
+        now_epoch_seconds: i64,
+    }
+
+    impl Clock for FixedClock {
+        fn now_epoch_seconds(&self) -> i64 {
+            self.now_epoch_seconds
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct FailingSummaryRepository;
+
+    impl AthleteSummaryRepository for FailingSummaryRepository {
+        fn find_by_user_id(
+            &self,
+            _user_id: &str,
+        ) -> BoxFuture<Result<Option<AthleteSummary>, AthleteSummaryError>> {
+            Box::pin(async { Ok(None) })
+        }
+
+        fn upsert(
+            &self,
+            _summary: AthleteSummary,
+        ) -> BoxFuture<Result<AthleteSummary, AthleteSummaryError>> {
+            Box::pin(async {
+                Err(AthleteSummaryError::Repository(
+                    "summary upsert failed".to_string(),
+                ))
+            })
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct RecordingOperationRepository {
+        last_operation: Arc<Mutex<Option<AthleteSummaryGenerationOperation>>>,
+    }
+
+    impl AthleteSummaryGenerationOperationRepository for RecordingOperationRepository {
+        fn find_by_user_id(
+            &self,
+            _user_id: &str,
+        ) -> BoxFuture<Result<Option<AthleteSummaryGenerationOperation>, AthleteSummaryError>>
+        {
+            let operation = self.last_operation.lock().unwrap().clone();
+            Box::pin(async move { Ok(operation) })
+        }
+
+        fn claim_pending(
+            &self,
+            operation: AthleteSummaryGenerationOperation,
+            _stale_before_epoch_seconds: i64,
+        ) -> BoxFuture<Result<AthleteSummaryGenerationClaimResult, AthleteSummaryError>> {
+            let store = self.last_operation.clone();
+            Box::pin(async move {
+                *store.lock().unwrap() = Some(operation.clone());
+                Ok(AthleteSummaryGenerationClaimResult::Claimed(operation))
+            })
+        }
+
+        fn upsert(
+            &self,
+            operation: AthleteSummaryGenerationOperation,
+        ) -> BoxFuture<Result<AthleteSummaryGenerationOperation, AthleteSummaryError>> {
+            let store = self.last_operation.clone();
+            Box::pin(async move {
+                *store.lock().unwrap() = Some(operation.clone());
+                Ok(operation)
+            })
+        }
+    }
+
+    #[derive(Clone)]
+    struct FixedGenerator;
+
+    impl AthleteSummaryGenerator for FixedGenerator {
+        fn generate(&self, _user_id: &str) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
+            Box::pin(async {
+                Ok(LlmChatResponse {
+                    provider: LlmProvider::OpenRouter,
+                    model: "test-model".to_string(),
+                    message: LlmChatMessage::assistant("Weekly summary text"),
+                    finish_reason: None,
+                    provider_request_id: None,
+                    usage: LlmTokenUsage::default(),
+                    cache: LlmCacheUsage::default(),
+                })
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn persists_failed_operation_when_summary_upsert_fails() {
+        let operations = RecordingOperationRepository::default();
+        let service = AthleteSummaryService::new(
+            FailingSummaryRepository,
+            operations.clone(),
+            FixedGenerator,
+            FixedClock {
+                now_epoch_seconds: 1_700_000_000,
+            },
+        );
+
+        let error = service
+            .generate_summary("user-1", true)
+            .await
+            .expect_err("summary upsert should fail");
+
+        assert!(matches!(error, AthleteSummaryError::Repository(_)));
+
+        let stored = operations
+            .last_operation
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("operation should be stored");
+
+        assert_eq!(
+            stored.status,
+            AthleteSummaryGenerationOperationStatus::Failed
+        );
+        assert_eq!(
+            stored.error_message.as_deref(),
+            Some("summary upsert failed")
+        );
     }
 }

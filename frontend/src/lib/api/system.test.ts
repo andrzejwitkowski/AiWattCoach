@@ -94,4 +94,24 @@ describe('loadBackendStatus', () => {
     expect(result.readiness.status).toBe('degraded');
     expect(result.readiness.reason).toBe('mongo_unreachable');
   });
+
+  it('rejects malformed health payloads', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 'ok' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 'ok', reason: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await expect(loadBackendStatus('')).rejects.toThrow();
+  });
 });

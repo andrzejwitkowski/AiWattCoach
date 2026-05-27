@@ -48,6 +48,20 @@ describe('loadCurrentUser', () => {
       expect(result.user.email).toBe('athlete@example.com');
     }
   });
+
+  it('rejects malformed auth payloads', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ authenticated: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await expect(loadCurrentUser('')).rejects.toThrow();
+  });
 });
 
 describe('buildGoogleLoginUrl', () => {
