@@ -3,6 +3,8 @@ mod model;
 mod ports;
 mod service;
 
+pub(crate) use llm_output::should_retry_training_plan_llm_envelope_repair;
+
 pub use llm_output::{
     parse_training_plan_llm_envelope, training_plan_llm_envelope_json_schema,
     TrainingPlanLlmEnvelope,

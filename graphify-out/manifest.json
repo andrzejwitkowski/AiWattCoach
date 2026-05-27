@@ -100,8 +100,8 @@
     "hash": "d667ffad31d8c6402f2c789e30efd540"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/llm_adapters/training_plan.rs": {
-    "mtime": 1779899216.526089,
-    "hash": "2b0fddcbff3ccd0f202d10f433c4f5e9"
+    "mtime": 1779900811.6820345,
+    "hash": "9f92ca68d137119a9bbd4b912a0c50b8"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/workout_summary_service/main.rs": {
     "mtime": 1777106174.2187326,
@@ -1696,8 +1696,8 @@
     "hash": "c89b118be541eba83958039b0fdff78a"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/llm/training_plan_generator.rs": {
-    "mtime": 1779899216.5130877,
-    "hash": "eb3d4ccd1723706b8e240c500a73c804"
+    "mtime": 1779900673.2035942,
+    "hash": "c8335bc2f24d74b82358d93e1dd6a1db"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/llm/logging.rs": {
     "mtime": 1778178824.8424969,
@@ -3380,16 +3380,16 @@
     "hash": "17f76f0b4f270e73c327c06b3f92df95"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/training_plan/mod.rs": {
-    "mtime": 1779825706.9598224,
-    "hash": "28010b5f6616856ed46570a5b3ed27fa"
+    "mtime": 1779900618.506498,
+    "hash": "66c53ee1d9b378d62eb07e519907ceee"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/training_plan/ports.rs": {
     "mtime": 1779639842.0343847,
     "hash": "0816912b90aa7e19f903fa7a5ae91f1e"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/training_plan/llm_output.rs": {
-    "mtime": 1779899035.5260165,
-    "hash": "9af3e52f02a75a68b94af0cc482c9815"
+    "mtime": 1779900285.2985299,
+    "hash": "60872821e87d197e457f2895e43198fa"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/training_plan/service/mod.rs": {
     "mtime": 1779898366.984532,
@@ -3476,8 +3476,8 @@
     "hash": "faf4641d60f84eaebcde39d3060c388a"
   },
   "/home/andrzej/Projects/AiWattCoach/reviewers.md": {
-    "mtime": 1779898942.8775494,
-    "hash": "1e055d0b940b50d2d29bd2fb31755771"
+    "mtime": 1779900334.8894446,
+    "hash": "3150f10a78b2e58d2533aae849893f6d"
   },
   "/home/andrzej/Projects/AiWattCoach/docker-compose.yml": {
     "mtime": 1775675724.9767706,

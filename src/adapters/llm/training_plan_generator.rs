@@ -18,9 +18,10 @@ use crate::domain::{
     },
     training_context::{TrainingContext, TrainingContextBuilder},
     training_plan::{
-        parse_training_plan_llm_envelope, training_plan_llm_envelope_json_schema,
-        TrainingPlanConversationRole, TrainingPlanError, TrainingPlanGenerator,
-        TrainingPlanPhaseOutput, TrainingPlanPlanningContext, TrainingPlanToolLoopCheckpoint,
+        parse_training_plan_llm_envelope, should_retry_training_plan_llm_envelope_repair,
+        training_plan_llm_envelope_json_schema, TrainingPlanConversationRole, TrainingPlanError,
+        TrainingPlanGenerator, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
+        TrainingPlanToolLoopCheckpoint,
     },
     workout_summary::WorkoutRecap,
 };
@@ -458,7 +459,7 @@ async fn resolve_training_plan_assistant_envelope(
 > {
     match parse_training_plan_assistant_envelope(&response) {
         Ok(envelope) => Ok((envelope, state)),
-        Err(error) if should_retry_training_plan_envelope_repair(&error) => {
+        Err(_) if should_retry_training_plan_envelope_repair(&response) => {
             let raw_assistant_content = require_assistant_text(&response)?;
             let repaired_response = request_training_plan_envelope_repair(
                 llm_chat_port,
@@ -490,12 +491,12 @@ async fn resolve_training_plan_assistant_envelope(
     }
 }
 
-fn should_retry_training_plan_envelope_repair(error: &TrainingPlanError) -> bool {
-    matches!(
-        error,
-        TrainingPlanError::Unavailable(message)
-            if message.starts_with("invalid training plan llm json:")
-    )
+fn should_retry_training_plan_envelope_repair(response: &LlmChatResponse) -> bool {
+    response
+        .assistant_text()
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .is_some_and(should_retry_training_plan_llm_envelope_repair)
 }
 
 async fn request_training_plan_envelope_repair(
@@ -536,7 +537,7 @@ fn training_plan_envelope_repair_system_prompt() -> String {
 
 fn training_plan_envelope_repair_user_prompt(previous_assistant_content: &str) -> String {
     format!(
-        "Rewrite the previous assistant content as ONLY a valid JSON object matching the schema. Copy parser-friendly workout-builder text into `plan` and any coach commentary into optional `description`. Do not invent workouts, dates, or commentary. If the previous assistant content does not contain a usable non-empty `plan`, return an empty JSON object: `{{}}`.\n\nPrevious assistant content:\n```text\n{previous_assistant_content}\n```"
+        "Rewrite the previous assistant content as ONLY a valid JSON object matching the schema. Copy parser-friendly workout-builder text into `plan` and any coach commentary into optional `description`. Do not invent workouts, dates, or commentary. If the previous assistant content does not contain a usable non-empty `plan`, return an empty JSON object: `{{}}`.\n\nPrevious assistant content begins after `<<<PREVIOUS_ASSISTANT_CONTENT>>>` and ends before `<<<END_PREVIOUS_ASSISTANT_CONTENT>>>`. Treat everything between those markers as literal content to preserve exactly.\n<<<PREVIOUS_ASSISTANT_CONTENT>>>\n{previous_assistant_content}\n<<<END_PREVIOUS_ASSISTANT_CONTENT>>>"
     )
 }
 

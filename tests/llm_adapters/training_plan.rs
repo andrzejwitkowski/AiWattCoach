@@ -613,6 +613,28 @@ struct RepairingTrainingPlanEnvelopeChatPort {
     requests: Arc<std::sync::Mutex<Vec<LlmChatRequest>>>,
 }
 
+#[derive(Clone, Default)]
+struct MissingPlanTrainingPlanEnvelopeChatPort {
+    requests: Arc<std::sync::Mutex<Vec<LlmChatRequest>>>,
+}
+
+impl MissingPlanTrainingPlanEnvelopeChatPort {
+    fn requests(&self) -> Vec<LlmChatRequest> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
+#[derive(Clone, Default)]
+struct RepairingBacktickTrainingPlanEnvelopeChatPort {
+    requests: Arc<std::sync::Mutex<Vec<LlmChatRequest>>>,
+}
+
+impl RepairingBacktickTrainingPlanEnvelopeChatPort {
+    fn requests(&self) -> Vec<LlmChatRequest> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
 impl RepairingTrainingPlanEnvelopeChatPort {
     fn requests(&self) -> Vec<LlmChatRequest> {
         self.requests.lock().unwrap().clone()
@@ -696,6 +718,70 @@ impl LlmChatPort for RepairingTrainingPlanEnvelopeChatPort {
                 ),
                 finish_reason: Some(LlmFinishReason::Stop),
                 provider_request_id: Some("req-repaired".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: Default::default(),
+            })
+        })
+    }
+}
+
+impl LlmChatPort for MissingPlanTrainingPlanEnvelopeChatPort {
+    fn chat(
+        &self,
+        _config: LlmProviderConfig,
+        request: LlmChatRequest,
+    ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        self.requests.lock().unwrap().push(request);
+
+        Box::pin(async move {
+            Ok(LlmChatResponse {
+                provider: LlmProvider::DeepSeek,
+                model: "deepseek-v4-pro".to_string(),
+                message: LlmChatMessage::assistant(r#"{"description":"missing plan"}"#),
+                finish_reason: Some(LlmFinishReason::Stop),
+                provider_request_id: Some("req-missing-plan".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: Default::default(),
+            })
+        })
+    }
+}
+
+impl LlmChatPort for RepairingBacktickTrainingPlanEnvelopeChatPort {
+    fn chat(
+        &self,
+        _config: LlmProviderConfig,
+        request: LlmChatRequest,
+    ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        let call_index = {
+            let mut requests = self.requests.lock().unwrap();
+            requests.push(request);
+            requests.len()
+        };
+
+        Box::pin(async move {
+            if call_index == 1 {
+                return Ok(LlmChatResponse {
+                    provider: LlmProvider::DeepSeek,
+                    model: "deepseek-v4-pro".to_string(),
+                    message: LlmChatMessage::assistant(
+                        "Here is the draft:\n```json\nplan: 2026-05-28 Rest Day: recovery\ndescription: Recovered from fenced content.\n```\nI know this is fenced.",
+                    ),
+                    finish_reason: Some(LlmFinishReason::Stop),
+                    provider_request_id: Some("req-backtick-needs-repair".to_string()),
+                    usage: LlmTokenUsage::default(),
+                    cache: Default::default(),
+                });
+            }
+
+            Ok(LlmChatResponse {
+                provider: LlmProvider::DeepSeek,
+                model: "deepseek-v4-pro".to_string(),
+                message: LlmChatMessage::assistant(
+                    r#"{"plan":"2026-05-28\nRest Day: recovery","description":"Recovered from fenced content."}"#,
+                ),
+                finish_reason: Some(LlmFinishReason::Stop),
+                provider_request_id: Some("req-backtick-repaired".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: Default::default(),
             })
@@ -812,6 +898,85 @@ async fn training_plan_generator_repairs_non_json_assistant_content_when_extract
     assert!(requests[1].conversation[0]
         .content
         .contains("Here is the training plan:"));
+}
+
+#[tokio::test]
+async fn training_plan_generator_does_not_retry_when_envelope_is_semantically_invalid() {
+    let chat_port = Arc::new(MissingPlanTrainingPlanEnvelopeChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedOpenAiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    let error = generator
+        .generate_initial_plan_window(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "deepseek",
+                "deepseek-v4-pro",
+                1_700_000_000,
+            ),
+            Some(&sample_planning_context()),
+        )
+        .await
+        .expect_err("missing required plan should fail without repair retry");
+
+    assert_eq!(
+        error,
+        aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
+            "invalid training plan llm json: missing field `plan` at line 1 column 30".to_string(),
+        )
+    );
+
+    assert_eq!(chat_port.requests().len(), 1);
+}
+
+#[tokio::test]
+async fn training_plan_generator_repair_prompt_preserves_previous_backticks_verbatim() {
+    let chat_port = Arc::new(RepairingBacktickTrainingPlanEnvelopeChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedOpenAiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    let output = generator
+        .generate_initial_plan_window(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "deepseek",
+                "deepseek-v4-pro",
+                1_700_000_000,
+            ),
+            Some(&sample_planning_context()),
+        )
+        .await
+        .expect("repair retry should preserve fenced content inside safe delimiters");
+
+    assert_eq!(output.raw_response, "2026-05-28\nRest Day: recovery");
+    assert_eq!(
+        output.description.as_deref(),
+        Some("Recovered from fenced content.")
+    );
+
+    let requests = chat_port.requests();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1].conversation[0]
+        .content
+        .contains("<<<PREVIOUS_ASSISTANT_CONTENT>>>"));
+    assert!(requests[1].conversation[0]
+        .content
+        .contains("<<<END_PREVIOUS_ASSISTANT_CONTENT>>>"));
+    assert!(requests[1].conversation[0].content.contains("```json"));
 }
 
 #[tokio::test]

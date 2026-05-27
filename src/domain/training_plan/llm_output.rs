@@ -1,5 +1,6 @@
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
+use serde_json::error::Category as JsonErrorCategory;
 
 use super::TrainingPlanError;
 
@@ -25,18 +26,46 @@ struct TrainingPlanLlmEnvelopePayload {
     description: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TrainingPlanLlmEnvelopeParseErrorKind {
+    RecoverableFormatting,
+    InvalidEnvelope,
+}
+
 pub fn parse_training_plan_llm_envelope(
     payload: &str,
 ) -> Result<TrainingPlanLlmEnvelope, TrainingPlanError> {
+    parse_training_plan_llm_envelope_detailed(payload).map_err(|error| error.0)
+}
+
+pub(crate) fn should_retry_training_plan_llm_envelope_repair(payload: &str) -> bool {
+    matches!(
+        parse_training_plan_llm_envelope_detailed(payload),
+        Err((
+            _,
+            TrainingPlanLlmEnvelopeParseErrorKind::RecoverableFormatting
+        ))
+    )
+}
+
+fn parse_training_plan_llm_envelope_detailed(
+    payload: &str,
+) -> Result<TrainingPlanLlmEnvelope, (TrainingPlanError, TrainingPlanLlmEnvelopeParseErrorKind)> {
     let payload = extract_json_payload(payload);
     let parsed: TrainingPlanLlmEnvelopePayload =
         serde_json::from_str(payload).map_err(|error| {
-            TrainingPlanError::Unavailable(format!("invalid training plan llm json: {error}"))
+            (
+                TrainingPlanError::Unavailable(format!("invalid training plan llm json: {error}")),
+                classify_training_plan_llm_json_error(&error),
+            )
         })?;
 
     if parsed.plan.trim().is_empty() {
-        return Err(TrainingPlanError::Unavailable(
-            "training plan llm json missing non-empty plan".to_string(),
+        return Err((
+            TrainingPlanError::Unavailable(
+                "training plan llm json missing non-empty plan".to_string(),
+            ),
+            TrainingPlanLlmEnvelopeParseErrorKind::InvalidEnvelope,
         ));
     }
 
@@ -117,9 +146,25 @@ fn extract_balanced_json_payload(raw: &str) -> Option<&str> {
     None
 }
 
+fn classify_training_plan_llm_json_error(
+    error: &serde_json::Error,
+) -> TrainingPlanLlmEnvelopeParseErrorKind {
+    match error.classify() {
+        JsonErrorCategory::Syntax | JsonErrorCategory::Eof => {
+            TrainingPlanLlmEnvelopeParseErrorKind::RecoverableFormatting
+        }
+        JsonErrorCategory::Data | JsonErrorCategory::Io => {
+            TrainingPlanLlmEnvelopeParseErrorKind::InvalidEnvelope
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{parse_training_plan_llm_envelope, training_plan_llm_envelope_json_schema};
+    use super::{
+        parse_training_plan_llm_envelope, should_retry_training_plan_llm_envelope_repair,
+        training_plan_llm_envelope_json_schema,
+    };
     use crate::domain::training_plan::TrainingPlanError;
     use serde_json::{json, Value};
 
@@ -249,6 +294,31 @@ mod tests {
             error,
             TrainingPlanError::Unavailable(message)
                 if message.starts_with("invalid training plan llm json:")
+        ));
+    }
+
+    #[test]
+    fn should_retry_training_plan_llm_envelope_repair_for_syntax_failure() {
+        assert!(should_retry_training_plan_llm_envelope_repair(
+            "Here is the envelope:\n{\n  \"plan\": \"2026-05-28\\nRest Day: recovery\",\n"
+        ));
+    }
+
+    #[test]
+    fn should_not_retry_training_plan_llm_envelope_repair_for_missing_plan() {
+        assert!(!should_retry_training_plan_llm_envelope_repair(
+            r#"{
+                "description": "missing required plan"
+            }"#
+        ));
+    }
+
+    #[test]
+    fn should_not_retry_training_plan_llm_envelope_repair_for_wrong_plan_type() {
+        assert!(!should_retry_training_plan_llm_envelope_repair(
+            r#"{
+                "plan": 123
+            }"#
         ));
     }
 }
