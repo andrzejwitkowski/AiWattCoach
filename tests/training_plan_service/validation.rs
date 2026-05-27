@@ -163,9 +163,16 @@ async fn generation_and_correction_log_bounded_description_metadata() {
     assert!(logs.contains(r#""phase":"initial_generation""#), "{logs}");
     assert!(logs.contains(r#""phase":"correction""#), "{logs}");
     assert!(logs.contains(r#""has_description":true"#), "{logs}");
-    assert!(logs.contains(r#""plan_chars":"#), "{logs}");
-    assert!(logs.contains(r#""description_chars":144"#), "{logs}");
-    assert!(logs.contains(r#""description_chars":36"#), "{logs}");
+    assert!(logs.contains("\"plan_chars\":"), "{logs}");
+    assert!(
+        logs.contains(r#""description_chars":144,"#)
+            || logs.contains(r#""description_chars":144}"#),
+        "{logs}"
+    );
+    assert!(
+        logs.contains(r#""description_chars":36,"#) || logs.contains(r#""description_chars":36}"#),
+        "{logs}"
+    );
     assert!(
         !logs.contains("description_preview"),
         "model description text must not appear in logs: {logs}"
