@@ -1,4 +1,5 @@
 use super::support::*;
+use crate::tracing_capture::capture_tracing_logs;
 
 #[tokio::test]
 async fn invalid_day_parse_records_date_scoped_validation_issue() {
@@ -92,6 +93,132 @@ async fn correction_round_merges_corrected_days_and_succeeds() {
 
     let operation = built.operations.stored_operation();
     assert_eq!(operation.status, WorkflowStatus::Completed);
+    assert!(operation.validation_issues.is_empty());
+}
+
+#[tokio::test]
+async fn generation_and_correction_descriptions_are_persisted_in_operation_state() {
+    let built = build_service(
+        new_call_log(),
+        vec![Ok(workout_recap())],
+        vec![Ok(plan_with_invalid_day(FIRST_DAY, "2026-04-10"))],
+        vec![Ok(single_rest_day("2026-04-10"))],
+        FIRST_DAY,
+    );
+    built
+        .generator
+        .set_initial_plan_descriptions(vec![Some("Initial draft rationale".to_string())]);
+    built
+        .generator
+        .set_correction_descriptions(vec![Some("Corrected only the invalid day".to_string())]);
+
+    let result = built
+        .service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    assert!(result.was_generated);
+
+    let operation = built.operations.stored_operation();
+    assert_eq!(
+        operation.raw_plan_description.as_deref(),
+        Some("Initial draft rationale")
+    );
+    assert_eq!(
+        operation.raw_correction_description.as_deref(),
+        Some("Corrected only the invalid day")
+    );
+}
+
+#[tokio::test]
+async fn generation_and_correction_log_bounded_description_metadata() {
+    let built = build_service(
+        new_call_log(),
+        vec![Ok(workout_recap())],
+        vec![Ok(plan_with_invalid_day(FIRST_DAY, "2026-04-10"))],
+        vec![Ok(single_rest_day("2026-04-10"))],
+        FIRST_DAY,
+    );
+    let initial_description = format!("  {}  ", "A".repeat(140));
+    let correction_description = "\n  Corrected only the invalid day  \n".to_string();
+    built
+        .generator
+        .set_initial_plan_descriptions(vec![Some(initial_description.clone())]);
+    built
+        .generator
+        .set_correction_descriptions(vec![Some(correction_description.clone())]);
+
+    let (result, logs) = capture_tracing_logs(|| async {
+        built
+            .service
+            .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+            .await
+            .unwrap()
+    })
+    .await;
+
+    assert!(result.was_generated);
+    assert!(logs.contains("stored training plan llm envelope"), "{logs}");
+    assert!(logs.contains(r#""phase":"initial_generation""#), "{logs}");
+    assert!(logs.contains(r#""phase":"correction""#), "{logs}");
+    assert!(logs.contains(r#""has_description":true"#), "{logs}");
+    assert!(logs.contains(r#""plan_chars":"#), "{logs}");
+    assert!(logs.contains(r#""description_chars":144"#), "{logs}");
+    assert!(
+        logs.contains(&format!(r#""description_preview":"{}""#, "A".repeat(120))),
+        "{logs}"
+    );
+    assert!(
+        logs.contains(r#""description_preview":"Corrected only the invalid day""#),
+        "{logs}"
+    );
+}
+
+#[tokio::test]
+async fn preamble_before_first_date_still_reaches_correction_flow() {
+    let initial_raw = format!(
+        "Symulacja potwierdza zdrowa progresje.\n\n{}",
+        plan_with_invalid_day(FIRST_DAY, "2026-04-10")
+    );
+    let built = build_service(
+        new_call_log(),
+        vec![Ok(workout_recap())],
+        vec![Ok(initial_raw.clone())],
+        vec![Ok(single_rest_day("2026-04-10"))],
+        FIRST_DAY,
+    );
+
+    let result = built
+        .service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    assert!(result.was_generated);
+    assert_eq!(built.generator.initial_plan_call_count(), 1);
+    assert_eq!(built.generator.correction_call_count(), 1);
+    let correction_inputs = built.generator.correction_inputs();
+    assert_eq!(correction_inputs.len(), 1);
+    assert_eq!(
+        correction_inputs[0].0,
+        "2026-04-10\nBroken session\n- nope".to_string()
+    );
+
+    let corrected_day = result
+        .snapshot
+        .days
+        .iter()
+        .find(|day| day.date == "2026-04-10")
+        .expect("expected corrected day");
+    assert!(corrected_day.rest_day);
+
+    let operation = built.operations.stored_operation();
+    assert_eq!(operation.status, WorkflowStatus::Completed);
+    assert_eq!(
+        operation.raw_plan_response.as_deref(),
+        Some(initial_raw.as_str())
+    );
     assert!(operation.validation_issues.is_empty());
 }
 

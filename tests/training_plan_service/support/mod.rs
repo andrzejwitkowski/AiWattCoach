@@ -109,6 +109,8 @@ pub(crate) struct StubTrainingPlanGenerator {
     recap_responses: Arc<Mutex<VecDeque<Result<WorkoutRecap, TrainingPlanError>>>>,
     initial_plan_responses: Arc<Mutex<VecDeque<Result<String, TrainingPlanError>>>>,
     correction_responses: Arc<Mutex<VecDeque<Result<String, TrainingPlanError>>>>,
+    initial_plan_descriptions: Arc<Mutex<VecDeque<Option<String>>>>,
+    correction_descriptions: Arc<Mutex<VecDeque<Option<String>>>>,
     recap_calls: Arc<Mutex<u32>>,
     initial_plan_calls: Arc<Mutex<u32>>,
     correction_calls: Arc<Mutex<u32>>,
@@ -131,6 +133,8 @@ impl StubTrainingPlanGenerator {
             recap_responses: Arc::new(Mutex::new(VecDeque::from(recap_responses))),
             initial_plan_responses: Arc::new(Mutex::new(VecDeque::from(initial_plan_responses))),
             correction_responses: Arc::new(Mutex::new(VecDeque::from(correction_responses))),
+            initial_plan_descriptions: Arc::new(Mutex::new(VecDeque::new())),
+            correction_descriptions: Arc::new(Mutex::new(VecDeque::new())),
             recap_calls: Arc::new(Mutex::new(0)),
             initial_plan_calls: Arc::new(Mutex::new(0)),
             correction_calls: Arc::new(Mutex::new(0)),
@@ -173,6 +177,14 @@ impl StubTrainingPlanGenerator {
 
     pub(crate) fn correction_restored_states(&self) -> Vec<Option<LlmToolLoopState>> {
         self.correction_restored_states.lock().unwrap().clone()
+    }
+
+    pub(crate) fn set_initial_plan_descriptions(&self, descriptions: Vec<Option<String>>) {
+        *self.initial_plan_descriptions.lock().unwrap() = VecDeque::from(descriptions);
+    }
+
+    pub(crate) fn set_correction_descriptions(&self, descriptions: Vec<Option<String>>) {
+        *self.correction_descriptions.lock().unwrap() = VecDeque::from(descriptions);
     }
 }
 
@@ -223,9 +235,16 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
             .unwrap()
             .pop_front()
             .expect("expected initial plan response");
+        let description = self
+            .initial_plan_descriptions
+            .lock()
+            .unwrap()
+            .pop_front()
+            .flatten();
         Box::pin(async move {
             response.map(|raw_response| TrainingPlanPhaseOutput {
                 raw_response,
+                description,
                 tool_loop_state: LlmToolLoopState::default(),
             })
         })
@@ -265,9 +284,16 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
             .unwrap()
             .pop_front()
             .expect("expected correction response");
+        let description = self
+            .correction_descriptions
+            .lock()
+            .unwrap()
+            .pop_front()
+            .flatten();
         Box::pin(async move {
             response.map(|raw_response| TrainingPlanPhaseOutput {
                 raw_response,
+                description,
                 tool_loop_state: LlmToolLoopState::default(),
             })
         })

@@ -44,12 +44,16 @@ struct TrainingPlanGenerationOperationDocument {
     #[serde(default)]
     projection_persisted_at: Option<DateTime>,
     raw_plan_response: Option<String>,
+    raw_plan_description: Option<String>,
     #[serde(default)]
     initial_plan_tool_loop_state: Option<LlmToolLoopState>,
     raw_correction_response: Option<String>,
+    raw_correction_description: Option<String>,
     #[serde(default)]
     correction_tool_loop_state: Option<LlmToolLoopState>,
+    #[serde(default)]
     validation_issues: Vec<ValidationIssueDocument>,
+    #[serde(default)]
     attempts: Vec<AttemptRecordDocument>,
     failure: Option<TrainingPlanFailureStateDocument>,
     started_at_epoch_seconds: Option<i64>,
@@ -223,8 +227,10 @@ fn map_operation_to_document(
         )
         .expect("projection_persisted_at should fit BSON DateTime"),
         raw_plan_response: operation.raw_plan_response.clone(),
+        raw_plan_description: operation.raw_plan_description.clone(),
         initial_plan_tool_loop_state: operation.initial_plan_tool_loop_state.clone(),
         raw_correction_response: operation.raw_correction_response.clone(),
+        raw_correction_description: operation.raw_correction_description.clone(),
         correction_tool_loop_state: operation.correction_tool_loop_state.clone(),
         validation_issues: operation
             .validation_issues
@@ -287,8 +293,10 @@ fn map_document_to_operation(
             document.projection_persisted_at_epoch_seconds,
         ),
         raw_plan_response: document.raw_plan_response,
+        raw_plan_description: document.raw_plan_description,
         initial_plan_tool_loop_state: document.initial_plan_tool_loop_state,
         raw_correction_response: document.raw_correction_response,
+        raw_correction_description: document.raw_correction_description,
         correction_tool_loop_state: document.correction_tool_loop_state,
         validation_issues: document
             .validation_issues

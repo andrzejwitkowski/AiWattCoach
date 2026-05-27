@@ -18,6 +18,7 @@ use aiwattcoach::{
             TrainingContextBuildResult, TrainingContextBuilder, ATHLETE_SUMMARY_FOCUS_ID,
             CALENDAR_OVERVIEW_FOCUS_ID,
         },
+        training_plan::training_plan_llm_envelope_json_schema,
         workout_summary::WorkoutSummary,
     },
 };
@@ -70,12 +71,21 @@ impl LlmChatPort for CapturingChatPort {
         _config: LlmProviderConfig,
         request: LlmChatRequest,
     ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        let is_training_plan_generation = request
+            .system_prompt
+            .contains(&training_plan_llm_envelope_json_schema());
         self.requests.lock().unwrap().push(request);
         Box::pin(async move {
             Ok(LlmChatResponse {
                 provider: LlmProvider::Gemini,
                 model: "gemini-3.1-pro".to_string(),
-                message: LlmChatMessage::assistant("Gemini coach reply"),
+                message: if is_training_plan_generation {
+                    LlmChatMessage::assistant(
+                        r#"{"plan":"2023-11-15\nRest Day","description":"Gemini coach reply"}"#,
+                    )
+                } else {
+                    LlmChatMessage::assistant("Gemini coach reply")
+                },
                 finish_reason: None,
                 provider_request_id: Some("req-1".to_string()),
                 usage: LlmTokenUsage::default(),

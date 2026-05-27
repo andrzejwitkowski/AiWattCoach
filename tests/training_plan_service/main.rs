@@ -2,6 +2,8 @@ mod generation;
 mod recovery;
 mod scheduler;
 mod support;
+#[path = "../support/tracing_capture.rs"]
+mod tracing_capture;
 mod validation;
 
 #[path = "../task_scheduler/support/clock.rs"]

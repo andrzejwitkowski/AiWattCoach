@@ -76,6 +76,7 @@ impl TrainingPlanGenerator for CheckpointingInitialPlanGenerator {
 
             Ok(TrainingPlanPhaseOutput {
                 raw_response: valid_plan_window(FIRST_DAY),
+                description: None,
                 tool_loop_state: LlmToolLoopState {
                     round_count: 3,
                     ..Default::default()
@@ -168,6 +169,7 @@ impl TrainingPlanGenerator for CompletedResponseCrashGenerator {
                     .unwrap_or_else(|| {
                         "2026-04-06\nRest Day: fallback provider response".to_string()
                     }),
+                description: None,
                 tool_loop_state: restored_state.unwrap_or(LlmToolLoopState {
                     round_count: 2,
                     ..Default::default()

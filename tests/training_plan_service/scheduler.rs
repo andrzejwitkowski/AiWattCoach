@@ -481,6 +481,7 @@ impl TrainingPlanGenerator for PanicOnceTrainingPlanGenerator {
         Box::pin(async move {
             Ok(TrainingPlanPhaseOutput {
                 raw_response: valid_plan_window(FIRST_DAY),
+                description: None,
                 tool_loop_state: aiwattcoach::domain::llm_tools::LlmToolLoopState::default(),
             })
         })
@@ -541,6 +542,7 @@ impl TrainingPlanGenerator for BlockingTrainingPlanGenerator {
         Box::pin(async move {
             Ok(TrainingPlanPhaseOutput {
                 raw_response: valid_plan_window(FIRST_DAY),
+                description: None,
                 tool_loop_state: aiwattcoach::domain::llm_tools::LlmToolLoopState::default(),
             })
         })
