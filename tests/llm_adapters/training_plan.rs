@@ -257,6 +257,11 @@ async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts()
     let initial_prompt = &chat_port.requests()[0].system_prompt;
     assert!(initial_prompt.contains("strict syntax generator"));
     assert!(initial_prompt.contains("Output ONLY valid JSON matching this schema"));
+    assert!(
+        initial_prompt.contains("Your full response is parsed directly as JSON by the application")
+    );
+    assert!(initial_prompt
+        .contains("Any text outside the JSON object will be treated as an invalid response"));
     assert!(initial_prompt.contains(&training_plan_llm_envelope_json_schema()));
     assert!(initial_prompt.contains("Put the workout-builder text only in the `plan` field"));
     assert!(initial_prompt
@@ -301,6 +306,10 @@ async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts()
     let correction_prompt = &chat_port.requests()[1].system_prompt;
     assert!(correction_prompt.contains("strict syntax generator"));
     assert!(correction_prompt.contains("Output ONLY valid JSON matching this schema"));
+    assert!(correction_prompt
+        .contains("Your full response is parsed directly as JSON by the application"));
+    assert!(correction_prompt
+        .contains("Any text outside the JSON object will be treated as an invalid response"));
     assert!(correction_prompt.contains(&training_plan_llm_envelope_json_schema()));
     assert!(correction_prompt.contains("Put the workout-builder text only in the `plan` field"));
     assert!(correction_prompt
@@ -373,7 +382,10 @@ async fn training_plan_generator_builds_initial_window_request_with_recap() {
         .contains("I am planning a recovery week with easy endurance only"));
     assert!(requests[0].conversation[2]
         .content
-        .contains("Generate the next 14 dated days"));
+        .contains("Return only the JSON envelope requested by the system prompt"));
+    assert!(requests[0].conversation[2]
+        .content
+        .contains("Put parser-friendly workout-builder text in the `plan` field"));
 }
 
 #[tokio::test]
@@ -593,6 +605,42 @@ async fn training_plan_generator_fails_when_llm_returns_blank_assistant_text() {
 #[derive(Clone, Default)]
 struct EmptyPlanTrainingPlanEnvelopeChatPort;
 
+#[derive(Clone, Default)]
+struct FencedTrainingPlanEnvelopeWithMetadataChatPort;
+
+#[derive(Clone, Default)]
+struct RepairingTrainingPlanEnvelopeChatPort {
+    requests: Arc<std::sync::Mutex<Vec<LlmChatRequest>>>,
+}
+
+#[derive(Clone, Default)]
+struct MissingPlanTrainingPlanEnvelopeChatPort {
+    requests: Arc<std::sync::Mutex<Vec<LlmChatRequest>>>,
+}
+
+impl MissingPlanTrainingPlanEnvelopeChatPort {
+    fn requests(&self) -> Vec<LlmChatRequest> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
+#[derive(Clone, Default)]
+struct RepairingBacktickTrainingPlanEnvelopeChatPort {
+    requests: Arc<std::sync::Mutex<Vec<LlmChatRequest>>>,
+}
+
+impl RepairingBacktickTrainingPlanEnvelopeChatPort {
+    fn requests(&self) -> Vec<LlmChatRequest> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
+impl RepairingTrainingPlanEnvelopeChatPort {
+    fn requests(&self) -> Vec<LlmChatRequest> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
 impl LlmChatPort for EmptyPlanTrainingPlanEnvelopeChatPort {
     fn chat(
         &self,
@@ -606,6 +654,134 @@ impl LlmChatPort for EmptyPlanTrainingPlanEnvelopeChatPort {
                 message: LlmChatMessage::assistant(r#"{"plan":"   ","description":"bad payload"}"#),
                 finish_reason: None,
                 provider_request_id: Some("req-empty-plan".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: Default::default(),
+            })
+        })
+    }
+}
+
+impl LlmChatPort for FencedTrainingPlanEnvelopeWithMetadataChatPort {
+    fn chat(
+        &self,
+        _config: LlmProviderConfig,
+        _request: LlmChatRequest,
+    ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        Box::pin(async move {
+            Ok(LlmChatResponse {
+                provider: LlmProvider::DeepSeek,
+                model: "deepseek-v4-pro".to_string(),
+                message: LlmChatMessage::assistant(
+                    "```json\n{\n  \"plan\": \"2026-05-28\\nRest Day: recovery\",\n  \"description\": \"Recovered well.\",\n  \"simulated_load\": {\n    \"ctl_start\": 48.49,\n    \"ctl_end\": 50.45\n  }\n}\n```",
+                ),
+                finish_reason: Some(LlmFinishReason::Stop),
+                provider_request_id: Some("req-fenced-plan".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: Default::default(),
+            })
+        })
+    }
+}
+
+impl LlmChatPort for RepairingTrainingPlanEnvelopeChatPort {
+    fn chat(
+        &self,
+        _config: LlmProviderConfig,
+        request: LlmChatRequest,
+    ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        let call_index = {
+            let mut requests = self.requests.lock().unwrap();
+            requests.push(request);
+            requests.len()
+        };
+
+        Box::pin(async move {
+            if call_index == 1 {
+                return Ok(LlmChatResponse {
+                    provider: LlmProvider::DeepSeek,
+                    model: "deepseek-v4-pro".to_string(),
+                    message: LlmChatMessage::assistant(
+                        "Here is the training plan:\nPlan:\n2026-05-28 Rest Day because fatigue is still high.",
+                    ),
+                    finish_reason: Some(LlmFinishReason::Stop),
+                    provider_request_id: Some("req-needs-repair".to_string()),
+                    usage: LlmTokenUsage::default(),
+                    cache: Default::default(),
+                });
+            }
+
+            Ok(LlmChatResponse {
+                provider: LlmProvider::DeepSeek,
+                model: "deepseek-v4-pro".to_string(),
+                message: LlmChatMessage::assistant(
+                    r#"{"plan":"2026-05-28\nRest Day: fatigue still high","description":"Recovered envelope only."}"#,
+                ),
+                finish_reason: Some(LlmFinishReason::Stop),
+                provider_request_id: Some("req-repaired".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: Default::default(),
+            })
+        })
+    }
+}
+
+impl LlmChatPort for MissingPlanTrainingPlanEnvelopeChatPort {
+    fn chat(
+        &self,
+        _config: LlmProviderConfig,
+        request: LlmChatRequest,
+    ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        self.requests.lock().unwrap().push(request);
+
+        Box::pin(async move {
+            Ok(LlmChatResponse {
+                provider: LlmProvider::DeepSeek,
+                model: "deepseek-v4-pro".to_string(),
+                message: LlmChatMessage::assistant(r#"{"description":"missing plan"}"#),
+                finish_reason: Some(LlmFinishReason::Stop),
+                provider_request_id: Some("req-missing-plan".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: Default::default(),
+            })
+        })
+    }
+}
+
+impl LlmChatPort for RepairingBacktickTrainingPlanEnvelopeChatPort {
+    fn chat(
+        &self,
+        _config: LlmProviderConfig,
+        request: LlmChatRequest,
+    ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        let call_index = {
+            let mut requests = self.requests.lock().unwrap();
+            requests.push(request);
+            requests.len()
+        };
+
+        Box::pin(async move {
+            if call_index == 1 {
+                return Ok(LlmChatResponse {
+                    provider: LlmProvider::DeepSeek,
+                    model: "deepseek-v4-pro".to_string(),
+                    message: LlmChatMessage::assistant(
+                        "Here is the draft:\n```json\nplan: 2026-05-28 Rest Day: recovery\ndescription: Recovered from fenced content.\n```\nI know this is fenced.",
+                    ),
+                    finish_reason: Some(LlmFinishReason::Stop),
+                    provider_request_id: Some("req-backtick-needs-repair".to_string()),
+                    usage: LlmTokenUsage::default(),
+                    cache: Default::default(),
+                });
+            }
+
+            Ok(LlmChatResponse {
+                provider: LlmProvider::DeepSeek,
+                model: "deepseek-v4-pro".to_string(),
+                message: LlmChatMessage::assistant(
+                    r#"{"plan":"2026-05-28\nRest Day: recovery","description":"Recovered from fenced content."}"#,
+                ),
+                finish_reason: Some(LlmFinishReason::Stop),
+                provider_request_id: Some("req-backtick-repaired".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: Default::default(),
             })
@@ -644,6 +820,163 @@ async fn training_plan_generator_fails_when_plan_generation_returns_empty_plan_e
             "training plan llm json missing non-empty plan".to_string(),
         )
     );
+}
+
+#[tokio::test]
+async fn training_plan_generator_accepts_fenced_json_envelope_with_extra_metadata() {
+    let generator = TrainingPlanLlmGenerator::new(
+        Arc::new(FencedTrainingPlanEnvelopeWithMetadataChatPort),
+        Arc::new(FixedOpenAiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    let output = generator
+        .generate_initial_plan_window(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "deepseek",
+                "deepseek-v4-pro",
+                1_700_000_000,
+            ),
+            Some(&sample_planning_context()),
+        )
+        .await
+        .expect("fenced JSON envelope with metadata should parse");
+
+    assert_eq!(output.raw_response, "2026-05-28\nRest Day: recovery");
+    assert_eq!(output.description.as_deref(), Some("Recovered well."));
+}
+
+#[tokio::test]
+async fn training_plan_generator_repairs_non_json_assistant_content_when_extraction_fails() {
+    let chat_port = Arc::new(RepairingTrainingPlanEnvelopeChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedOpenAiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    let output = generator
+        .generate_initial_plan_window(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "deepseek",
+                "deepseek-v4-pro",
+                1_700_000_000,
+            ),
+            Some(&sample_planning_context()),
+        )
+        .await
+        .expect("repair retry should return a valid envelope");
+
+    assert_eq!(
+        output.raw_response,
+        "2026-05-28\nRest Day: fatigue still high"
+    );
+    assert_eq!(
+        output.description.as_deref(),
+        Some("Recovered envelope only.")
+    );
+    assert_eq!(output.tool_loop_state.round_count, 2);
+
+    let requests = chat_port.requests();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1]
+        .system_prompt
+        .contains("repairing one previously generated training-plan reply"));
+    assert!(requests[1].conversation[0]
+        .content
+        .contains("Rewrite the previous assistant content as ONLY a valid JSON object"));
+    assert!(requests[1].conversation[0]
+        .content
+        .contains("Here is the training plan:"));
+}
+
+#[tokio::test]
+async fn training_plan_generator_does_not_retry_when_envelope_is_semantically_invalid() {
+    let chat_port = Arc::new(MissingPlanTrainingPlanEnvelopeChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedOpenAiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    let error = generator
+        .generate_initial_plan_window(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "deepseek",
+                "deepseek-v4-pro",
+                1_700_000_000,
+            ),
+            Some(&sample_planning_context()),
+        )
+        .await
+        .expect_err("missing required plan should fail without repair retry");
+
+    assert_eq!(
+        error,
+        aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
+            "invalid training plan llm json: missing field `plan` at line 1 column 30".to_string(),
+        )
+    );
+
+    assert_eq!(chat_port.requests().len(), 1);
+}
+
+#[tokio::test]
+async fn training_plan_generator_repair_prompt_preserves_previous_backticks_verbatim() {
+    let chat_port = Arc::new(RepairingBacktickTrainingPlanEnvelopeChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedOpenAiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    let output = generator
+        .generate_initial_plan_window(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "deepseek",
+                "deepseek-v4-pro",
+                1_700_000_000,
+            ),
+            Some(&sample_planning_context()),
+        )
+        .await
+        .expect("repair retry should preserve fenced content inside safe delimiters");
+
+    assert_eq!(output.raw_response, "2026-05-28\nRest Day: recovery");
+    assert_eq!(
+        output.description.as_deref(),
+        Some("Recovered from fenced content.")
+    );
+
+    let requests = chat_port.requests();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1].conversation[0]
+        .content
+        .contains("<<<PREVIOUS_ASSISTANT_CONTENT>>>"));
+    assert!(requests[1].conversation[0]
+        .content
+        .contains("<<<END_PREVIOUS_ASSISTANT_CONTENT>>>"));
+    assert!(requests[1].conversation[0].content.contains("```json"));
 }
 
 #[tokio::test]

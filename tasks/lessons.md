@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-05-27 - LLM JSON envelope parsers must tolerate provider presentation noise
+
+- When a prompt asks for JSON, models may still wrap valid JSON in markdown fences, surround it with explanatory prose, or append harmless top-level metadata. Parser regressions should use the exact logged assistant content shape, not only ideal payloads.
+- Keep the app contract strict for required fields such as `plan`, but avoid failing a workflow on extra top-level metadata unless that metadata would change behavior.
+- First try to recover the owned JSON payload from the provider response, and only if that still fails use a narrow repair retry that asks the model to restate the same content as a clean envelope. Do not broaden that retry to empty-plan or blank-response cases.
+- Check every user prompt in the same request path after introducing a JSON envelope; a lingering "return raw text only" instruction can fight the system prompt and increase provider drift.
+
 ## Review Fix Logging Loop
 
 - When I implement a fix based on feedback from the user, Copilot, or CodeRabbit, I must record it in `reviewers.md`.
