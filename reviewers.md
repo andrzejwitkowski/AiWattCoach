@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-27 | user | training plan LLM JSON envelope parsing
+
+- Problem: DeepSeek returned a usable training-plan JSON envelope wrapped in a markdown `json` code fence and with an extra `simulated_load` metadata object. The parser fed the raw assistant text directly to `serde_json::from_str(...)`, causing `expected value at line 1 column 1`, and the strict top-level DTO would have rejected the metadata after fence stripping. Some provider replies can also leave the usable plan embedded in prose instead of a clean JSON envelope, and the initial plan user prompt still asked for raw dated sections even though the system prompt required a JSON envelope.
+- Fix: hardened the training-plan LLM envelope parser to extract fenced or embedded JSON and ignore harmless top-level metadata while still requiring a non-empty `plan`, added adapter coverage for the production response shape plus a narrow one-shot repair retry when extraction still cannot recover a valid envelope, and aligned the initial plan user prompt with the JSON-envelope contract.
+- Prevention: when adding structured LLM output contracts, test the exact provider-shaped assistant content including markdown fences, surrounding prose, and extra metadata. First try to recover the owned payload from the model response, and only then fall back to a tightly scoped repair prompt. Keep user prompts consistent with system-level JSON schema instructions, and parse only the fields the app owns unless extra fields have product semantics.
+
 ### 2026-05-26 | user | training plan validation log assertion follow-up
 
 - Problem: `generation_and_correction_log_bounded_description_metadata` in `tests/training_plan_service/validation.rs` still asserted escaped JSON fragments like `\"phase\"` even though `capture_tracing_logs(...)` returns raw JSON log lines. The production log metadata was correct, but the stale escaped-string expectation made the focused `training_plan_service` test fail.
