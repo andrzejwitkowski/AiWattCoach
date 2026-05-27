@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-05-27 - Completed workout alias sets must include provider external ids
+
+- If workout summaries are looked up from completed-workout ids coming from the UI, the alias set cannot stop at `source_activity_id` plus canonical completed-workout id. For imported workouts that exist in both Intervals and Wahoo identity spaces, the persisted summary may still be keyed by the provider external id.
+- Before concluding that a recap was deleted, inspect the live `workout_summaries` document and compare it against the exact id sent by the frontend summary endpoint. A missing recap in the UI can be a read-side alias gap even when Mongo still has `workout_recap_text`.
+- Reproduction for this class of bug should include dual identities for the same day/workout, for example one `intervals-activity:*` record and one `wahoo-workout:*`/external-id alias, then assert that reads from one id still find summaries persisted under the other.
+
 ## 2026-05-27 - LLM JSON envelope parsers must tolerate provider presentation noise
 
 - When a prompt asks for JSON, models may still wrap valid JSON in markdown fences, surround it with explanatory prose, or append harmless top-level metadata. Parser regressions should use the exact logged assistant content shape, not only ideal payloads.
