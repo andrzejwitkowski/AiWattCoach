@@ -107,7 +107,10 @@ impl ProviderPollStateRepository for MongoProviderPollStateRepository {
         state: ProviderPollState,
     ) -> BoxFuture<Result<ProviderPollState, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
-        let document = map_poll_state_to_document(&state);
+        let document = match map_poll_state_to_document(&state) {
+            Ok(document) => document,
+            Err(error) => return Box::pin(async move { Err(error) }),
+        };
         Box::pin(async move {
             collection
                 .replace_one(
@@ -172,14 +175,20 @@ impl ProviderPollStateRepository for MongoProviderPollStateRepository {
     }
 }
 
-fn map_poll_state_to_document(state: &ProviderPollState) -> ProviderPollStateDocument {
+fn map_poll_state_to_document(
+    state: &ProviderPollState,
+) -> Result<ProviderPollStateDocument, ExternalSyncRepositoryError> {
     let next_due_at = if state.next_due_at_epoch_seconds == i64::MAX {
         None
     } else {
-        datetime_or_panic(Some(state.next_due_at_epoch_seconds), "next_due_at")
+        optional_epoch_seconds_to_bson_datetime(
+            Some(state.next_due_at_epoch_seconds),
+            "next_due_at",
+        )
+        .map_err(ExternalSyncRepositoryError::Storage)?
     };
 
-    ProviderPollStateDocument {
+    Ok(ProviderPollStateDocument {
         user_id: state.user_id.clone(),
         provider: state.provider.as_str().to_string(),
         stream: stream_as_str(&state.stream).to_string(),
@@ -187,19 +196,25 @@ fn map_poll_state_to_document(state: &ProviderPollState) -> ProviderPollStateDoc
         next_due_at_epoch_seconds: Some(state.next_due_at_epoch_seconds),
         next_due_at,
         last_attempted_at_epoch_seconds: state.last_attempted_at_epoch_seconds,
-        last_attempted_at: datetime_or_panic(
+        last_attempted_at: optional_epoch_seconds_to_bson_datetime(
             state.last_attempted_at_epoch_seconds,
             "last_attempted_at",
-        ),
+        )
+        .map_err(ExternalSyncRepositoryError::Storage)?,
         last_successful_at_epoch_seconds: state.last_successful_at_epoch_seconds,
-        last_successful_at: datetime_or_panic(
+        last_successful_at: optional_epoch_seconds_to_bson_datetime(
             state.last_successful_at_epoch_seconds,
             "last_successful_at",
-        ),
+        )
+        .map_err(ExternalSyncRepositoryError::Storage)?,
         last_error: state.last_error.clone(),
         backoff_until_epoch_seconds: state.backoff_until_epoch_seconds,
-        backoff_until_at: datetime_or_panic(state.backoff_until_epoch_seconds, "backoff_until_at"),
-    }
+        backoff_until_at: optional_epoch_seconds_to_bson_datetime(
+            state.backoff_until_epoch_seconds,
+            "backoff_until_at",
+        )
+        .map_err(ExternalSyncRepositoryError::Storage)?,
+    })
 }
 
 fn map_document_to_poll_state(
@@ -232,12 +247,6 @@ fn map_document_to_poll_state(
         ),
     })
 }
-
-fn datetime_or_panic(epoch_seconds: Option<i64>, field_name: &str) -> Option<DateTime> {
-    optional_epoch_seconds_to_bson_datetime(epoch_seconds, field_name)
-        .unwrap_or_else(|error| panic!("{error}"))
-}
-
 fn stream_as_str(stream: &ProviderPollStream) -> &'static str {
     match stream {
         ProviderPollStream::Calendar => "calendar",
@@ -304,7 +313,8 @@ mod tests {
             backoff_until_epoch_seconds: Some(1_700_000_300),
         };
 
-        let mapped = map_document_to_poll_state(map_poll_state_to_document(&state)).unwrap();
+        let mapped =
+            map_document_to_poll_state(map_poll_state_to_document(&state).unwrap()).unwrap();
 
         assert_eq!(mapped, state);
     }
@@ -417,7 +427,8 @@ mod tests {
             last_successful_at_epoch_seconds: None,
             last_error: None,
             backoff_until_epoch_seconds: None,
-        });
+        })
+        .expect("parked poll state should map");
 
         assert_eq!(document.next_due_at_epoch_seconds, Some(i64::MAX));
         assert_eq!(document.next_due_at, None);

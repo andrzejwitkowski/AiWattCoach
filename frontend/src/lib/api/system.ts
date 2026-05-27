@@ -1,14 +1,18 @@
+import { z } from 'zod';
+
 import { ApiError, getJsonResponse } from './client';
 
-export type HealthPayload = {
-  status: string;
-  service: string;
-};
+export const HealthPayloadSchema = z.object({
+  status: z.string(),
+  service: z.string()
+});
+export type HealthPayload = z.infer<typeof HealthPayloadSchema>;
 
-export type ReadinessPayload = {
-  status: string;
-  reason: string | null;
-};
+export const ReadinessPayloadSchema = z.object({
+  status: z.string(),
+  reason: z.string().nullable()
+});
+export type ReadinessPayload = z.infer<typeof ReadinessPayloadSchema>;
 
 export type BackendStatusState = 'online' | 'degraded' | 'offline';
 
@@ -58,8 +62,8 @@ export async function loadBackendStatus(apiBaseUrl: string): Promise<BackendStat
   const checkedAtLabel = formatCheckedAtLabel(new Date());
 
   return {
-    health: healthResponse.body,
-    readiness: readinessResponse.body,
+    health: HealthPayloadSchema.parse(healthResponse.body),
+    readiness: ReadinessPayloadSchema.parse(readinessResponse.body),
     state: readinessResponse.status === 503 ? 'degraded' : 'online',
     checkedAtLabel
   };

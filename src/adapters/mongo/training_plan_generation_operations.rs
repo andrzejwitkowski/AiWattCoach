@@ -208,7 +208,8 @@ fn map_operation_to_document(
         saved_at: required_epoch_seconds_to_bson_datetime(
             operation.saved_at_epoch_seconds,
             "saved_at",
-        ),
+        )
+        .map_err(TrainingPlanError::Repository)?,
         status: map_status_to_document(&operation.status).to_string(),
         workout_recap_text: operation.workout_recap_text.clone(),
         workout_recap_provider: operation.workout_recap_provider.clone(),
@@ -247,23 +248,27 @@ fn map_operation_to_document(
         started_at: required_epoch_seconds_to_bson_datetime(
             operation.started_at_epoch_seconds,
             "started_at",
-        ),
+        )
+        .map_err(TrainingPlanError::Repository)?,
         last_attempt_at_epoch_seconds: Some(operation.last_attempt_at_epoch_seconds),
         last_attempt_at: required_epoch_seconds_to_bson_datetime(
             operation.last_attempt_at_epoch_seconds,
             "last_attempt_at",
-        ),
+        )
+        .map_err(TrainingPlanError::Repository)?,
         attempt_count: i64::from(operation.attempt_count),
         created_at_epoch_seconds: Some(operation.created_at_epoch_seconds),
         created_at: required_epoch_seconds_to_bson_datetime(
             operation.created_at_epoch_seconds,
             "created_at",
-        ),
+        )
+        .map_err(TrainingPlanError::Repository)?,
         updated_at_epoch_seconds: Some(operation.updated_at_epoch_seconds),
         updated_at: required_epoch_seconds_to_bson_datetime(
             operation.updated_at_epoch_seconds,
             "updated_at",
-        ),
+        )
+        .map_err(TrainingPlanError::Repository)?,
     })
 }
 
@@ -363,7 +368,8 @@ fn map_attempt_to_document(
         recorded_at: required_epoch_seconds_to_bson_datetime(
             attempt.recorded_at_epoch_seconds,
             "recorded_at",
-        ),
+        )
+        .map_err(TrainingPlanError::Repository)?,
     })
 }
 
