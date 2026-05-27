@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-27 | user | completed workout summary alias lookup after regeneration/edit
+
+- Problem: the completed-workout detail modal loads recap text through `GET /api/completed-workouts/{activity_id}/summary`, which passes an activity-scoped id like `i151959404` into workout-summary resolution. For the 2026-05-27 ride, the workout summary document persisted the recap under the Wahoo/external alias `459893292`, while the completed-workout target resolver exposed only the preferred/source activity id plus the canonical completed-workout id. That left the real external alias out of `equivalent_workout_ids`, so recap reads could return `404` even though Mongo still contained `workout_recap_text`.
+- Fix: updated `CompletedWorkoutTargetAdapter` to include `CompletedWorkout.external_id` in `ResolvedCompletedWorkoutTarget.equivalent_workout_ids`, and added a focused adapter regression that resolves an Intervals activity id to the source id, canonical completed-workout id, and external id alias together.
+- Prevention: when workout-summary lookup depends on completed-workout alias resolution, include every persisted identity that can legitimately key the same workout summary document, not only the preferred/source id and canonical completed-workout id. For imported completed workouts that may exist in both Intervals and Wahoo forms, verify recap reads from one provider id still find summaries saved under the other provider's alias.
+
 ### 2026-05-27 | Copilot | PR #253 training plan repair retry narrowing
 
 - Problem: the first JSON-envelope repair implementation retried on every `invalid training plan llm json` failure, which was too broad because it also covered semantically invalid envelopes such as missing `plan` or wrong field types. The repair prompt also embedded the previous assistant content inside triple-backtick fences, which could corrupt the prompt when the original provider reply itself contained triple backticks.
