@@ -1,3 +1,7 @@
+use aiwattcoach::adapters::workout_summary_completed_target::CompletedWorkoutTargetAdapter;
+use aiwattcoach::domain::completed_workouts::{
+    CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutRepository,
+};
 use aiwattcoach::domain::workout_summary::{
     SaveWorkflowCompletionPort, SaveWorkflowStatus, WorkoutRecap, WorkoutSummaryError,
     WorkoutSummaryRepository, WorkoutSummaryService, WorkoutSummaryUseCases,
@@ -532,6 +536,39 @@ async fn get_summary_reuses_equivalent_completed_workout_alias_without_duplicate
 }
 
 #[tokio::test]
+async fn get_summary_reuses_cross_source_completed_workout_alias_for_requested_activity_id() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.workout_id = "459893292".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let completed_target = CompletedWorkoutTargetAdapter::new(
+        InMemoryCompletedWorkoutRepository::with_workouts(vec![
+            completed_workout(
+                "intervals-activity:i151959404",
+                Some("i151959404"),
+                Some("training-plan:user-1:source:2026-05-27"),
+                Some("459893292"),
+                "2026-05-27T15:10:35",
+            ),
+            completed_workout(
+                "wahoo-workout:459893292",
+                Some("459893292"),
+                Some("training-plan:user-1:source:2026-05-27"),
+                Some("459893292"),
+                "2026-05-27T13:10:35.000Z",
+            ),
+        ]),
+    );
+    let service = test_service(repository.clone())
+        .with_completed_workout_target_service(std::sync::Arc::new(completed_target));
+
+    let fetched = service.get_summary("user-1", "i151959404").await.unwrap();
+
+    assert_eq!(fetched.id, "summary-1");
+    assert_eq!(fetched.workout_id, "i151959404");
+    assert_eq!(repository.calls(), Vec::<String>::new());
+}
+
+#[tokio::test]
 async fn mark_saved_uses_preferred_completed_workout_id_for_side_effects() {
     let mut summary = existing_summary_with_finished_conversation();
     summary.workout_id = "i144331018".to_string();
@@ -590,6 +627,217 @@ async fn mark_saved_uses_preferred_completed_workout_id_for_side_effects() {
         completed_target.calls(),
         vec!["resolve_completed_workout_target:user-1:wahoo-workout:450868242".to_string()]
     );
+}
+
+#[derive(Clone, Default)]
+struct InMemoryCompletedWorkoutRepository {
+    stored: Arc<Mutex<Vec<CompletedWorkout>>>,
+}
+
+impl InMemoryCompletedWorkoutRepository {
+    fn with_workouts(workouts: Vec<CompletedWorkout>) -> Self {
+        Self {
+            stored: Arc::new(Mutex::new(workouts)),
+        }
+    }
+}
+
+impl CompletedWorkoutRepository for InMemoryCompletedWorkoutRepository {
+    fn find_by_user_id_and_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<
+            Option<CompletedWorkout>,
+            aiwattcoach::domain::completed_workouts::CompletedWorkoutError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            Ok(stored.lock().unwrap().iter().find_map(|workout| {
+                (workout.user_id == user_id && workout.completed_workout_id == completed_workout_id)
+                    .then(|| workout.clone())
+            }))
+        })
+    }
+
+    fn find_by_user_id_and_source_activity_id(
+        &self,
+        user_id: &str,
+        source_activity_id: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<
+            Option<CompletedWorkout>,
+            aiwattcoach::domain::completed_workouts::CompletedWorkoutError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let source_activity_id = source_activity_id.to_string();
+        Box::pin(async move {
+            Ok(stored.lock().unwrap().iter().find_map(|workout| {
+                (workout.user_id == user_id
+                    && workout.source_activity_id.as_deref() == Some(source_activity_id.as_str()))
+                .then(|| workout.clone())
+            }))
+        })
+    }
+
+    fn find_latest_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<
+            Option<CompletedWorkout>,
+            aiwattcoach::domain::completed_workouts::CompletedWorkoutError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let mut workouts = stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|workout| workout.user_id == user_id)
+                .cloned()
+                .collect::<Vec<_>>();
+            workouts.sort_by(|left, right| {
+                right
+                    .start_date_local
+                    .cmp(&left.start_date_local)
+                    .then_with(|| right.completed_workout_id.cmp(&left.completed_workout_id))
+            });
+            Ok(workouts.into_iter().next())
+        })
+    }
+
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<
+            Vec<CompletedWorkout>,
+            aiwattcoach::domain::completed_workouts::CompletedWorkoutError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|workout| workout.user_id == user_id)
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<
+            Vec<CompletedWorkout>,
+            aiwattcoach::domain::completed_workouts::CompletedWorkoutError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|workout| {
+                    workout.user_id == user_id
+                        && workout.start_date_local.as_str() >= oldest.as_str()
+                        && workout.start_date_local.as_str() <= newest.as_str()
+                })
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn upsert(
+        &self,
+        workout: CompletedWorkout,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<CompletedWorkout, aiwattcoach::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            if let Some(existing) = stored.iter_mut().find(|existing| {
+                existing.user_id == workout.user_id
+                    && existing.completed_workout_id == workout.completed_workout_id
+            }) {
+                *existing = workout.clone();
+            } else {
+                stored.push(workout.clone());
+            }
+            Ok(workout)
+        })
+    }
+}
+
+fn completed_workout(
+    completed_workout_id: &str,
+    source_activity_id: Option<&str>,
+    planned_workout_id: Option<&str>,
+    external_id: Option<&str>,
+    start_date_local: &str,
+) -> CompletedWorkout {
+    CompletedWorkout::new(
+        completed_workout_id.to_string(),
+        "user-1".to_string(),
+        start_date_local.to_string(),
+        source_activity_id.map(ToString::to_string),
+        planned_workout_id.map(ToString::to_string),
+        Some("Aerobic Endurance".to_string()),
+        None,
+        Some("Ride".to_string()),
+        external_id.map(ToString::to_string),
+        false,
+        Some(5283),
+        Some(40000.0),
+        CompletedWorkoutMetrics {
+            training_stress_score: Some(61),
+            normalized_power_watts: Some(223),
+            intensity_factor: Some(0.66),
+            efficiency_factor: None,
+            variability_index: None,
+            average_power_watts: Some(207),
+            ftp_watts: Some(335),
+            total_work_joules: None,
+            calories: None,
+            trimp: None,
+            power_load: None,
+            heart_rate_load: None,
+            pace_load: None,
+            strain_score: None,
+        },
+        CompletedWorkoutDetails {
+            intervals: Vec::new(),
+            interval_groups: Vec::new(),
+            streams: Vec::new(),
+            interval_summary: Vec::new(),
+            skyline_chart: Vec::new(),
+            power_zone_times: Vec::new(),
+            heart_rate_zone_times: Vec::new(),
+            pace_zone_times: Vec::new(),
+            gap_zone_times: Vec::new(),
+        },
+        None,
+    )
 }
 
 #[tokio::test]

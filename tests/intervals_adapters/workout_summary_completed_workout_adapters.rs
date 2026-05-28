@@ -46,6 +46,44 @@ async fn completed_workout_target_adapter_accepts_canonical_completed_workout_id
 }
 
 #[tokio::test]
+async fn completed_workout_target_adapter_returns_cross_source_equivalent_ids_for_same_workout() {
+    let repository = completed_workout_repository(vec![
+        completed_workout(
+            "intervals-activity:i151959404",
+            Some("i151959404"),
+            Some("training-plan:user-1:source:2026-05-27"),
+            Some("459893292"),
+            "2026-05-27T15:10:35",
+        ),
+        completed_workout(
+            "wahoo-workout:459893292",
+            Some("459893292"),
+            Some("training-plan:user-1:source:2026-05-27"),
+            Some("459893292"),
+            "2026-05-27T13:10:35.000Z",
+        ),
+    ]);
+    let adapter = CompletedWorkoutTargetAdapter::new(repository);
+
+    let resolved = adapter
+        .resolve_completed_workout_target("user-1", "i151959404")
+        .await
+        .expect("target lookup should succeed")
+        .expect("completed workout target should resolve");
+
+    assert_eq!(resolved.preferred_workout_id, "i151959404");
+    assert_eq!(
+        resolved.equivalent_workout_ids,
+        vec![
+            "i151959404".to_string(),
+            "intervals-activity:i151959404".to_string(),
+            "459893292".to_string(),
+            "wahoo-workout:459893292".to_string(),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn latest_completed_activity_adapter_falls_back_to_legacy_completed_workout_id() {
     let repository = completed_workout_repository(vec![legacy_completed_workout(
         "intervals-activity:latest-77",
@@ -71,16 +109,26 @@ fn legacy_completed_workout(
     completed_workout_id: &str,
     start_date_local: &str,
 ) -> CompletedWorkout {
+    completed_workout(completed_workout_id, None, None, None, start_date_local)
+}
+
+fn completed_workout(
+    completed_workout_id: &str,
+    source_activity_id: Option<&str>,
+    planned_workout_id: Option<&str>,
+    external_id: Option<&str>,
+    start_date_local: &str,
+) -> CompletedWorkout {
     CompletedWorkout::new(
         completed_workout_id.to_string(),
         "user-1".to_string(),
         start_date_local.to_string(),
-        None,
-        None,
+        source_activity_id.map(ToString::to_string),
+        planned_workout_id.map(ToString::to_string),
         Some("Legacy Ride".to_string()),
         None,
         Some("Ride".to_string()),
-        None,
+        external_id.map(ToString::to_string),
         false,
         Some(3600),
         Some(40000.0),
