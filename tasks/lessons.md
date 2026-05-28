@@ -18,6 +18,8 @@
 - In `AI Coach`, preloading workout summaries for a 12-week history window caused `GET /api/workout-summaries` to send 84 ids even though the sidebar showed one week, which amplified backend alias-resolution cost and led to `524` timeouts.
 - When switching from eager preload to visible-range fetches, keep a small client-side cache of already loaded summary ids so paging back to a previously visited week does not re-fetch needlessly.
 - For batch endpoints that can be hit by UI regressions, add a hard server-side max-id guard even after fixing the client. UI correctness and backend blast-radius limits are separate protections.
+- After adding a server-side batch limit, audit the client path for the same limit immediately. A visible-range fetch can still exceed the cap on dense weeks if the client sends the whole week in one batch.
+- In scope-narrowing regressions, assert exact fetch count in addition to the requested ids so an extra hidden request cannot slip through while the argument assertion still passes.
 
 ## 2026-05-28 - Summary handlers must not pre-check through a narrower completed-workout reader
 

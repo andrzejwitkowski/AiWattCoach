@@ -12,6 +12,7 @@ export type WorkoutListState = 'loading' | 'ready' | 'error' | 'credentials-requ
 
 const WORKOUT_PAGE_SIZE = 7;
 const WORKOUT_LOOKBACK_WEEKS = 12;
+const MAX_SUMMARY_BATCH_SIZE = 31;
 
 type UseWorkoutListOptions = {
   apiBaseUrl: string;
@@ -276,6 +277,16 @@ function replaceRequestedSummaries(
   return next;
 }
 
+function chunkWorkoutIds(workoutIds: string[]): string[][] {
+  const chunks: string[][] = [];
+
+  for (let index = 0; index < workoutIds.length; index += MAX_SUMMARY_BATCH_SIZE) {
+    chunks.push(workoutIds.slice(index, index + MAX_SUMMARY_BATCH_SIZE));
+  }
+
+  return chunks;
+}
+
 function defaultVisibleWeekStart(items: CoachWorkoutListItem[], currentWeekStart: Date): Date {
   if (items.some((item) => isWithinWeek(item.startDateLocal, currentWeekStart))) {
     return currentWeekStart;
@@ -416,7 +427,11 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
 
     void (async () => {
       try {
-        const summaries = await listWorkoutSummaries(apiBaseUrl, missingSummaryIds);
+        const summaries = (
+          await Promise.all(
+            chunkWorkoutIds(missingSummaryIds).map((workoutIds) => listWorkoutSummaries(apiBaseUrl, workoutIds)),
+          )
+        ).flat();
 
         if (requestId !== summaryRequestIdRef.current) {
           return;

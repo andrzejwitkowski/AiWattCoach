@@ -436,6 +436,50 @@ describe('useWorkoutList', () => {
     expect(result.current.items[0]?.hasSummary).toBe(false);
   });
 
+  it('chunks visible-week summary fetches to the backend batch limit', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-04-11T12:00:00Z'));
+
+    try {
+      const activities = Array.from({ length: 32 }, (_, index) => {
+        const day = String(11 - Math.floor(index / 8)).padStart(2, '0');
+        const hour = String(23 - (index % 8)).padStart(2, '0');
+        const id = `activity-batch-${String(index + 1).padStart(2, '0')}`;
+
+        return {
+          ...activityFixture,
+          id,
+          name: `Batch Ride ${index + 1}`,
+          startDateLocal: `2026-04-${day}T${hour}:00:00`,
+          startDate: `2026-04-${day}T${hour}:00:00Z`,
+        };
+      });
+      vi.mocked(listActivities).mockResolvedValue(activities);
+      vi.mocked(listEvents).mockResolvedValue([]);
+      vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
+
+      const { result } = renderWorkoutListHook();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+
+      await waitFor(() => {
+        expect(result.current.state).toBe('ready');
+      });
+
+      expect(listWorkoutSummaries).toHaveBeenCalledTimes(2);
+      expect(listWorkoutSummaries).toHaveBeenNthCalledWith(
+        1,
+        '',
+        activities.slice(0, 31).map((activity) => activity.id),
+      );
+      expect(listWorkoutSummaries).toHaveBeenNthCalledWith(2, '', [activities[31]!.id]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('updates the matching item when a summary changes', async () => {
     vi.mocked(listActivities).mockResolvedValue([
       {
@@ -643,6 +687,7 @@ describe('useWorkoutList', () => {
 
       expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 23), new Date(2026, 2, 29)));
       expect(listWorkoutSummaries).toHaveBeenCalledWith('', ['activity-current-week']);
+      expect(listWorkoutSummaries).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }

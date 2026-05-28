@@ -24,7 +24,13 @@ const MAX_LIST_SUMMARIES_WORKOUT_IDS: usize = 31;
 
 #[derive(Serialize)]
 struct ErrorResponse {
-    error: &'static str,
+    error: String,
+}
+
+fn error_response(error: impl Into<String>) -> Json<ErrorResponse> {
+    Json(ErrorResponse {
+        error: error.into(),
+    })
 }
 
 pub(super) async fn resolve_user_id(
@@ -105,9 +111,7 @@ pub async fn list_summaries(
     if workout_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "workoutIds must contain at least one workout id",
-            }),
+            error_response("workoutIds must contain at least one workout id"),
         )
             .into_response();
     }
@@ -115,9 +119,10 @@ pub async fn list_summaries(
     if workout_ids.len() > MAX_LIST_SUMMARIES_WORKOUT_IDS {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "workoutIds must contain at most 31 workout ids",
-            }),
+            error_response(format!(
+                "workoutIds must contain at most {} workout ids",
+                MAX_LIST_SUMMARIES_WORKOUT_IDS
+            )),
         )
             .into_response();
     }
