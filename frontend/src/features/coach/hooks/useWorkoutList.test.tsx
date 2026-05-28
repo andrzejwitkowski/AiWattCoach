@@ -384,6 +384,58 @@ describe('useWorkoutList', () => {
     expect(listActivities).toHaveBeenCalledTimes(1);
   });
 
+  it('refresh clears stale visible-week summaries omitted by the next batch response', async () => {
+    vi.mocked(listActivities).mockResolvedValue([
+      {
+        ...activityFixture,
+        id: 'activity-refresh',
+        name: 'Refresh Ride',
+        startDateLocal: '2026-04-07T09:00:00',
+        startDate: '2026-04-07T08:00:00Z',
+      },
+    ]);
+    vi.mocked(listEvents).mockResolvedValue([
+      {
+        ...eventFixture,
+        id: 907,
+        name: 'Refresh Ride',
+        startDateLocal: '2026-04-07T09:00:00',
+      },
+    ]);
+    vi.mocked(listWorkoutSummaries)
+      .mockResolvedValueOnce([
+        {
+          id: 'summary-refresh',
+          workoutId: 'activity-refresh',
+          rpe: 5,
+          messages: [],
+          savedAtEpochSeconds: null,
+          createdAtEpochSeconds: 1,
+          updatedAtEpochSeconds: 2,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const { result } = renderWorkoutListHook();
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    expect(result.current.items[0]?.hasSummary).toBe(true);
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    expect(result.current.items[0]?.summary).toBeNull();
+    expect(result.current.items[0]?.hasSummary).toBe(false);
+  });
+
   it('updates the matching item when a summary changes', async () => {
     vi.mocked(listActivities).mockResolvedValue([
       {

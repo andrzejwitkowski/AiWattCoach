@@ -258,6 +258,24 @@ function mergeSummaryCache(
   return next;
 }
 
+function replaceRequestedSummaries(
+  current: Map<string, WorkoutSummary>,
+  requestedWorkoutIds: string[],
+  summaries: WorkoutSummary[],
+): Map<string, WorkoutSummary> {
+  const next = new Map(current);
+
+  for (const workoutId of requestedWorkoutIds) {
+    next.delete(workoutId);
+  }
+
+  for (const summary of summaries) {
+    next.set(summary.workoutId, summary);
+  }
+
+  return next;
+}
+
 function defaultVisibleWeekStart(items: CoachWorkoutListItem[], currentWeekStart: Date): Date {
   if (items.some((item) => isWithinWeek(item.startDateLocal, currentWeekStart))) {
     return currentWeekStart;
@@ -295,6 +313,7 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
   const loadRecentWorkouts = useCallback(async () => {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    summaryRequestIdRef.current += 1;
     setHasLoadedWorkouts(false);
     setState('loading');
     setError(null);
@@ -403,7 +422,7 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
           return;
         }
 
-        setSummaryCache((current) => mergeSummaryCache(current, summaries));
+        setSummaryCache((current) => replaceRequestedSummaries(current, missingSummaryIds, summaries));
         setLoadedSummaryIds((current) => {
           const next = new Set(current);
 
