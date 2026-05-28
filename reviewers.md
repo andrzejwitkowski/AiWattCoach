@@ -21,6 +21,24 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-27 | user | completed workout summary alias lookup after regeneration/edit
+
+- Problem: the completed-workout detail modal loads recap text through `GET /api/completed-workouts/{activity_id}/summary`, which passes an activity-scoped id like `i151959404` into workout-summary resolution. For the 2026-05-27 ride, the workout summary document persisted the recap under the Wahoo/external alias `459893292`, while the completed-workout target resolver exposed only the preferred/source activity id plus the canonical completed-workout id. That left the real external alias out of `equivalent_workout_ids`, so recap reads could return `404` even though Mongo still contained `workout_recap_text`.
+- Fix: updated `CompletedWorkoutTargetAdapter` to include `CompletedWorkout.external_id` in `ResolvedCompletedWorkoutTarget.equivalent_workout_ids`, and added a focused adapter regression that resolves an Intervals activity id to the source id, canonical completed-workout id, and external id alias together.
+- Prevention: when workout-summary lookup depends on completed-workout alias resolution, include every persisted identity that can legitimately key the same workout summary document, not only the preferred/source id and canonical completed-workout id. For imported completed workouts that may exist in both Intervals and Wahoo forms, verify recap reads from one provider id still find summaries saved under the other provider's alias.
+
+### 2026-05-27 | Copilot | PR #253 training plan repair retry narrowing
+
+- Problem: the first JSON-envelope repair implementation retried on every `invalid training plan llm json` failure, which was too broad because it also covered semantically invalid envelopes such as missing `plan` or wrong field types. The repair prompt also embedded the previous assistant content inside triple-backtick fences, which could corrupt the prompt when the original provider reply itself contained triple backticks.
+- Fix: moved retry classification down to the training-plan envelope parser so only syntax/EOF-style recoverable formatting failures trigger the one-shot repair retry, kept semantic envelope failures as immediate errors, and replaced the repair prompt fence wrapper with explicit begin/end literal-content markers. Added regressions for both no-retry semantic failures and repair prompts that preserve embedded backticks.
+- Prevention: when adding a fallback repair call after structured-output parsing, classify parser failures by recoverability rather than matching a broad error prefix. If a repair prompt embeds prior model output, never wrap that content in the same fence syntax the provider may already have used; use dedicated literal-content delimiters or escaping instead.
+
+### 2026-05-27 | user | training plan LLM JSON envelope parsing
+
+- Problem: DeepSeek returned a usable training-plan JSON envelope wrapped in a markdown `json` code fence and with an extra `simulated_load` metadata object. The parser fed the raw assistant text directly to `serde_json::from_str(...)`, causing `expected value at line 1 column 1`, and the strict top-level DTO would have rejected the metadata after fence stripping. Some provider replies can also leave the usable plan embedded in prose instead of a clean JSON envelope, and the initial plan user prompt still asked for raw dated sections even though the system prompt required a JSON envelope.
+- Fix: hardened the training-plan LLM envelope parser to extract fenced or embedded JSON and ignore harmless top-level metadata while still requiring a non-empty `plan`, added adapter coverage for the production response shape plus a narrow one-shot repair retry when extraction still cannot recover a valid envelope, and aligned the initial plan user prompt with the JSON-envelope contract.
+- Prevention: when adding structured LLM output contracts, test the exact provider-shaped assistant content including markdown fences, surrounding prose, and extra metadata. First try to recover the owned payload from the model response, and only then fall back to a tightly scoped repair prompt. Keep user prompts consistent with system-level JSON schema instructions, and parse only the fields the app owns unless extra fields have product semantics.
+
 ### 2026-05-26 | user | training plan validation log assertion follow-up
 
 - Problem: `generation_and_correction_log_bounded_description_metadata` in `tests/training_plan_service/validation.rs` still asserted escaped JSON fragments like `\"phase\"` even though `capture_tracing_logs(...)` returns raw JSON log lines. The production log metadata was correct, but the stale escaped-string expectation made the focused `training_plan_service` test fail.

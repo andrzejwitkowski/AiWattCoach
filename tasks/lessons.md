@@ -1,5 +1,18 @@
 # Lessons
 
+## 2026-05-27 - Completed workout alias sets must include provider external ids
+
+- If workout summaries are looked up from completed-workout ids coming from the UI, the alias set cannot stop at `source_activity_id` plus canonical completed-workout id. For imported workouts that exist in both Intervals and Wahoo identity spaces, the persisted summary may still be keyed by the provider external id.
+- Before concluding that a recap was deleted, inspect the live `workout_summaries` document and compare it against the exact id sent by the frontend summary endpoint. A missing recap in the UI can be a read-side alias gap even when Mongo still has `workout_recap_text`.
+- Reproduction for this class of bug should include dual identities for the same day/workout, for example one `intervals-activity:*` record and one `wahoo-workout:*`/external-id alias, then assert that reads from one id still find summaries persisted under the other.
+
+## 2026-05-27 - LLM JSON envelope parsers must tolerate provider presentation noise
+
+- When a prompt asks for JSON, models may still wrap valid JSON in markdown fences, surround it with explanatory prose, or append harmless top-level metadata. Parser regressions should use the exact logged assistant content shape, not only ideal payloads.
+- Keep the app contract strict for required fields such as `plan`, but avoid failing a workflow on extra top-level metadata unless that metadata would change behavior.
+- First try to recover the owned JSON payload from the provider response, and only if that still fails use a narrow repair retry that asks the model to restate the same content as a clean envelope. Do not broaden that retry to empty-plan or blank-response cases.
+- Check every user prompt in the same request path after introducing a JSON envelope; a lingering "return raw text only" instruction can fight the system prompt and increase provider drift.
+
 ## Review Fix Logging Loop
 
 - When I implement a fix based on feedback from the user, Copilot, or CodeRabbit, I must record it in `reviewers.md`.
