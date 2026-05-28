@@ -1,3 +1,7 @@
+use aiwattcoach::domain::completed_workouts::{
+    BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout, CompletedWorkoutError,
+    CompletedWorkoutReadUseCases,
+};
 use axum::{
     body::Body,
     http::{header, Request, StatusCode},
@@ -9,8 +13,9 @@ use crate::{
     app::{
         intervals_test_app_with_calendar_entries_and_completed_workouts,
         intervals_test_app_with_calendar_entries_completed_workouts_and_summary_service,
-        sample_workout_summary, InMemoryCalendarEntryViewRepository,
-        InMemoryCompletedWorkoutRepository, TestWorkoutSummaryService,
+        intervals_test_app_with_completed_workout_read_and_summary_service, sample_workout_summary,
+        InMemoryCalendarEntryViewRepository, InMemoryCompletedWorkoutRepository,
+        TestWorkoutSummaryService,
     },
     fixtures::{get_json, sample_completed_workout, session_cookie},
     identity_fakes::TestIdentityServiceWithSession,
@@ -338,6 +343,67 @@ async fn get_completed_workout_summary_returns_404_for_other_users_workout() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn get_completed_workout_summary_returns_recap_for_hidden_completed_workout_alias() {
+    let mut summary = sample_workout_summary("user-1", "i151959404");
+    summary.workout_recap_text = Some("Cross-source recap survives hidden alias".to_string());
+    summary.workout_recap_provider = Some("deepseek".to_string());
+    summary.workout_recap_model = Some("deepseek-v4-pro".to_string());
+    summary.workout_recap_generated_at_epoch_seconds = Some(1_779_902_685);
+
+    let app = intervals_test_app_with_completed_workout_read_and_summary_service(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        std::sync::Arc::new(NotFoundCompletedWorkoutService),
+        TestWorkoutSummaryService::with_summaries(vec![summary]),
+    );
+    let app = app.await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/completed-workouts/i151959404/summary")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("workoutId").and_then(Value::as_str),
+        Some("i151959404")
+    );
+    assert_eq!(
+        body.get("text").and_then(Value::as_str),
+        Some("Cross-source recap survives hidden alias")
+    );
+}
+
+#[derive(Clone, Default)]
+struct NotFoundCompletedWorkoutService;
+
+impl CompletedWorkoutReadUseCases for NotFoundCompletedWorkoutService {
+    fn list_completed_workouts(
+        &self,
+        _user_id: &str,
+        _oldest: &str,
+        _newest: &str,
+    ) -> CompletedWorkoutBoxFuture<Result<Vec<CompletedWorkout>, CompletedWorkoutError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn get_completed_workout(
+        &self,
+        _user_id: &str,
+        _activity_id: &str,
+    ) -> CompletedWorkoutBoxFuture<Result<Option<CompletedWorkout>, CompletedWorkoutError>> {
+        Box::pin(async { Ok(None) })
+    }
 }
 
 #[tokio::test]

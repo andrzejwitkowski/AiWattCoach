@@ -17,7 +17,7 @@ use aiwattcoach::{
         },
         completed_workouts::{
             CompletedWorkout, CompletedWorkoutError, CompletedWorkoutReadService,
-            CompletedWorkoutRepository,
+            CompletedWorkoutReadUseCases, CompletedWorkoutRepository,
         },
         external_sync::NoopExternalSyncStateRepository,
         identity::{Clock, IdentityUseCases},
@@ -165,6 +165,51 @@ pub(crate) async fn intervals_test_app_with_calendar_entries_completed_workouts_
         workout_summary_service,
     )
     .await
+}
+
+pub(crate) async fn intervals_test_app_with_completed_workout_read_and_summary_service(
+    identity_service: impl IdentityUseCases + 'static,
+    intervals_service: impl IntervalsUseCases + Clone + 'static,
+    completed_workout_service: Arc<dyn CompletedWorkoutReadUseCases>,
+    workout_summary_service: impl WorkoutSummaryUseCases + 'static,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let fixture = shared_frontend_fixture();
+    let completed_workout_repository = InMemoryCompletedWorkoutRepository::default();
+    let calendar_service = Arc::new(
+        CalendarService::new(
+            intervals_service.clone(),
+            InMemoryCalendarEntryViewRepository::default(),
+            EmptyTrainingPlanProjectionRepository,
+            NoopExternalSyncStateRepository,
+            TestClock,
+        )
+        .with_completed_workouts(completed_workout_repository),
+    );
+    let calendar_labels_service = Arc::new(CalendarLabelsService::new(EmptyCalendarLabelSource));
+    let manual_calendar_refresh_service = Arc::new(TestManualCalendarRefreshService);
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_identity_service(
+            Arc::new(identity_service),
+            "aiwattcoach_session",
+            "lax",
+            false,
+            24,
+        )
+        .with_calendar_service(calendar_service)
+        .with_calendar_labels_service(calendar_labels_service)
+        .with_manual_calendar_refresh_service(manual_calendar_refresh_service)
+        .with_completed_workout_service(completed_workout_service)
+        .with_workout_summary_service(Arc::new(workout_summary_service))
+        .with_intervals_service(Arc::new(intervals_service)),
+        fixture.dist_dir(),
+    )
 }
 
 async fn intervals_test_app_with_projections_calendar_entries_and_completed_workouts(
