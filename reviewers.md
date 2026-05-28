@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-28 | user + Copilot + CodeRabbit | PR #257 AI Coach weekly summary review follow-up
+
+- Problem: the first weekly-summary-range fix still had three review gaps: the frontend sent all visible-week ids in one request even though the backend now rejects batches above 31 ids, the visible-week regression test did not assert exclusivity and could still pass with an extra hidden fetch, and the backend error message hardcoded `31` instead of deriving it from the limit constant.
+- Fix: chunked visible-week summary fetches into `31`-id batches in `useWorkoutList`, added a focused frontend regression that exercises a dense 32-activity week plus a one-call assertion in the visible-week test, and changed the REST handler error payload to use a `String` so the max-id message is formatted from `MAX_LIST_SUMMARIES_WORKOUT_IDS`.
+- Prevention: whenever a backend endpoint gains a hard batch cap, audit all client call sites to batch to the same limit and add one regression that exceeds the cap from the client side. In tests that are meant to prove scope narrowing, assert call count as well as argument shape, and avoid hardcoding limit values in user-facing error strings when a local constant already defines the contract.
+
+### 2026-05-28 | user | AI Coach weekly workout-summary range and batch limit
+
+- Problem: the AI Coach sidebar shows one visible week at a time, but `useWorkoutList` eagerly fetched workout summaries for a 12-week lookback window (`12 * 7 = 84` activities) on initial load. That widened `/api/workout-summaries` far beyond the visible date range and amplified an already expensive backend alias-resolution path, leading to timeout-prone `524` failures and an empty AI Coach tab.
+- Fix: changed the frontend hook to fetch summary state only for workouts in the currently visible week, cache already loaded summaries by `workoutId`, and reuse that cache when paging back to previously visited weeks. Added frontend regressions for visible-week-only fetches and cache reuse, and added a REST guard that rejects `/api/workout-summaries` batches above 31 ids with a focused endpoint test.
+- Prevention: when a UI presents a concrete date range, do not preload status data for a much larger hidden history window unless the product explicitly requires it and the backend path is proven cheap. For batch sidebar/status endpoints, align request scope to the visible range first, then add a backend max-id guard so one client regression cannot fan out into timeout-scale work.
+
 ### 2026-05-28 | user | completed workout summary handler pre-check hid valid cross-source recap
 
 - Problem: even after the alias-aware workout-summary target resolution was fixed, `GET /api/completed-workouts/{activity_id}/summary` still performed a separate `completed_workout_service.get_completed_workout(...)` pre-check in the REST handler. That read path uses the authoritative completed-workout repository, which intentionally hides same-day duplicates and can prefer the Wahoo canonical workout over the Intervals alias. For the 2026-05-27 ride, the Intervals alias `i151959404` was therefore rejected at the handler boundary with `404` before the alias-aware `workout_summary_service.get_summary(...)` could resolve the existing recap stored under `459893292`.
