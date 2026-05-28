@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-28 | user + CodeRabbit | completed workout import matching and workout-summary test helper reuse
+
+- Problem: completed workout import resolved the canonical completed workout before propagating the strongest planned-workout match onto the incoming workout, and the resolver considered only direct `completed_workout_id` plus dedup-key observations. That let cross-source Intervals/Wahoo imports for the same workout split into two canonical completed workouts even when they already shared a `planned_workout_id` or `external_id`. The workout-summary alias regressions also duplicated the same in-memory completed-workout repository and fixture builder across two test files.
+- Fix: updated `src/domain/external_sync/import/mod.rs` so completed-workout import first applies the resolved planned-workout link onto the incoming workout, then resolves canonical matches in this order: direct `completed_workout_id`, unique `planned_workout_id`, unique `external_id`, and finally dedup-key observations. Added focused import regressions for planned-workout-id and external-id cross-source reuse, and extracted the shared completed-workout test repository/fixture into `tests/support/completed_workouts.rs` for reuse by both workout-summary test suites.
+- Prevention: when completed-workout canonicalization depends on fields that are computed earlier in the same import flow, propagate those fields onto the candidate entity before matching. For dual-provider workout imports, treat stable shared ids like `planned_workout_id` and provider `external_id` as stronger canonical anchors than fingerprint fallbacks, and when two tests need the same in-memory repository/fixture shape, extract it once instead of copying both the helper and the repository impl.
+
 ### 2026-05-27 | user | completed workout summary alias lookup after regeneration/edit
 
 - Problem: the completed-workout detail modal loads recap text through `GET /api/completed-workouts/{activity_id}/summary`, which passes an activity-scoped id like `i151959404` into workout-summary resolution. For the 2026-05-27 ride, the workout summary document persisted the recap under the Wahoo/external alias `459893292`, while the completed-workout target resolver exposed only the preferred/source activity id plus the canonical completed-workout id. That left the real external alias out of `equivalent_workout_ids`, so recap reads could return `404` even though Mongo still contained `workout_recap_text`.

@@ -420,6 +420,117 @@ async fn import_completed_workout_matches_even_when_other_provider_arrives_first
 }
 
 #[tokio::test]
+async fn import_completed_workout_reuses_existing_canonical_workout_for_matching_planned_workout_id(
+) {
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let mut existing = sample_completed_workout_with_id("wahoo-workout:459893292");
+    existing.source_activity_id = Some("459893292".to_string());
+    existing.planned_workout_id = Some("training-plan:user-1:source:2026-05-27".to_string());
+    existing.external_id = Some("459893292".to_string());
+    completed_workouts.upsert(existing.clone()).await.unwrap();
+    let service = external_import_service_without_refresh(
+        InMemoryPlannedWorkoutRepository::default(),
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
+        InMemoryObservationRepository::default(),
+        InMemorySyncStateRepository::default(),
+    );
+
+    let mut incoming = sample_completed_workout_with_id("intervals-activity:i151959404");
+    incoming.source_activity_id = Some("i151959404".to_string());
+    incoming.planned_workout_id = Some("training-plan:user-1:source:2026-05-27".to_string());
+    incoming.external_id = Some("459893292".to_string());
+    incoming.start_date_local = "2026-05-27T15:10:35".to_string();
+
+    let outcome = service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Intervals,
+                external_id: "459893292".to_string(),
+                normalized_payload_hash: "hash-intervals-planned-match".to_string(),
+                intervals_paired_event_id: None,
+                marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
+                workout: incoming,
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].completed_workout_id, "wahoo-workout:459893292");
+    assert_eq!(stored[0].source_activity_id.as_deref(), Some("i151959404"));
+    assert_eq!(
+        stored[0].planned_workout_id.as_deref(),
+        Some("training-plan:user-1:source:2026-05-27")
+    );
+    assert_eq!(
+        outcome.canonical_entity.entity_id,
+        "wahoo-workout:459893292"
+    );
+}
+
+#[tokio::test]
+async fn import_completed_workout_reuses_existing_canonical_workout_for_matching_external_id_without_planned_workout_id(
+) {
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let mut existing = sample_completed_workout_with_id("wahoo-workout:459893292");
+    existing.source_activity_id = Some("459893292".to_string());
+    existing.planned_workout_id = None;
+    existing.external_id = Some("459893292".to_string());
+    completed_workouts.upsert(existing.clone()).await.unwrap();
+    let service = external_import_service_without_refresh(
+        InMemoryPlannedWorkoutRepository::default(),
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
+        InMemoryObservationRepository::default(),
+        InMemorySyncStateRepository::default(),
+    );
+
+    let mut incoming = sample_completed_workout_with_id("intervals-activity:i151959404");
+    incoming.source_activity_id = Some("i151959404".to_string());
+    incoming.planned_workout_id = None;
+    incoming.external_id = Some("459893292".to_string());
+    incoming.start_date_local = "2026-05-27T15:10:35".to_string();
+
+    let outcome = service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Intervals,
+                external_id: "459893292".to_string(),
+                normalized_payload_hash: "hash-intervals-external-id-match".to_string(),
+                intervals_paired_event_id: None,
+                marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
+                workout: incoming,
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].completed_workout_id, "wahoo-workout:459893292");
+    assert_eq!(stored[0].source_activity_id.as_deref(), Some("i151959404"));
+    assert_eq!(stored[0].external_id.as_deref(), Some("459893292"));
+    assert_eq!(
+        outcome.canonical_entity.entity_id,
+        "wahoo-workout:459893292"
+    );
+}
+
+#[tokio::test]
 async fn import_completed_workout_uses_fingerprint_when_external_ids_do_not_help() {
     let service = external_import_service_without_refresh(
         InMemoryPlannedWorkoutRepository::default(),

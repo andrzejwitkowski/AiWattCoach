@@ -380,8 +380,9 @@ where
                 },
             )
             .await?;
+        let workout = apply_resolved_planned_workout_id(command.workout, resolved_link.as_ref());
         let resolved_target = self
-            .resolve_completed_workout_target(command.workout, dedup_key.as_deref())
+            .resolve_completed_workout_target(workout, dedup_key.as_deref())
             .await?;
         let mut workout = resolved_target.workout;
         let refresh_dates = resolved_target.refresh_dates;
@@ -588,6 +589,37 @@ where
             });
         }
 
+        if let Some(existing) = unique_completed_workout_match(
+            &stored_workouts,
+            incoming.planned_workout_id.as_deref(),
+            |existing, planned_workout_id| {
+                same_non_empty_option(
+                    existing.planned_workout_id.as_deref(),
+                    Some(planned_workout_id),
+                )
+            },
+            "planned_workout_id",
+        )? {
+            return Ok(ResolvedCompletedWorkoutTarget {
+                refresh_dates: completed_workout_refresh_dates(Some(&existing), &incoming),
+                workout: merge_completed_workout(existing, incoming),
+            });
+        }
+
+        if let Some(existing) = unique_completed_workout_match(
+            &stored_workouts,
+            incoming.external_id.as_deref(),
+            |existing, external_id| {
+                same_non_empty_option(existing.external_id.as_deref(), Some(external_id))
+            },
+            "external_id",
+        )? {
+            return Ok(ResolvedCompletedWorkoutTarget {
+                refresh_dates: completed_workout_refresh_dates(Some(&existing), &incoming),
+                workout: merge_completed_workout(existing, incoming),
+            });
+        }
+
         let Some(dedup_key) = dedup_key else {
             return Ok(ResolvedCompletedWorkoutTarget {
                 refresh_dates: completed_workout_refresh_dates(None, &incoming),
@@ -757,6 +789,52 @@ fn completed_workout_refresh_dates(
     dates.sort();
     dates.dedup();
     dates
+}
+
+fn apply_resolved_planned_workout_id(
+    mut workout: CompletedWorkout,
+    resolved_link: Option<&ResolvedPlannedWorkoutLink>,
+) -> CompletedWorkout {
+    if let Some(link) = resolved_link {
+        workout.planned_workout_id = Some(link.planned_workout_id.clone());
+    }
+
+    workout
+}
+
+fn unique_completed_workout_match<F>(
+    stored_workouts: &[CompletedWorkout],
+    candidate: Option<&str>,
+    predicate: F,
+    field_name: &str,
+) -> Result<Option<CompletedWorkout>, ExternalImportError>
+where
+    F: Fn(&CompletedWorkout, &str) -> bool,
+{
+    let Some(candidate) = candidate.filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+
+    let mut matches = stored_workouts
+        .iter()
+        .filter(|existing| predicate(existing, candidate))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    match matches.len() {
+        0 => Ok(None),
+        1 => Ok(matches.pop()),
+        _ => Err(ExternalImportError::CompletedWorkout(format!(
+            "ambiguous completed workout match for {field_name} '{candidate}'"
+        ))),
+    }
+}
+
+fn same_non_empty_option(left: Option<&str>, right: Option<&str>) -> bool {
+    match (left, right) {
+        (Some(left), Some(right)) => !left.is_empty() && left == right,
+        _ => false,
+    }
 }
 
 fn same_workout_name(left: Option<&str>, right: Option<&str>) -> bool {
