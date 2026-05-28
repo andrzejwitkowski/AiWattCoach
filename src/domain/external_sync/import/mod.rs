@@ -380,9 +380,14 @@ where
                 },
             )
             .await?;
-        let workout = apply_resolved_planned_workout_id(command.workout, resolved_link.as_ref());
         let resolved_target = self
-            .resolve_completed_workout_target(workout, dedup_key.as_deref())
+            .resolve_completed_workout_target(
+                command.workout,
+                resolved_link
+                    .as_ref()
+                    .map(|link| link.planned_workout_id.as_str()),
+                dedup_key.as_deref(),
+            )
             .await?;
         let mut workout = resolved_target.workout;
         let refresh_dates = resolved_target.refresh_dates;
@@ -570,6 +575,7 @@ where
     async fn resolve_completed_workout_target(
         &self,
         incoming: CompletedWorkout,
+        planned_workout_match_id: Option<&str>,
         dedup_key: Option<&str>,
     ) -> Result<ResolvedCompletedWorkoutTarget, ExternalImportError> {
         let stored_workouts = self
@@ -591,7 +597,7 @@ where
 
         if let Some(existing) = unique_completed_workout_match(
             &stored_workouts,
-            incoming.planned_workout_id.as_deref(),
+            planned_workout_match_id.or(incoming.planned_workout_id.as_deref()),
             |existing, planned_workout_id| {
                 same_non_empty_option(
                     existing.planned_workout_id.as_deref(),
@@ -789,17 +795,6 @@ fn completed_workout_refresh_dates(
     dates.sort();
     dates.dedup();
     dates
-}
-
-fn apply_resolved_planned_workout_id(
-    mut workout: CompletedWorkout,
-    resolved_link: Option<&ResolvedPlannedWorkoutLink>,
-) -> CompletedWorkout {
-    if let Some(link) = resolved_link {
-        workout.planned_workout_id = Some(link.planned_workout_id.clone());
-    }
-
-    workout
 }
 
 fn unique_completed_workout_match<F>(

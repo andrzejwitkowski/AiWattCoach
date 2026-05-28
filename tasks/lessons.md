@@ -6,6 +6,12 @@
 - Before concluding that a recap was deleted, inspect the live `workout_summaries` document and compare it against the exact id sent by the frontend summary endpoint. A missing recap in the UI can be a read-side alias gap even when Mongo still has `workout_recap_text`.
 - Reproduction for this class of bug should include dual identities for the same day/workout, for example one `intervals-activity:*` record and one `wahoo-workout:*`/external-id alias, then assert that reads from one id still find summaries persisted under the other.
 
+## 2026-05-28 - Canonical matching inputs must not silently upgrade link strength
+
+- If a completed-workout import needs an inferred `planned_workout_id` only to find the canonical completed workout, pass that id as lookup context instead of mutating the incoming workout before link selection finishes.
+- In this flow, mutating `workout.planned_workout_id` too early caused `persist_legacy_planned_workout_link(...)` to create a synthetic `Explicit` link, which incorrectly outranked real `Token` and `Heuristic` matches and overwrote legacy planned ids.
+- When canonical reuse and link persistence share one function, verify both outcomes explicitly after refactors: canonical record reuse and preserved `match_source` / legacy planned-id semantics.
+
 ## 2026-05-27 - LLM JSON envelope parsers must tolerate provider presentation noise
 
 - When a prompt asks for JSON, models may still wrap valid JSON in markdown fences, surround it with explanatory prose, or append harmless top-level metadata. Parser regressions should use the exact logged assistant content shape, not only ideal payloads.
@@ -15,6 +21,7 @@
 
 ## Review Fix Logging Loop
 
+- When observability logs drop a field for redaction or privacy, grep integration tests that assert on tracing JSON (`description_preview`, request previews, etc.) and update expectations in the same change that edits the `tracing::info!` fields.
 - When I implement a fix based on feedback from the user, Copilot, or CodeRabbit, I must record it in `reviewers.md`.
 - Each `reviewers.md` entry must state both the problem that was identified and the fix that was applied.
 - The purpose of this loop is to reduce repeated PR and review mistakes over time.

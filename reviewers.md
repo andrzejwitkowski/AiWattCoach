@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-28 | user | completed workout import matching follow-up after failing unit tests
+
+- Problem: the first completed-workout matching fix pushed `resolved_link.planned_workout_id` directly onto the incoming workout before canonical resolution. That made `persist_legacy_planned_workout_link(...)` synthesize a temporary `Explicit` link even for token and heuristic matches, which then outranked the real `resolved_link.match_source` and also overwrote legacy planned ids that should have been preserved when no better match existed.
+- Fix: changed `resolve_completed_workout_target(...)` to accept a separate planned-workout match candidate for canonical matching, while leaving the incoming workout unchanged until the normal `selected_link` resolution step. Canonical reuse can still match by resolved `planned_workout_id`, but link ranking and legacy planned-id preservation now continue to use the original explicit/token/heuristic flow.
+- Prevention: when a field is needed only as a temporary canonical-match anchor, pass it as explicit lookup context instead of mutating the entity before later ranking/merge steps run. In flows that both infer links and persist link strength, do not materialize inferred ids early if downstream code treats any preexisting planned id as legacy-explicit state.
+
 ### 2026-05-28 | user + CodeRabbit | completed workout import matching and workout-summary test helper reuse
 
 - Problem: completed workout import resolved the canonical completed workout before propagating the strongest planned-workout match onto the incoming workout, and the resolver considered only direct `completed_workout_id` plus dedup-key observations. That let cross-source Intervals/Wahoo imports for the same workout split into two canonical completed workouts even when they already shared a `planned_workout_id` or `external_id`. The workout-summary alias regressions also duplicated the same in-memory completed-workout repository and fixture builder across two test files.
