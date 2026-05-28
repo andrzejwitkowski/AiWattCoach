@@ -341,6 +341,60 @@ async fn get_completed_workout_summary_returns_404_for_other_users_workout() {
 }
 
 #[tokio::test]
+async fn get_completed_workout_summary_returns_recap_for_hidden_completed_workout_alias() {
+    let mut intervals_workout = sample_completed_workout(
+        "intervals-activity:i151959404",
+        Some("training-plan:user-1:i151639477:1779808255:2026-05-27".to_string()),
+    );
+    intervals_workout.source_activity_id = Some("i151959404".to_string());
+    intervals_workout.external_id = Some("459893292".to_string());
+
+    let mut wahoo_workout = sample_completed_workout(
+        "wahoo-workout:459893292",
+        Some("training-plan:user-1:i151639477:1779808255:2026-05-27".to_string()),
+    );
+    wahoo_workout.source_activity_id = Some("459893292".to_string());
+    wahoo_workout.external_id = Some("459893292".to_string());
+
+    let mut summary = sample_workout_summary("user-1", "459893292");
+    summary.workout_recap_text = Some("Cross-source recap survives hidden alias".to_string());
+    summary.workout_recap_provider = Some("deepseek".to_string());
+    summary.workout_recap_model = Some("deepseek-v4-pro".to_string());
+    summary.workout_recap_generated_at_epoch_seconds = Some(1_779_902_685);
+
+    let app = intervals_test_app_with_calendar_entries_completed_workouts_and_summary_service(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        InMemoryCalendarEntryViewRepository::default(),
+        InMemoryCompletedWorkoutRepository::with_workouts(vec![intervals_workout, wahoo_workout]),
+        TestWorkoutSummaryService::with_summaries(vec![summary]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/completed-workouts/i151959404/summary")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("workoutId").and_then(Value::as_str),
+        Some("i151959404")
+    );
+    assert_eq!(
+        body.get("text").and_then(Value::as_str),
+        Some("Cross-source recap survives hidden alias")
+    );
+}
+
+#[tokio::test]
 async fn list_completed_workouts_rejects_reversed_date_ranges() {
     let app = intervals_test_app_with_calendar_entries_and_completed_workouts(
         TestIdentityServiceWithSession::default(),

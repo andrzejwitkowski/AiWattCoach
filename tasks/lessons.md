@@ -12,6 +12,12 @@
 - In this flow, mutating `workout.planned_workout_id` too early caused `persist_legacy_planned_workout_link(...)` to create a synthetic `Explicit` link, which incorrectly outranked real `Token` and `Heuristic` matches and overwrote legacy planned ids.
 - When canonical reuse and link persistence share one function, verify both outcomes explicitly after refactors: canonical record reuse and preserved `match_source` / legacy planned-id semantics.
 
+## 2026-05-28 - Summary handlers must not pre-check through a narrower completed-workout reader
+
+- If a summary endpoint already delegates target validation and alias resolution to `WorkoutSummaryService`, do not add an extra `CompletedWorkoutReadService` existence check in the handler.
+- In this repo, `CompletedWorkoutReadService` can sit behind `AuthoritativeCompletedWorkoutRepository`, which intentionally hides same-day duplicate aliases. That is correct for canonical workout detail reads, but wrong as a gate for recap lookup by alias.
+- When one domain path is alias-aware and another is canonical-only or visibility-filtered, the handler must use the domain path that matches the endpoint contract as the single source of truth.
+
 ## 2026-05-27 - LLM JSON envelope parsers must tolerate provider presentation noise
 
 - When a prompt asks for JSON, models may still wrap valid JSON in markdown fences, surround it with explanatory prose, or append harmless top-level metadata. Parser regressions should use the exact logged assistant content shape, not only ideal payloads.

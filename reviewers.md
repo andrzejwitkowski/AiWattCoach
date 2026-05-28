@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-28 | user | completed workout summary handler pre-check hid valid cross-source recap
+
+- Problem: even after the alias-aware workout-summary target resolution was fixed, `GET /api/completed-workouts/{activity_id}/summary` still performed a separate `completed_workout_service.get_completed_workout(...)` pre-check in the REST handler. That read path uses the authoritative completed-workout repository, which intentionally hides same-day duplicates and can prefer the Wahoo canonical workout over the Intervals alias. For the 2026-05-27 ride, the Intervals alias `i151959404` was therefore rejected at the handler boundary with `404` before the alias-aware `workout_summary_service.get_summary(...)` could resolve the existing recap stored under `459893292`.
+- Fix: removed the redundant completed-workout pre-check from `src/adapters/rest/completed_workouts/handlers.rs` and added a focused REST regression for a hidden Intervals alias whose recap is stored under the Wahoo/external alias.
+- Prevention: if an endpoint's domain service already validates the target and resolves aliases, do not add a second transport-layer existence gate that goes through a narrower or differently filtered read path. For completed-workout summary reads specifically, the summary service must stay the single source of truth because authoritative completed-workout visibility intentionally hides duplicate aliases.
+
 ### 2026-05-28 | user | completed workout import matching follow-up after failing unit tests
 
 - Problem: the first completed-workout matching fix pushed `resolved_link.planned_workout_id` directly onto the incoming workout before canonical resolution. That made `persist_legacy_planned_workout_link(...)` synthesize a temporary `Explicit` link even for token and heuristic matches, which then outranked the real `resolved_link.match_source` and also overwrote legacy planned ids that should have been preserved when no better match existed.
