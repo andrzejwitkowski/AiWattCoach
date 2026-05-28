@@ -372,12 +372,27 @@ mod tests {
 
         fn list_by_user_id_and_date_range(
             &self,
-            _user_id: &str,
-            _oldest: &str,
-            _newest: &str,
+            user_id: &str,
+            oldest: &str,
+            newest: &str,
         ) -> CompletedWorkoutBoxFuture<Result<Vec<CompletedWorkout>, CompletedWorkoutError>>
         {
-            Box::pin(async { Ok(Vec::new()) })
+            let workout = self.workout.clone();
+            let user_id = user_id.to_string();
+            let oldest = oldest.to_string();
+            let newest = newest.to_string();
+            Box::pin(async move {
+                if workout.user_id != user_id {
+                    return Ok(Vec::new());
+                }
+
+                let workout_date = workout.start_date_local.get(..10).unwrap_or("");
+                if workout_date >= oldest.as_str() && workout_date <= newest.as_str() {
+                    Ok(vec![workout])
+                } else {
+                    Ok(Vec::new())
+                }
+            })
         }
 
         fn upsert(
