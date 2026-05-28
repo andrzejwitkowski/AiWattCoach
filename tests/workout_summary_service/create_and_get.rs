@@ -1,3 +1,4 @@
+use aiwattcoach::adapters::workout_summary_completed_target::CompletedWorkoutTargetAdapter;
 use aiwattcoach::domain::workout_summary::{
     SaveWorkflowCompletionPort, SaveWorkflowStatus, WorkoutRecap, WorkoutSummaryError,
     WorkoutSummaryRepository, WorkoutSummaryService, WorkoutSummaryUseCases,
@@ -8,6 +9,11 @@ use std::{
 };
 
 use tokio::time::{sleep, timeout};
+
+#[path = "../support/completed_workouts.rs"]
+mod completed_workout_support;
+
+use completed_workout_support::{completed_workout, InMemoryCompletedWorkoutRepository};
 
 use crate::shared::{
     existing_summary, existing_summary_with_finished_conversation,
@@ -529,6 +535,39 @@ async fn get_summary_reuses_equivalent_completed_workout_alias_without_duplicate
             "resolve_completed_workout_target:user-1:wahoo-workout:450868242".to_string(),
         ]
     );
+}
+
+#[tokio::test]
+async fn get_summary_reuses_cross_source_completed_workout_alias_for_requested_activity_id() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.workout_id = "459893292".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let completed_target = CompletedWorkoutTargetAdapter::new(
+        InMemoryCompletedWorkoutRepository::with_workouts(vec![
+            completed_workout(
+                "intervals-activity:i151959404",
+                Some("i151959404"),
+                Some("training-plan:user-1:source:2026-05-27"),
+                Some("459893292"),
+                "2026-05-27T15:10:35",
+            ),
+            completed_workout(
+                "wahoo-workout:459893292",
+                Some("459893292"),
+                Some("training-plan:user-1:source:2026-05-27"),
+                Some("459893292"),
+                "2026-05-27T13:10:35.000Z",
+            ),
+        ]),
+    );
+    let service = test_service(repository.clone())
+        .with_completed_workout_target_service(std::sync::Arc::new(completed_target));
+
+    let fetched = service.get_summary("user-1", "i151959404").await.unwrap();
+
+    assert_eq!(fetched.id, "summary-1");
+    assert_eq!(fetched.workout_id, "i151959404");
+    assert_eq!(repository.calls(), Vec::<String>::new());
 }
 
 #[tokio::test]

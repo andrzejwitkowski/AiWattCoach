@@ -1,5 +1,8 @@
 use crate::domain::{
-    completed_workouts::{canonical_completed_workout_id, CompletedWorkoutRepository},
+    completed_workouts::{
+        canonical_completed_workout_id, completed_workout_activity_id, CompletedWorkout,
+        CompletedWorkoutRepository,
+    },
     workout_summary::{
         BoxFuture, CompletedWorkoutTargetUseCases, ResolvedCompletedWorkoutTarget,
         WorkoutSummaryError,
@@ -44,31 +47,106 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
-            Ok(
-                resolve_completed_workout(&repository, &user_id, &workout_id)
-                    .await?
-                    .map(|workout| {
-                        let completed_workout_id = workout.completed_workout_id;
-                        let preferred_workout_id = workout
-                            .source_activity_id
-                            .unwrap_or_else(|| completed_workout_id.clone());
-                        let mut equivalent_workout_ids = vec![preferred_workout_id.clone()];
-                        if !equivalent_workout_ids.contains(&completed_workout_id) {
-                            equivalent_workout_ids.push(completed_workout_id);
-                        }
-                        if let Some(external_id) = workout.external_id {
-                            if !equivalent_workout_ids.contains(&external_id) {
-                                equivalent_workout_ids.push(external_id);
-                            }
-                        }
+            let Some(workout) =
+                resolve_completed_workout(&repository, &user_id, &workout_id).await?
+            else {
+                return Ok(None);
+            };
 
-                        ResolvedCompletedWorkoutTarget {
-                            preferred_workout_id,
-                            equivalent_workout_ids,
-                        }
-                    }),
-            )
+            let mut equivalent_workout_ids =
+                equivalent_workout_ids_for_workout(&repository, &user_id, &workout).await?;
+            let preferred_workout_id = workout
+                .source_activity_id
+                .clone()
+                .unwrap_or_else(|| workout.completed_workout_id.clone());
+            push_unique_workout_id(&mut equivalent_workout_ids, preferred_workout_id.clone());
+
+            Ok(Some(ResolvedCompletedWorkoutTarget {
+                preferred_workout_id,
+                equivalent_workout_ids,
+            }))
         })
+    }
+}
+
+async fn equivalent_workout_ids_for_workout<Repo>(
+    repository: &Repo,
+    user_id: &str,
+    workout: &CompletedWorkout,
+) -> Result<Vec<String>, WorkoutSummaryError>
+where
+    Repo: CompletedWorkoutRepository + Clone + Send + Sync + 'static,
+{
+    let mut equivalent_workout_ids = Vec::new();
+    push_unique_workout_id(
+        &mut equivalent_workout_ids,
+        workout
+            .source_activity_id
+            .clone()
+            .unwrap_or_else(|| workout.completed_workout_id.clone()),
+    );
+    push_unique_workout_id(
+        &mut equivalent_workout_ids,
+        workout.completed_workout_id.clone(),
+    );
+    if let Some(external_id) = workout.external_id.clone() {
+        push_unique_workout_id(&mut equivalent_workout_ids, external_id);
+    }
+
+    let siblings = repository
+        .list_by_user_id(user_id)
+        .await
+        .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+    for sibling in siblings {
+        if same_completed_workout_family(workout, &sibling) {
+            push_unique_workout_id(
+                &mut equivalent_workout_ids,
+                sibling
+                    .source_activity_id
+                    .clone()
+                    .unwrap_or_else(|| sibling.completed_workout_id.clone()),
+            );
+            push_unique_workout_id(&mut equivalent_workout_ids, sibling.completed_workout_id);
+            if let Some(external_id) = sibling.external_id {
+                push_unique_workout_id(&mut equivalent_workout_ids, external_id);
+            }
+        }
+    }
+
+    Ok(equivalent_workout_ids)
+}
+
+fn same_completed_workout_family(left: &CompletedWorkout, right: &CompletedWorkout) -> bool {
+    if left.user_id != right.user_id {
+        return false;
+    }
+
+    if left.completed_workout_id == right.completed_workout_id {
+        return true;
+    }
+
+    if same_non_empty_option(
+        left.planned_workout_id.as_deref(),
+        right.planned_workout_id.as_deref(),
+    ) {
+        return true;
+    }
+
+    same_non_empty_option(left.external_id.as_deref(), right.external_id.as_deref())
+        || completed_workout_activity_id(&left.completed_workout_id)
+            == completed_workout_activity_id(&right.completed_workout_id)
+}
+
+fn same_non_empty_option(left: Option<&str>, right: Option<&str>) -> bool {
+    match (left, right) {
+        (Some(left), Some(right)) => !left.is_empty() && left == right,
+        _ => false,
+    }
+}
+
+fn push_unique_workout_id(equivalent_workout_ids: &mut Vec<String>, workout_id: String) {
+    if !equivalent_workout_ids.contains(&workout_id) {
+        equivalent_workout_ids.push(workout_id);
     }
 }
 
