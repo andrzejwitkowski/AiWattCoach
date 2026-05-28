@@ -519,6 +519,46 @@ impl CompletedWorkoutTargetUseCases for RecordingCompletedWorkoutTargetService {
             Ok(resolved_targets.get(&workout_id).cloned())
         })
     }
+
+    fn resolve_completed_workout_target_in_scope(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        _alias_scope: &aiwattcoach::domain::workout_summary::CompletedWorkoutAliasScope,
+    ) -> aiwattcoach::domain::workout_summary::BoxFuture<
+        Result<Option<ResolvedCompletedWorkoutTarget>, WorkoutSummaryError>,
+    > {
+        self.resolve_completed_workout_target(user_id, workout_id)
+    }
+
+    fn resolve_completed_workout_targets_in_scope(
+        &self,
+        user_id: &str,
+        workout_ids: &[String],
+        _alias_scope: &aiwattcoach::domain::workout_summary::CompletedWorkoutAliasScope,
+    ) -> aiwattcoach::domain::workout_summary::BoxFuture<
+        Result<
+            std::collections::HashMap<String, ResolvedCompletedWorkoutTarget>,
+            WorkoutSummaryError,
+        >,
+    > {
+        let resolved_targets = self.resolved_targets.lock().unwrap().clone();
+        let calls = self.calls.clone();
+        let user_id = user_id.to_string();
+        let workout_ids = workout_ids.to_vec();
+        Box::pin(async move {
+            let mut resolved = std::collections::HashMap::new();
+            for workout_id in workout_ids {
+                calls.lock().unwrap().push(format!(
+                    "resolve_completed_workout_target:{user_id}:{workout_id}"
+                ));
+                if let Some(target) = resolved_targets.get(&workout_id).cloned() {
+                    resolved.insert(workout_id, target);
+                }
+            }
+            Ok(resolved)
+        })
+    }
 }
 
 impl RecordingTrainingPlanService {

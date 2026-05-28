@@ -11,15 +11,20 @@ where
     Time: Clock + Clone,
     Ids: IdGenerator + Clone,
 {
-    fn get_summary(
+    fn get_summary_with_options(
         &self,
         user_id: &str,
         workout_id: &str,
+        options: WorkoutSummaryGetOptions,
     ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
-        Box::pin(async move { service.get_summary_impl(&user_id, &workout_id).await })
+        Box::pin(async move {
+            service
+                .get_summary_impl(&user_id, &workout_id, options)
+                .await
+        })
     }
 
     fn create_summary(
@@ -33,14 +38,19 @@ where
         Box::pin(async move { service.create_summary_impl(&user_id, &workout_id).await })
     }
 
-    fn list_summaries(
+    fn list_summaries_with_options(
         &self,
         user_id: &str,
         workout_ids: Vec<String>,
+        options: WorkoutSummaryListOptions,
     ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
-        Box::pin(async move { service.list_summaries_impl(&user_id, workout_ids).await })
+        Box::pin(async move {
+            service
+                .list_summaries_impl(&user_id, workout_ids, options)
+                .await
+        })
     }
 
     fn update_rpe(

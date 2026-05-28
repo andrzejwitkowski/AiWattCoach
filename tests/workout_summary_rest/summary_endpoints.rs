@@ -16,7 +16,9 @@ use crate::shared::{
     TestWorkoutSummaryService,
 };
 use aiwattcoach::adapters::rest::WorkoutSummarySaveNotifier;
-use aiwattcoach::domain::workout_summary::{WorkoutSummaryRepository, WorkoutSummaryService};
+use aiwattcoach::domain::workout_summary::{
+    ConversationMessage, MessageRole, WorkoutSummaryRepository, WorkoutSummaryService,
+};
 
 #[tokio::test]
 async fn get_summary_requires_authentication() {
@@ -183,6 +185,56 @@ async fn list_summaries_returns_batch_results() {
     assert_eq!(
         summaries[1].get("workoutId").unwrap().as_str().unwrap(),
         "workout-1"
+    );
+}
+
+#[tokio::test]
+async fn list_summaries_metadata_view_omits_messages() {
+    let mut summary = sample_summary("workout-1");
+    summary.messages.push(ConversationMessage {
+        id: "coach-1".to_string(),
+        role: MessageRole::Coach,
+        content: "How did it feel?".to_string(),
+        questions: Vec::new(),
+        tool_call: None,
+        created_at_epoch_seconds: 1_700_000_010,
+    });
+
+    let app = workout_summary_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::with_summaries(vec![summary]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/workout-summaries?workoutIds=workout-1&view=metadata")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = get_json(response).await;
+    let summaries = body
+        .as_array()
+        .expect("metadata list response should be an array");
+    assert_eq!(summaries.len(), 1);
+    let summary = &summaries[0];
+    assert_eq!(
+        summary
+            .get("messages")
+            .and_then(|value| value.as_array())
+            .map_or(0, Vec::len),
+        0
+    );
+    assert_eq!(
+        summary.get("hasCoachMessage").and_then(Value::as_bool),
+        Some(true)
     );
 }
 

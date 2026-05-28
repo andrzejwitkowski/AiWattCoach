@@ -259,7 +259,7 @@ where
         workout_id: &str,
     ) -> Result<SaveSummaryResult, WorkoutSummaryError> {
         let target = self
-            .resolve_workout_summary_target(user_id, workout_id)
+            .resolve_workout_summary_target(user_id, workout_id, None)
             .await?;
         let existing = target
             .existing_summary

@@ -451,6 +451,24 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         })
     }
 
+    fn list_summaries_with_options(
+        &self,
+        user_id: &str,
+        workout_ids: Vec<String>,
+        _options: aiwattcoach::domain::workout_summary::WorkoutSummaryListOptions,
+    ) -> WorkoutSummaryBoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
+        self.list_summaries(user_id, workout_ids)
+    }
+
+    fn get_summary_with_options(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        _options: aiwattcoach::domain::workout_summary::WorkoutSummaryGetOptions,
+    ) -> WorkoutSummaryBoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        self.get_summary(user_id, workout_id)
+    }
+
     fn update_rpe(
         &self,
         _user_id: &str,

@@ -20,6 +20,15 @@ pub(in crate::adapters::rest) struct ListWorkoutSummariesQuery {
     // Keep alias for backward compatibility during transition.
     #[serde(rename = "workoutIds", alias = "eventIds")]
     pub workout_ids: String,
+    pub oldest: Option<String>,
+    pub newest: Option<String>,
+    pub view: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(in crate::adapters::rest) struct GetWorkoutSummaryQuery {
+    pub oldest: Option<String>,
+    pub newest: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -58,6 +67,9 @@ pub(super) struct WorkoutSummaryDto {
     #[serde(rename = "workoutId")]
     pub workout_id: String,
     pub rpe: Option<u8>,
+    #[serde(rename = "hasCoachMessage", skip_serializing_if = "Option::is_none")]
+    pub has_coach_message: Option<bool>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub messages: Vec<ConversationMessageDto>,
     #[serde(rename = "savedAtEpochSeconds")]
     pub saved_at_epoch_seconds: Option<i64>,

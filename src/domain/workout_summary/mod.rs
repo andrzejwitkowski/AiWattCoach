@@ -20,9 +20,10 @@ pub use model::{
 pub use ports::{BoxFuture, CoachReplyOperationRepository, WorkoutSummaryRepository};
 pub use save_completion_port::{NoopSaveWorkflowCompletionPort, SaveWorkflowCompletionPort};
 pub use service::{
-    workout_summary_coach_reply_task_handler, CompletedWorkoutTargetUseCases,
-    LatestCompletedActivityUseCases, ResolvedCompletedWorkoutTarget, SaveSummaryResult,
-    SaveWorkflowResult, SaveWorkflowStatus, SchedulerBackedWorkoutSummaryService,
+    workout_summary_coach_reply_task_handler, CompletedWorkoutAliasScope,
+    CompletedWorkoutTargetUseCases, LatestCompletedActivityUseCases,
+    ResolvedCompletedWorkoutTarget, SaveSummaryResult, SaveWorkflowResult, SaveWorkflowStatus,
+    SchedulerBackedWorkoutSummaryService, WorkoutSummaryGetOptions, WorkoutSummaryListOptions,
     WorkoutSummaryService, WorkoutSummaryUseCases,
 };
 pub(crate) use service::{

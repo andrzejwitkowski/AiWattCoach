@@ -222,8 +222,8 @@ describe('workoutSummary api', () => {
   it('reopens workout summary', async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
-        summary: summaryFixture,
-        workflow: { recapStatus: 'unchanged', planStatus: 'unchanged', messages: [] },
+        ...summaryFixture,
+        savedAtEpochSeconds: null,
       }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -232,7 +232,7 @@ describe('workoutSummary api', () => {
 
     const result = await reopenWorkoutSummary('', '101');
 
-    expect(result.summary.savedAtEpochSeconds).toBeNull();
+    expect(result.savedAtEpochSeconds).toBeNull();
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/workout-summaries/101/state',
       expect.objectContaining({

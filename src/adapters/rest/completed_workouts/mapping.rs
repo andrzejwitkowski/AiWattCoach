@@ -31,6 +31,15 @@ pub(super) fn map_completed_workout_to_dto(workout: CompletedWorkout) -> Activit
     map_activity_to_dto(map_completed_workout_to_activity(workout))
 }
 
+pub(super) fn map_completed_workout_list_to_dto(workout: CompletedWorkout) -> ActivityDto {
+    let mut activity = map_completed_workout_to_activity(workout);
+    activity.stream_types.clear();
+    activity.details.streams.clear();
+    activity.details.interval_summary.clear();
+    activity.details.skyline_chart.clear();
+    map_activity_to_dto(activity)
+}
+
 pub(super) fn map_completed_workout_summary_to_dto(
     summary: WorkoutSummary,
 ) -> Option<CompletedWorkoutSummaryDto> {

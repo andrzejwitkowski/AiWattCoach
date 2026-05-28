@@ -45,7 +45,7 @@ where
         content: String,
     ) -> Result<PersistedUserMessage, WorkoutSummaryError> {
         let target = self
-            .resolve_workout_summary_target(user_id, workout_id)
+            .resolve_workout_summary_target(user_id, workout_id, None)
             .await?;
 
         let user_message = self
@@ -95,7 +95,7 @@ where
         user_message_id: String,
     ) -> Result<CoachReply, WorkoutSummaryError> {
         let target = self
-            .resolve_workout_summary_target(user_id, workout_id)
+            .resolve_workout_summary_target(user_id, workout_id, None)
             .await?;
 
         let user_message = self

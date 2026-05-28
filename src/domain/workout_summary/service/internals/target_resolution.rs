@@ -23,6 +23,7 @@ where
         &self,
         user_id: &str,
         workout_id: &str,
+        alias_scope: Option<CompletedWorkoutAliasScope>,
     ) -> Result<ResolvedWorkoutSummaryTarget, WorkoutSummaryError> {
         let Some(service) = &self.completed_workout_target_service else {
             return self
@@ -30,10 +31,20 @@ where
                 .await;
         };
 
-        let Some(resolved_target) = service
-            .resolve_completed_workout_target(user_id, workout_id)
-            .await?
-        else {
+        let resolved_target = match alias_scope.as_ref() {
+            Some(scope) => {
+                service
+                    .resolve_completed_workout_target_in_scope(user_id, workout_id, scope)
+                    .await?
+            }
+            None => {
+                service
+                    .resolve_completed_workout_target(user_id, workout_id)
+                    .await?
+            }
+        };
+
+        let Some(resolved_target) = resolved_target else {
             return Err(not_completed_workout_target_error());
         };
 
@@ -46,7 +57,7 @@ where
         user_id: &str,
         workout_id: &str,
     ) -> Result<(), WorkoutSummaryError> {
-        self.resolve_workout_summary_target(user_id, workout_id)
+        self.resolve_workout_summary_target(user_id, workout_id, None)
             .await
             .map(|_| ())
     }
