@@ -90,7 +90,12 @@ async fn create_summary_returns_created_summary() {
         body.get("workoutId").unwrap().as_str().unwrap(),
         "workout-1"
     );
-    assert!(body.get("messages").unwrap().as_array().unwrap().is_empty());
+    assert_eq!(
+        body.get("messages")
+            .and_then(|value| value.as_array())
+            .map_or(0, Vec::len),
+        0,
+    );
 }
 
 #[tokio::test]
