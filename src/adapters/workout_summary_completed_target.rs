@@ -1,13 +1,17 @@
+use std::collections::HashMap;
+
 use crate::domain::{
     completed_workouts::{
         canonical_completed_workout_id, completed_workout_activity_id, CompletedWorkout,
         CompletedWorkoutRepository,
     },
     workout_summary::{
-        BoxFuture, CompletedWorkoutTargetUseCases, ResolvedCompletedWorkoutTarget,
-        WorkoutSummaryError,
+        BoxFuture, CompletedWorkoutAliasScope, CompletedWorkoutTargetUseCases,
+        ResolvedCompletedWorkoutTarget, WorkoutSummaryError,
     },
 };
+
+const ALIAS_SCOPE_MARGIN_DAYS: i64 = 7;
 
 #[derive(Clone)]
 pub struct CompletedWorkoutTargetAdapter<Repo> {
@@ -54,7 +58,7 @@ where
             };
 
             let mut equivalent_workout_ids =
-                equivalent_workout_ids_for_workout(&repository, &user_id, &workout).await?;
+                equivalent_workout_ids_for_workout(&repository, &user_id, &workout, None).await?;
             let preferred_workout_id = workout
                 .source_activity_id
                 .clone()
@@ -67,16 +71,144 @@ where
             }))
         })
     }
+
+    fn resolve_completed_workout_target_in_scope(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        alias_scope: &CompletedWorkoutAliasScope,
+    ) -> BoxFuture<Result<Option<ResolvedCompletedWorkoutTarget>, WorkoutSummaryError>> {
+        let repository = self.repository.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let alias_scope = alias_scope.clone();
+        Box::pin(async move {
+            let siblings = load_alias_scope_siblings(&repository, &user_id, &alias_scope).await?;
+            let Some(workout) =
+                resolve_completed_workout_from_siblings(&siblings, &user_id, &workout_id)
+            else {
+                return Ok(None);
+            };
+
+            let mut equivalent_workout_ids =
+                equivalent_workout_ids_for_workout_with_siblings(&workout, &siblings);
+            let preferred_workout_id = workout
+                .source_activity_id
+                .clone()
+                .unwrap_or_else(|| workout.completed_workout_id.clone());
+            push_unique_workout_id(&mut equivalent_workout_ids, preferred_workout_id.clone());
+
+            Ok(Some(ResolvedCompletedWorkoutTarget {
+                preferred_workout_id,
+                equivalent_workout_ids,
+            }))
+        })
+    }
+
+    fn resolve_completed_workout_targets_in_scope(
+        &self,
+        user_id: &str,
+        workout_ids: &[String],
+        alias_scope: &CompletedWorkoutAliasScope,
+    ) -> BoxFuture<Result<HashMap<String, ResolvedCompletedWorkoutTarget>, WorkoutSummaryError>>
+    {
+        let repository = self.repository.clone();
+        let user_id = user_id.to_string();
+        let workout_ids = workout_ids.to_vec();
+        let alias_scope = alias_scope.clone();
+        Box::pin(async move {
+            let siblings = load_alias_scope_siblings(&repository, &user_id, &alias_scope).await?;
+            let mut resolved = HashMap::new();
+
+            for workout_id in workout_ids {
+                let Some(workout) =
+                    resolve_completed_workout_from_siblings(&siblings, &user_id, &workout_id)
+                else {
+                    continue;
+                };
+
+                let mut equivalent_workout_ids =
+                    equivalent_workout_ids_for_workout_with_siblings(&workout, &siblings);
+                let preferred_workout_id = workout
+                    .source_activity_id
+                    .clone()
+                    .unwrap_or_else(|| workout.completed_workout_id.clone());
+                push_unique_workout_id(&mut equivalent_workout_ids, preferred_workout_id.clone());
+
+                resolved.insert(
+                    workout_id,
+                    ResolvedCompletedWorkoutTarget {
+                        preferred_workout_id,
+                        equivalent_workout_ids,
+                    },
+                );
+            }
+
+            Ok(resolved)
+        })
+    }
+}
+
+async fn load_alias_scope_siblings<Repo>(
+    repository: &Repo,
+    user_id: &str,
+    alias_scope: &CompletedWorkoutAliasScope,
+) -> Result<Vec<CompletedWorkout>, WorkoutSummaryError>
+where
+    Repo: CompletedWorkoutRepository + Clone + Send + Sync + 'static,
+{
+    let expanded_scope = alias_scope.with_alias_margin_days(ALIAS_SCOPE_MARGIN_DAYS);
+    repository
+        .list_by_user_id_and_date_range(user_id, &expanded_scope.oldest, &expanded_scope.newest)
+        .await
+        .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))
+}
+
+fn resolve_completed_workout_from_siblings(
+    siblings: &[CompletedWorkout],
+    user_id: &str,
+    workout_id: &str,
+) -> Option<CompletedWorkout> {
+    if let Some(workout) = siblings.iter().find(|workout| {
+        workout.user_id == user_id && workout.source_activity_id.as_deref() == Some(workout_id)
+    }) {
+        return Some(workout.clone());
+    }
+
+    let canonical_id = canonical_completed_workout_id(workout_id);
+    siblings
+        .iter()
+        .find(|workout| workout.user_id == user_id && workout.completed_workout_id == canonical_id)
+        .cloned()
 }
 
 async fn equivalent_workout_ids_for_workout<Repo>(
     repository: &Repo,
     user_id: &str,
     workout: &CompletedWorkout,
+    alias_scope: Option<&CompletedWorkoutAliasScope>,
 ) -> Result<Vec<String>, WorkoutSummaryError>
 where
     Repo: CompletedWorkoutRepository + Clone + Send + Sync + 'static,
 {
+    let siblings = if let Some(scope) = alias_scope {
+        load_alias_scope_siblings(repository, user_id, scope).await?
+    } else {
+        repository
+            .list_by_user_id(user_id)
+            .await
+            .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?
+    };
+
+    Ok(equivalent_workout_ids_for_workout_with_siblings(
+        workout, &siblings,
+    ))
+}
+
+fn equivalent_workout_ids_for_workout_with_siblings(
+    workout: &CompletedWorkout,
+    siblings: &[CompletedWorkout],
+) -> Vec<String> {
     let mut equivalent_workout_ids = Vec::new();
     push_unique_workout_id(
         &mut equivalent_workout_ids,
@@ -93,12 +225,8 @@ where
         push_unique_workout_id(&mut equivalent_workout_ids, external_id);
     }
 
-    let siblings = repository
-        .list_by_user_id(user_id)
-        .await
-        .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
     for sibling in siblings {
-        if same_completed_workout_family(workout, &sibling) {
+        if same_completed_workout_family(workout, sibling) {
             push_unique_workout_id(
                 &mut equivalent_workout_ids,
                 sibling
@@ -106,14 +234,17 @@ where
                     .clone()
                     .unwrap_or_else(|| sibling.completed_workout_id.clone()),
             );
-            push_unique_workout_id(&mut equivalent_workout_ids, sibling.completed_workout_id);
-            if let Some(external_id) = sibling.external_id {
+            push_unique_workout_id(
+                &mut equivalent_workout_ids,
+                sibling.completed_workout_id.clone(),
+            );
+            if let Some(external_id) = sibling.external_id.clone() {
                 push_unique_workout_id(&mut equivalent_workout_ids, external_id);
             }
         }
     }
 
-    Ok(equivalent_workout_ids)
+    equivalent_workout_ids
 }
 
 fn same_completed_workout_family(left: &CompletedWorkout, right: &CompletedWorkout) -> bool {
@@ -182,7 +313,7 @@ mod tests {
             BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout, CompletedWorkoutDetails,
             CompletedWorkoutError, CompletedWorkoutMetrics, CompletedWorkoutRepository,
         },
-        workout_summary::CompletedWorkoutTargetUseCases,
+        workout_summary::{CompletedWorkoutAliasScope, CompletedWorkoutTargetUseCases},
     };
 
     #[derive(Clone)]
@@ -241,12 +372,27 @@ mod tests {
 
         fn list_by_user_id_and_date_range(
             &self,
-            _user_id: &str,
-            _oldest: &str,
-            _newest: &str,
+            user_id: &str,
+            oldest: &str,
+            newest: &str,
         ) -> CompletedWorkoutBoxFuture<Result<Vec<CompletedWorkout>, CompletedWorkoutError>>
         {
-            Box::pin(async { Ok(Vec::new()) })
+            let workout = self.workout.clone();
+            let user_id = user_id.to_string();
+            let oldest = oldest.to_string();
+            let newest = newest.to_string();
+            Box::pin(async move {
+                if workout.user_id != user_id {
+                    return Ok(Vec::new());
+                }
+
+                let workout_date = workout.start_date_local.get(..10).unwrap_or("");
+                if workout_date >= oldest.as_str() && workout_date <= newest.as_str() {
+                    Ok(vec![workout])
+                } else {
+                    Ok(Vec::new())
+                }
+            })
         }
 
         fn upsert(
@@ -306,5 +452,52 @@ mod tests {
                 "459893292".to_string(),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn resolve_completed_workout_target_in_scope_uses_date_range_lookup() {
+        let repository = StubCompletedWorkoutRepository {
+            workout: CompletedWorkout {
+                completed_workout_id: "wahoo-workout:459893292".to_string(),
+                user_id: "user-1".to_string(),
+                start_date_local: "2026-05-27T13:10:35.000Z".to_string(),
+                source_activity_id: Some("i151959404".to_string()),
+                planned_workout_id: None,
+                name: Some("Aerobic Endurance".to_string()),
+                description: None,
+                activity_type: Some("Ride".to_string()),
+                external_id: Some("459893292".to_string()),
+                trainer: false,
+                duration_seconds: Some(5283),
+                distance_meters: Some(44_718.45),
+                metrics: CompletedWorkoutMetrics::default(),
+                details: CompletedWorkoutDetails {
+                    intervals: Vec::new(),
+                    interval_groups: Vec::new(),
+                    streams: Vec::new(),
+                    interval_summary: Vec::new(),
+                    skyline_chart: Vec::new(),
+                    power_zone_times: Vec::new(),
+                    heart_rate_zone_times: Vec::new(),
+                    pace_zone_times: Vec::new(),
+                    gap_zone_times: Vec::new(),
+                },
+                details_unavailable_reason: None,
+                power_curve_5s: None,
+            },
+        };
+        let adapter = CompletedWorkoutTargetAdapter::new(repository);
+        let scope = CompletedWorkoutAliasScope {
+            oldest: "2026-05-20".to_string(),
+            newest: "2026-05-28".to_string(),
+        };
+
+        let resolved = adapter
+            .resolve_completed_workout_target_in_scope("user-1", "i151959404", &scope)
+            .await
+            .expect("resolver should succeed")
+            .expect("target should resolve");
+
+        assert_eq!(resolved.preferred_workout_id, "i151959404");
     }
 }

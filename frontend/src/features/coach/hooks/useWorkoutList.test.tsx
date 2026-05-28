@@ -40,6 +40,14 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+const metadataListOptions = expect.objectContaining({
+  view: 'metadata',
+  range: expect.objectContaining({
+    oldest: expect.any(String),
+    newest: expect.any(String),
+  }),
+});
+
 const eventFixture: IntervalEvent = {
   id: 101,
   startDateLocal: '2026-03-24T09:00:00',
@@ -172,7 +180,7 @@ describe('useWorkoutList', () => {
     expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 23), new Date(2026, 2, 29)));
     expect(result.current.items).toHaveLength(2);
     expect(result.current.items[0]?.hasConversation).toBe(true);
-    expect(listWorkoutSummaries).toHaveBeenCalledWith('', ['activity-101', 'activity-102']);
+    expect(listWorkoutSummaries).toHaveBeenCalledWith('', ['activity-101', 'activity-102'], metadataListOptions);
   });
 
   it('keeps activities whose matched event has an unknown category', async () => {
@@ -239,6 +247,7 @@ describe('useWorkoutList', () => {
       1,
       '',
       ['activity-200', 'activity-201', 'activity-202', 'activity-203', 'activity-204', 'activity-205'],
+      metadataListOptions,
     );
 
     act(() => {
@@ -256,6 +265,7 @@ describe('useWorkoutList', () => {
       2,
       '',
       ['activity-206', 'activity-207', 'activity-208', 'activity-209'],
+      metadataListOptions,
     );
 
     act(() => {
@@ -354,7 +364,7 @@ describe('useWorkoutList', () => {
     expect(result.current.items[0]?.event?.actualWorkout?.activityId).toBe('activity-linked');
   });
 
-  it('reuses cached activities on refresh without re-fetching', async () => {
+  it('re-fetches activities on refresh', async () => {
     vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
     vi.mocked(listActivities).mockResolvedValue([
       {
@@ -381,7 +391,7 @@ describe('useWorkoutList', () => {
     });
 
     expect(result.current.items[0]?.activity?.name).toBe('Cached result');
-    expect(listActivities).toHaveBeenCalledTimes(1);
+    expect(listActivities).toHaveBeenCalledTimes(2);
   });
 
   it('refresh clears stale visible-week summaries omitted by the next batch response', async () => {
@@ -473,8 +483,14 @@ describe('useWorkoutList', () => {
         1,
         '',
         activities.slice(0, 31).map((activity) => activity.id),
+        metadataListOptions,
       );
-      expect(listWorkoutSummaries).toHaveBeenNthCalledWith(2, '', [activities[31]!.id]);
+      expect(listWorkoutSummaries).toHaveBeenNthCalledWith(
+        2,
+        '',
+        [activities[31]!.id],
+        metadataListOptions,
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -635,7 +651,7 @@ describe('useWorkoutList', () => {
     expect(result.current.items).toHaveLength(1);
     expect(result.current.items[0]?.id).toBe('activity-990');
     expect(result.current.items[0]?.summary?.workoutId).toBe('activity-990');
-    expect(listWorkoutSummaries).toHaveBeenCalledWith('', ['activity-990']);
+    expect(listWorkoutSummaries).toHaveBeenCalledWith('', ['activity-990'], metadataListOptions);
   });
 
   it('loads summaries only for the currently visible week', async () => {
@@ -686,7 +702,7 @@ describe('useWorkoutList', () => {
       });
 
       expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 23), new Date(2026, 2, 29)));
-      expect(listWorkoutSummaries).toHaveBeenCalledWith('', ['activity-current-week']);
+      expect(listWorkoutSummaries).toHaveBeenCalledWith('', ['activity-current-week'], metadataListOptions);
       expect(listWorkoutSummaries).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();

@@ -14,6 +14,7 @@ import {
   intervalActivitySchema,
   intervalEventSchema,
   intervalEventsResponseSchema,
+  listCompletedWorkoutsQuerySchema,
   listEventsQuerySchema,
   updateActivityRequestSchema,
   updateIntervalEventRequestSchema,
@@ -89,7 +90,7 @@ export async function deleteEvent(apiBaseUrl: string, eventId: number) {
 }
 
 export async function listActivities(apiBaseUrl: string, query: unknown) {
-  const validated = listEventsQuerySchema.parse(query);
+  const validated = listCompletedWorkoutsQuerySchema.parse(query);
   const path = `/api/completed-workouts?${toQueryString(validated)}`;
   const data = await get(apiBaseUrl, path);
   return intervalActivitiesResponseSchema.parse(data);

@@ -122,6 +122,10 @@ export const listEventsQuerySchema = z.object({
   newest: dateSchema,
 });
 
+export const listCompletedWorkoutsQuerySchema = listEventsQuerySchema.extend({
+  detail: z.literal('list').optional(),
+});
+
 export const createIntervalEventRequestSchema = z.object({
   category: intervalCategorySchema,
   startDateLocal: dateSchema,

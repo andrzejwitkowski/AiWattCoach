@@ -1,7 +1,9 @@
 use super::checkpoint::{parse_terminal_coach_reply_checkpoint, parse_terminal_task_error};
 use super::*;
 use crate::domain::task_scheduler::{parse_failed_or_error_message, ResultTaskHandler};
-use crate::domain::workout_summary::SaveSummaryResult;
+use crate::domain::workout_summary::{
+    SaveSummaryResult, WorkoutSummaryGetOptions, WorkoutSummaryListOptions,
+};
 
 #[derive(Clone)]
 struct CoachReplyTaskResultHandler<Base> {
@@ -175,12 +177,14 @@ where
     Time: Clock,
     Ids: IdGenerator,
 {
-    fn get_summary(
+    fn get_summary_with_options(
         &self,
         user_id: &str,
         workout_id: &str,
+        options: WorkoutSummaryGetOptions,
     ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
-        self.base.get_summary(user_id, workout_id)
+        self.base
+            .get_summary_with_options(user_id, workout_id, options)
     }
 
     fn create_summary(
@@ -191,12 +195,14 @@ where
         self.base.create_summary(user_id, workout_id)
     }
 
-    fn list_summaries(
+    fn list_summaries_with_options(
         &self,
         user_id: &str,
         workout_ids: Vec<String>,
+        options: WorkoutSummaryListOptions,
     ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
-        self.base.list_summaries(user_id, workout_ids)
+        self.base
+            .list_summaries_with_options(user_id, workout_ids, options)
     }
 
     fn update_rpe(

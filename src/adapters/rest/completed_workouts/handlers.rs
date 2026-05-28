@@ -14,6 +14,7 @@ use super::mapping::{map_completed_workout_summary_to_dto, map_completed_workout
 pub(crate) struct ListCompletedWorkoutsQuery {
     pub oldest: String,
     pub newest: String,
+    pub detail: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -56,13 +57,21 @@ pub(crate) async fn list_completed_workouts(
         .list_completed_workouts(&user_id, &query.oldest, &query.newest)
         .await
     {
-        Ok(workouts) => Json(
-            workouts
-                .into_iter()
-                .map(map_completed_workout_to_dto)
-                .collect::<Vec<_>>(),
-        )
-        .into_response(),
+        Ok(workouts) => {
+            let list_view = query.detail.as_deref() == Some("list");
+            let payload = if list_view {
+                workouts
+                    .into_iter()
+                    .map(super::mapping::map_completed_workout_list_to_dto)
+                    .collect::<Vec<_>>()
+            } else {
+                workouts
+                    .into_iter()
+                    .map(map_completed_workout_to_dto)
+                    .collect::<Vec<_>>()
+            };
+            Json(payload).into_response()
+        }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

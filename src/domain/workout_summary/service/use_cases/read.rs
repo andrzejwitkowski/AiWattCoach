@@ -1,10 +1,6 @@
-use futures::{stream, StreamExt, TryStreamExt};
-
 use std::collections::HashSet;
 
 use super::*;
-
-const LIST_SUMMARIES_TARGET_CHECK_CONCURRENCY: usize = 8;
 
 struct ListSummaryLookup {
     requested_workout_id: String,
@@ -22,9 +18,10 @@ where
         &self,
         user_id: &str,
         workout_id: &str,
+        options: WorkoutSummaryGetOptions,
     ) -> Result<WorkoutSummary, WorkoutSummaryError> {
         let target = self
-            .resolve_workout_summary_target(user_id, workout_id)
+            .resolve_workout_summary_target(user_id, workout_id, options.alias_scope)
             .await?;
         let summary = target
             .existing_summary
@@ -38,7 +35,7 @@ where
         workout_id: &str,
     ) -> Result<WorkoutSummary, WorkoutSummaryError> {
         let target = self
-            .resolve_workout_summary_target(user_id, workout_id)
+            .resolve_workout_summary_target(user_id, workout_id, None)
             .await?;
 
         if let Some(existing) = target.existing_summary {
@@ -69,22 +66,23 @@ where
         &self,
         user_id: &str,
         workout_ids: Vec<String>,
+        options: WorkoutSummaryListOptions,
     ) -> Result<Vec<WorkoutSummary>, WorkoutSummaryError> {
-        let lookup_requests = stream::iter(workout_ids.into_iter().map(|workout_id| {
-            let service = self.clone();
-            let user_id = user_id.to_string();
-            async move {
-                service
-                    .resolve_list_summary_lookup(&user_id, workout_id)
-                    .await
+        let lookup_requests = if let Some(alias_scope) = options.alias_scope.clone() {
+            self.resolve_list_summary_lookups_in_scope(user_id, &workout_ids, &alias_scope)
+                .await?
+        } else {
+            let mut lookup_requests = Vec::new();
+            for workout_id in workout_ids {
+                if let Some(lookup) = self
+                    .resolve_list_summary_lookup(user_id, workout_id)
+                    .await?
+                {
+                    lookup_requests.push(lookup);
+                }
             }
-        }))
-        .buffered(LIST_SUMMARIES_TARGET_CHECK_CONCURRENCY)
-        .try_collect::<Vec<_>>()
-        .await?
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
+            lookup_requests
+        };
 
         let mut lookup_workout_ids = Vec::new();
         let mut seen_lookup_workout_ids = HashSet::new();
@@ -131,7 +129,60 @@ where
                         .cmp(&left.created_at_epoch_seconds)
                 })
         });
+
         Ok(summaries)
+    }
+
+    async fn resolve_list_summary_lookups_in_scope(
+        &self,
+        user_id: &str,
+        workout_ids: &[String],
+        alias_scope: &CompletedWorkoutAliasScope,
+    ) -> Result<Vec<ListSummaryLookup>, WorkoutSummaryError> {
+        let Some(service) = &self.completed_workout_target_service else {
+            return Ok(workout_ids
+                .iter()
+                .map(|workout_id| ListSummaryLookup {
+                    requested_workout_id: workout_id.clone(),
+                    lookup_workout_ids: vec![workout_id.clone()],
+                })
+                .collect());
+        };
+
+        let resolved_targets = service
+            .resolve_completed_workout_targets_in_scope(user_id, workout_ids, alias_scope)
+            .await?;
+
+        Ok(workout_ids
+            .iter()
+            .filter_map(|workout_id| {
+                let resolved_target = resolved_targets.get(workout_id)?;
+                let mut lookup_workout_ids = Vec::new();
+                let mut seen_lookup_workout_ids = HashSet::new();
+                push_unique_list_summary_lookup_workout_id(
+                    &mut lookup_workout_ids,
+                    &mut seen_lookup_workout_ids,
+                    resolved_target.preferred_workout_id.clone(),
+                );
+                push_unique_list_summary_lookup_workout_id(
+                    &mut lookup_workout_ids,
+                    &mut seen_lookup_workout_ids,
+                    workout_id.clone(),
+                );
+                for equivalent_workout_id in &resolved_target.equivalent_workout_ids {
+                    push_unique_list_summary_lookup_workout_id(
+                        &mut lookup_workout_ids,
+                        &mut seen_lookup_workout_ids,
+                        equivalent_workout_id.clone(),
+                    );
+                }
+
+                Some(ListSummaryLookup {
+                    requested_workout_id: workout_id.clone(),
+                    lookup_workout_ids,
+                })
+            })
+            .collect())
     }
 
     async fn resolve_list_summary_lookup(
@@ -186,7 +237,7 @@ where
         rpe: u8,
     ) -> Result<WorkoutSummary, WorkoutSummaryError> {
         let target = self
-            .resolve_workout_summary_target(user_id, workout_id)
+            .resolve_workout_summary_target(user_id, workout_id, None)
             .await?;
         let rpe = validate_rpe(rpe)?;
         let existing = target
@@ -212,7 +263,7 @@ where
         workout_id: &str,
     ) -> Result<WorkoutSummary, WorkoutSummaryError> {
         let target = self
-            .resolve_workout_summary_target(user_id, workout_id)
+            .resolve_workout_summary_target(user_id, workout_id, None)
             .await?;
         let existing = target
             .existing_summary
@@ -237,7 +288,7 @@ where
         recap: WorkoutRecap,
     ) -> Result<WorkoutSummary, WorkoutSummaryError> {
         let target = self
-            .resolve_workout_summary_target(user_id, workout_id)
+            .resolve_workout_summary_target(user_id, workout_id, None)
             .await?;
         let existing = target
             .existing_summary

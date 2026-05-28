@@ -6,17 +6,23 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::{config::AppState, domain::workout_summary::WorkoutSummaryUseCases};
+use crate::{
+    config::AppState,
+    domain::workout_summary::{
+        CompletedWorkoutAliasScope, WorkoutSummaryGetOptions, WorkoutSummaryListOptions,
+        WorkoutSummaryUseCases,
+    },
+};
 
 use super::{
     dto::{
-        ListWorkoutSummariesQuery, SendMessageRequest, SetSavedStateRequest, UpdateRpeRequest,
-        WorkoutSummaryPath, WorkoutSummaryStateResponse,
+        GetWorkoutSummaryQuery, ListWorkoutSummariesQuery, SendMessageRequest,
+        SetSavedStateRequest, UpdateRpeRequest, WorkoutSummaryPath, WorkoutSummaryStateResponse,
     },
     error::map_workout_summary_error,
     mapping::{
-        map_save_summary_result_to_dto, map_send_message_result_to_dto, map_summary_to_dto,
-        unchanged_save_summary_result,
+        map_save_summary_result_to_dto, map_send_message_result_to_dto,
+        map_summary_metadata_to_dto, map_summary_to_dto, unchanged_save_summary_result,
     },
 };
 
@@ -46,10 +52,27 @@ fn workout_summary_service(
     state.workout_summary_service.as_ref()
 }
 
+fn parse_alias_scope(
+    oldest: Option<String>,
+    newest: Option<String>,
+) -> Option<CompletedWorkoutAliasScope> {
+    let oldest = oldest?;
+    let newest = newest?;
+    if !super::super::intervals::is_valid_date(&oldest)
+        || !super::super::intervals::is_valid_date(&newest)
+        || oldest > newest
+    {
+        return None;
+    }
+
+    Some(CompletedWorkoutAliasScope { oldest, newest })
+}
+
 pub async fn get_summary(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(path): Path<WorkoutSummaryPath>,
+    Query(query): Query<GetWorkoutSummaryQuery>,
 ) -> Response {
     let user_id = match resolve_user_id(&state, &headers).await {
         Ok(user_id) => user_id,
@@ -60,7 +83,14 @@ pub async fn get_summary(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
-    match service.get_summary(&user_id, &path.workout_id).await {
+    let options = WorkoutSummaryGetOptions {
+        alias_scope: parse_alias_scope(query.oldest, query.newest),
+    };
+
+    match service
+        .get_summary_with_options(&user_id, &path.workout_id, options)
+        .await
+    {
         Ok(summary) => Json(map_summary_to_dto(summary)).into_response(),
         Err(error) => map_workout_summary_error(&error),
     }
@@ -127,14 +157,29 @@ pub async fn list_summaries(
             .into_response();
     }
 
-    match service.list_summaries(&user_id, workout_ids).await {
-        Ok(summaries) => Json(
-            summaries
-                .into_iter()
-                .map(map_summary_to_dto)
-                .collect::<Vec<_>>(),
-        )
-        .into_response(),
+    let metadata_only = query.view.as_deref() == Some("metadata");
+    let options = WorkoutSummaryListOptions {
+        alias_scope: parse_alias_scope(query.oldest, query.newest),
+    };
+
+    match service
+        .list_summaries_with_options(&user_id, workout_ids, options)
+        .await
+    {
+        Ok(summaries) => {
+            let payload = if metadata_only {
+                summaries
+                    .into_iter()
+                    .map(map_summary_metadata_to_dto)
+                    .collect::<Vec<_>>()
+            } else {
+                summaries
+                    .into_iter()
+                    .map(map_summary_to_dto)
+                    .collect::<Vec<_>>()
+            };
+            Json(payload).into_response()
+        }
         Err(error) => map_workout_summary_error(&error),
     }
 }

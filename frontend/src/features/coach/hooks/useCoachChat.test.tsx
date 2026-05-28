@@ -601,8 +601,8 @@ describe('useCoachChat', () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     vi.mocked(getWorkoutSummary).mockResolvedValue({ ...summaryFixture, savedAtEpochSeconds: 3 });
     vi.mocked(reopenWorkoutSummary).mockResolvedValue({
-      summary: summaryFixture,
-      workflow: { recapStatus: 'unchanged', planStatus: 'unchanged', messages: [] },
+      ...summaryFixture,
+      savedAtEpochSeconds: null,
     });
 
     const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));

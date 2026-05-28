@@ -13,11 +13,29 @@ pub(super) fn map_summary_to_dto(summary: WorkoutSummary) -> WorkoutSummaryDto {
         id: summary.id,
         workout_id: summary.workout_id,
         rpe: summary.rpe,
+        has_coach_message: None,
         messages: summary
             .messages
             .into_iter()
             .map(map_message_to_dto)
             .collect(),
+        saved_at_epoch_seconds: summary.saved_at_epoch_seconds,
+        created_at_epoch_seconds: summary.created_at_epoch_seconds,
+        updated_at_epoch_seconds: summary.updated_at_epoch_seconds,
+    }
+}
+
+pub(super) fn map_summary_metadata_to_dto(summary: WorkoutSummary) -> WorkoutSummaryDto {
+    let has_coach_message = summary
+        .messages
+        .iter()
+        .any(|message| message.role == MessageRole::Coach);
+    WorkoutSummaryDto {
+        id: summary.id,
+        workout_id: summary.workout_id,
+        rpe: summary.rpe,
+        has_coach_message: Some(has_coach_message),
+        messages: Vec::new(),
         saved_at_epoch_seconds: summary.saved_at_epoch_seconds,
         created_at_epoch_seconds: summary.created_at_epoch_seconds,
         updated_at_epoch_seconds: summary.updated_at_epoch_seconds,

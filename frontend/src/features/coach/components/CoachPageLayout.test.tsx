@@ -7,6 +7,7 @@ import * as calendarHooks from '../../calendar/hooks/useCalendarData';
 import * as useWorkoutListModule from '../hooks/useWorkoutList';
 import * as useCoachChatModule from '../hooks/useCoachChat';
 import type { CoachWorkoutListItem, WorkoutSummary } from '../types';
+import { CoachSessionCacheProvider } from '../context/CoachSessionCache';
 import { CoachPageLayout } from './CoachPageLayout';
 
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -91,8 +92,10 @@ function setupMocks(opts?: { planStatus?: 'generated' | 'processing' | 'skipped'
   vi.mocked(useWorkoutListModule.useWorkoutList).mockReturnValue({
     items: [defaultWorkoutItem()],
     state: 'ready',
+    summariesState: 'ready',
     error: null,
     weekLabel: 'Mar 10 - Mar 16',
+    visibleWeekRange: { oldest: '2025-03-10', newest: '2025-03-16' },
     canGoToNewerWeek: false,
     goToOlderWeek: vi.fn(),
     goToNewerWeek: vi.fn(),
@@ -140,7 +143,11 @@ describe('CoachPageLayout', () => {
   it('invalidates caches after save with generated plan', async () => {
     const { invalidateCalendarCache, invalidateAll } = setupMocks({ planStatus: 'generated' });
 
-    render(<CoachPageLayout apiBaseUrl="http://localhost:3000" />);
+    render(
+      <CoachSessionCacheProvider>
+        <CoachPageLayout apiBaseUrl="http://localhost:3000" />
+      </CoachSessionCacheProvider>,
+    );
     fireEvent.click(screen.getByRole('button', { name: /save as workout summary/i }));
 
     await waitFor(() => expect(invalidateCalendarCache).toHaveBeenCalledTimes(1));
@@ -155,7 +162,11 @@ describe('CoachPageLayout', () => {
   ])('does not invalidate caches when plan status is %s', async (planStatus) => {
     const { invalidateCalendarCache, invalidateAll, refresh } = setupMocks({ planStatus: planStatus as never });
 
-    render(<CoachPageLayout apiBaseUrl="http://localhost:3000" />);
+    render(
+      <CoachSessionCacheProvider>
+        <CoachPageLayout apiBaseUrl="http://localhost:3000" />
+      </CoachSessionCacheProvider>,
+    );
     fireEvent.click(screen.getByRole('button', { name: /save as workout summary/i }));
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
@@ -166,7 +177,11 @@ describe('CoachPageLayout', () => {
   it('does not invalidate caches when save returns null', async () => {
     const { invalidateCalendarCache, invalidateAll } = setupMocks({ saveSummaryResult: null });
 
-    render(<CoachPageLayout apiBaseUrl="http://localhost:3000" />);
+    render(
+      <CoachSessionCacheProvider>
+        <CoachPageLayout apiBaseUrl="http://localhost:3000" />
+      </CoachSessionCacheProvider>,
+    );
     fireEvent.click(screen.getByRole('button', { name: /save as workout summary/i }));
 
     await waitFor(() => expect(invalidateCalendarCache).not.toHaveBeenCalled());

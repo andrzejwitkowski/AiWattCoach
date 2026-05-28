@@ -38,7 +38,9 @@ pub trait WorkoutSummaryUseCases: Send + Sync {
         &self,
         user_id: &str,
         workout_id: &str,
-    ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>>;
+    ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        self.get_summary_with_options(user_id, workout_id, WorkoutSummaryGetOptions::default())
+    }
 
     fn create_summary(
         &self,
@@ -46,11 +48,27 @@ pub trait WorkoutSummaryUseCases: Send + Sync {
         workout_id: &str,
     ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>>;
 
+    fn list_summaries_with_options(
+        &self,
+        user_id: &str,
+        workout_ids: Vec<String>,
+        options: WorkoutSummaryListOptions,
+    ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>>;
+
     fn list_summaries(
         &self,
         user_id: &str,
         workout_ids: Vec<String>,
-    ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>>;
+    ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
+        self.list_summaries_with_options(user_id, workout_ids, WorkoutSummaryListOptions::default())
+    }
+
+    fn get_summary_with_options(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        options: WorkoutSummaryGetOptions,
+    ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>>;
 
     fn update_rpe(
         &self,
@@ -113,6 +131,45 @@ pub struct ResolvedCompletedWorkoutTarget {
     pub equivalent_workout_ids: Vec<String>,
 }
 
+/// Date window for resolving completed-workout alias families without scanning full user history.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CompletedWorkoutAliasScope {
+    pub oldest: String,
+    pub newest: String,
+}
+
+impl CompletedWorkoutAliasScope {
+    pub fn with_alias_margin_days(&self, margin_days: i64) -> Self {
+        use chrono::{Duration, NaiveDate};
+
+        let expanded_oldest = NaiveDate::parse_from_str(&self.oldest, "%Y-%m-%d")
+            .ok()
+            .and_then(|date| date.checked_sub_signed(Duration::days(margin_days)))
+            .map(|date| date.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| self.oldest.clone());
+        let expanded_newest = NaiveDate::parse_from_str(&self.newest, "%Y-%m-%d")
+            .ok()
+            .and_then(|date| date.checked_add_signed(Duration::days(margin_days)))
+            .map(|date| date.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| self.newest.clone());
+
+        Self {
+            oldest: expanded_oldest,
+            newest: expanded_newest,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WorkoutSummaryListOptions {
+    pub alias_scope: Option<CompletedWorkoutAliasScope>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WorkoutSummaryGetOptions {
+    pub alias_scope: Option<CompletedWorkoutAliasScope>,
+}
+
 pub trait CompletedWorkoutTargetUseCases: Send + Sync {
     fn is_completed_workout_target(
         &self,
@@ -137,6 +194,27 @@ pub trait CompletedWorkoutTargetUseCases: Send + Sync {
                 }))
         })
     }
+
+    fn resolve_completed_workout_target_in_scope(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        _alias_scope: &CompletedWorkoutAliasScope,
+    ) -> BoxFuture<Result<Option<ResolvedCompletedWorkoutTarget>, WorkoutSummaryError>> {
+        self.resolve_completed_workout_target(user_id, workout_id)
+    }
+
+    fn resolve_completed_workout_targets_in_scope(
+        &self,
+        user_id: &str,
+        workout_ids: &[String],
+        alias_scope: &CompletedWorkoutAliasScope,
+    ) -> BoxFuture<
+        Result<
+            std::collections::HashMap<String, ResolvedCompletedWorkoutTarget>,
+            WorkoutSummaryError,
+        >,
+    >;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

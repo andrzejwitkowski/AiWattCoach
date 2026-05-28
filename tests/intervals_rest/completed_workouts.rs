@@ -67,6 +67,63 @@ async fn list_completed_workouts_returns_canonical_workouts_for_authenticated_us
 }
 
 #[tokio::test]
+async fn list_completed_workouts_detail_list_omits_streams() {
+    let app = intervals_test_app_with_calendar_entries_and_completed_workouts(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        InMemoryCalendarEntryViewRepository::default(),
+        InMemoryCompletedWorkoutRepository::with_workouts(vec![sample_completed_workout(
+            "activity-11",
+            None,
+        )]),
+    )
+    .await;
+
+    let full_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/completed-workouts?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(full_response.status(), StatusCode::OK);
+    let full_body: Value = get_json(full_response).await;
+    let full_streams = full_body.as_array().unwrap()[0]
+        .get("details")
+        .unwrap()
+        .get("streams")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert!(!full_streams.is_empty());
+
+    let list_response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/completed-workouts?oldest=2026-03-01&newest=2026-03-31&detail=list")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_body: Value = get_json(list_response).await;
+    let list_streams = list_body.as_array().unwrap()[0]
+        .get("details")
+        .unwrap()
+        .get("streams")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert!(list_streams.is_empty());
+}
+
+#[tokio::test]
 async fn list_completed_workouts_excludes_other_users_workouts() {
     let mut other_user_workout = sample_completed_workout("activity-99", None);
     other_user_workout.user_id = "user-2".to_string();
