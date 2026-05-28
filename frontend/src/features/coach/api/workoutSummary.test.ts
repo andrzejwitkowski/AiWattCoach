@@ -222,8 +222,12 @@ describe('workoutSummary api', () => {
   it('reopens workout summary', async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
-        ...summaryFixture,
-        savedAtEpochSeconds: null,
+        summary: { ...summaryFixture, savedAtEpochSeconds: null },
+        workflow: {
+          recapStatus: 'unchanged',
+          planStatus: 'unchanged',
+          messages: [],
+        },
       }), {
         status: 200,
         headers: { 'content-type': 'application/json' },

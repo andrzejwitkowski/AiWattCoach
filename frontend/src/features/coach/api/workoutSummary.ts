@@ -103,7 +103,7 @@ export async function reopenWorkoutSummary(apiBaseUrl: string, workoutId: string
     `/api/workout-summaries/${normalizeWorkoutTargetId(workoutId)}/state`,
     { saved: false },
   );
-  return workoutSummarySchema.parse(data);
+  return saveWorkoutSummaryResponseSchema.parse(data).summary;
 }
 
 export async function sendWorkoutSummaryMessage(apiBaseUrl: string, workoutId: string, payload: unknown) {
