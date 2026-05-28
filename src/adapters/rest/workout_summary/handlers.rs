@@ -20,6 +20,8 @@ use super::{
     },
 };
 
+const MAX_LIST_SUMMARIES_WORKOUT_IDS: usize = 31;
+
 #[derive(Serialize)]
 struct ErrorResponse {
     error: &'static str,
@@ -105,6 +107,16 @@ pub async fn list_summaries(
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 error: "workoutIds must contain at least one workout id",
+            }),
+        )
+            .into_response();
+    }
+
+    if workout_ids.len() > MAX_LIST_SUMMARIES_WORKOUT_IDS {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "workoutIds must contain at most 31 workout ids",
             }),
         )
             .into_response();

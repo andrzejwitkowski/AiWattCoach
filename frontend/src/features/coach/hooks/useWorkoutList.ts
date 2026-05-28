@@ -87,11 +87,9 @@ function inferEventIdHint(activity: IntervalActivity): string | null {
 function buildWorkoutItems(
   events: IntervalEvent[],
   activities: IntervalActivity[],
-  summaries: WorkoutSummary[],
 ): CoachWorkoutListItem[] {
   const eventsSorted = [...events].sort((left, right) => right.startDateLocal.localeCompare(left.startDateLocal));
   const activitiesSorted = [...activities].sort((left, right) => right.startDateLocal.localeCompare(left.startDateLocal));
-  const summariesById = new Map(summaries.map((summary) => [summary.workoutId, summary]));
   const activitiesByDate = new Map<string, IntervalActivity[]>();
   const eventsByDate = new Map<string, IntervalEvent[]>();
   const eventsByActualWorkoutActivityId = new Map<string, IntervalEvent[]>();
@@ -175,7 +173,6 @@ function buildWorkoutItems(
 
   const items: CoachWorkoutListItem[] = activitiesSorted.map((activity) => {
     const matchedEvent = activityEventMatches.get(activity.id) ?? null;
-    const summary = summariesById.get(activity.id) ?? null;
     const id = activity.id;
 
     return {
@@ -184,9 +181,9 @@ function buildWorkoutItems(
       startDateLocal: activity.startDateLocal,
       event: matchedEvent,
       activity,
-      summary,
-      hasSummary: summary !== null,
-      hasConversation: summary?.messages.some((message) => message.role === 'coach') ?? false,
+      summary: null,
+      hasSummary: false,
+      hasConversation: false,
     };
   });
 
@@ -195,16 +192,15 @@ function buildWorkoutItems(
       continue;
     }
 
-    const summary = summariesById.get(String(event.id)) ?? null;
     items.push({
-      id: summary?.workoutId ?? String(event.id),
+      id: String(event.id),
       source: 'event',
       startDateLocal: event.startDateLocal,
       event,
       activity: null,
-      summary,
-      hasSummary: summary !== null,
-      hasConversation: summary?.messages.some((message) => message.role === 'coach') ?? false,
+      summary: null,
+      hasSummary: false,
+      hasConversation: false,
     });
   }
 
@@ -223,36 +219,43 @@ function isWithinWeek(value: string, weekStart: Date): boolean {
   return dateKey >= weekStartKey && dateKey <= weekEndKey;
 }
 
-function applySummaryToItem(item: CoachWorkoutListItem, summary: WorkoutSummary): CoachWorkoutListItem {
-  if (item.activity) {
-    if (item.activity.id !== summary.workoutId) {
-      return item;
-    }
-
-    return {
-      ...item,
-      id: item.activity.id,
-      summary,
-      hasSummary: true,
-      hasConversation: summary.messages.some((message) => message.role === 'coach'),
-    };
-  }
-
-  const hasSummaryMatch = item.id === summary.workoutId
-    || item.summary?.workoutId === summary.workoutId
-    || String(item.event?.id ?? '') === summary.workoutId;
-
-  if (!hasSummaryMatch) {
-    return item;
-  }
-
+function withSummaryState(item: CoachWorkoutListItem, summary: WorkoutSummary | null): CoachWorkoutListItem {
   return {
     ...item,
-    id: summary.workoutId,
     summary,
-    hasSummary: true,
-    hasConversation: summary.messages.some((message) => message.role === 'coach'),
+    hasSummary: summary !== null,
+    hasConversation: summary?.messages.some((message) => message.role === 'coach') ?? false,
   };
+}
+
+function buildVisibleItems(
+  allItems: CoachWorkoutListItem[],
+  visibleWeekStart: Date,
+  summaryCache: Map<string, WorkoutSummary>,
+): CoachWorkoutListItem[] {
+  const todayDateKey = toDateKey(new Date());
+
+  return allItems
+    .filter(
+      (item) =>
+        item.source === 'activity'
+        && extractDateKey(item.startDateLocal) <= todayDateKey
+        && isWithinWeek(item.startDateLocal, visibleWeekStart),
+    )
+    .map((item) => withSummaryState(item, summaryCache.get(item.id) ?? null));
+}
+
+function mergeSummaryCache(
+  current: Map<string, WorkoutSummary>,
+  summaries: WorkoutSummary[],
+): Map<string, WorkoutSummary> {
+  const next = new Map(current);
+
+  for (const summary of summaries) {
+    next.set(summary.workoutId, summary);
+  }
+
+  return next;
 }
 
 function defaultVisibleWeekStart(items: CoachWorkoutListItem[], currentWeekStart: Date): Date {
@@ -269,12 +272,21 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
   const [currentWeekStart, setCurrentWeekStart] = useState(() => getMondayOfWeek(new Date()));
   const [visibleWeekStart, setVisibleWeekStart] = useState(() => getMondayOfWeek(new Date()));
   const [allItems, setAllItems] = useState<CoachWorkoutListItem[]>([]);
-  const [items, setItems] = useState<CoachWorkoutListItem[]>([]);
+  const [summaryCache, setSummaryCache] = useState<Map<string, WorkoutSummary>>(() => new Map());
+  const [loadedSummaryIds, setLoadedSummaryIds] = useState<Set<string>>(() => new Set());
+  const [hasLoadedWorkouts, setHasLoadedWorkouts] = useState(false);
   const [state, setState] = useState<WorkoutListState>('loading');
   const [error, setError] = useState<string | null>(null);
   const currentWeekStartRef = useRef(currentWeekStart);
   const requestIdRef = useRef(0);
+  const summaryRequestIdRef = useRef(0);
   const contextErrorRef = useRef(contextError);
+
+  const items = useMemo(() => buildVisibleItems(allItems, visibleWeekStart, summaryCache), [
+    allItems,
+    visibleWeekStart,
+    summaryCache,
+  ]);
 
   useEffect(() => {
     contextErrorRef.current = contextError;
@@ -283,6 +295,7 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
   const loadRecentWorkouts = useCallback(async () => {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    setHasLoadedWorkouts(false);
     setState('loading');
     setError(null);
 
@@ -312,17 +325,14 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
       const recentActivities = [...activities]
         .sort((left, right) => right.startDateLocal.localeCompare(left.startDateLocal))
         .slice(0, WORKOUT_LOOKBACK_WEEKS * WORKOUT_PAGE_SIZE);
-      const summaries = await listWorkoutSummaries(
-        apiBaseUrl,
-        recentActivities.map((activity) => activity.id),
-      );
-      const nextItems = buildWorkoutItems(workoutEvents, recentActivities, summaries);
+      const nextItems = buildWorkoutItems(workoutEvents, recentActivities);
 
       if (requestId !== requestIdRef.current) {
         return;
       }
 
       setAllItems(nextItems);
+      setLoadedSummaryIds(new Set());
       const nextVisibleWeekStart = defaultVisibleWeekStart(nextItems, latestCurrentWeekStart);
       const previousCurrentWeekStart = currentWeekStartRef.current;
       currentWeekStartRef.current = latestCurrentWeekStart;
@@ -334,7 +344,7 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
 
         return current;
       });
-      setState('ready');
+      setHasLoadedWorkouts(true);
     } catch (loadError) {
       if (requestId !== requestIdRef.current) {
         return;
@@ -360,16 +370,70 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
   }, [loadRecentWorkouts]);
 
   useEffect(() => {
-    const todayDateKey = toDateKey(new Date());
-    setItems(
-      allItems.filter(
-        (item) =>
-          item.source === 'activity'
-          && extractDateKey(item.startDateLocal) <= todayDateKey
-          && isWithinWeek(item.startDateLocal, visibleWeekStart),
-      ),
-    );
-  }, [allItems, visibleWeekStart]);
+    if (!hasLoadedWorkouts) {
+      return;
+    }
+
+    const summaryTargetIds = items.map((item) => item.id);
+
+    if (summaryTargetIds.length === 0) {
+      setState('ready');
+      setError(null);
+      return;
+    }
+
+    const missingSummaryIds = summaryTargetIds.filter((workoutId) => !loadedSummaryIds.has(workoutId));
+
+    if (missingSummaryIds.length === 0) {
+      setState('ready');
+      setError(null);
+      return;
+    }
+
+    const requestId = summaryRequestIdRef.current + 1;
+    summaryRequestIdRef.current = requestId;
+    setState('loading');
+    setError(null);
+
+    void (async () => {
+      try {
+        const summaries = await listWorkoutSummaries(apiBaseUrl, missingSummaryIds);
+
+        if (requestId !== summaryRequestIdRef.current) {
+          return;
+        }
+
+        setSummaryCache((current) => mergeSummaryCache(current, summaries));
+        setLoadedSummaryIds((current) => {
+          const next = new Set(current);
+
+          for (const workoutId of missingSummaryIds) {
+            next.add(workoutId);
+          }
+
+          return next;
+        });
+        setState('ready');
+      } catch (loadError) {
+        if (requestId !== summaryRequestIdRef.current) {
+          return;
+        }
+
+        if (loadError instanceof AuthenticationError) {
+          window.location.href = '/';
+          return;
+        }
+
+        if (loadError instanceof HttpError && loadError.status === 422) {
+          setState('credentials-required');
+          return;
+        }
+
+        setState('error');
+        setError(loadError instanceof Error ? loadError.message : 'Unknown error');
+      }
+    })();
+  }, [apiBaseUrl, hasLoadedWorkouts, items, loadedSummaryIds]);
 
   const weekLabel = useMemo(() => {
     return formatRangeLabel(visibleWeekStart, addDays(visibleWeekStart, 6));
@@ -377,7 +441,12 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
   const canGoToNewerWeek = visibleWeekStart < currentWeekStart;
 
   const replaceSummary = useCallback((summary: WorkoutSummary) => {
-    setAllItems((current) => current.map((item) => applySummaryToItem(item, summary)));
+    setSummaryCache((current) => mergeSummaryCache(current, [summary]));
+    setLoadedSummaryIds((current) => {
+      const next = new Set(current);
+      next.add(summary.workoutId);
+      return next;
+    });
   }, []);
 
   return {

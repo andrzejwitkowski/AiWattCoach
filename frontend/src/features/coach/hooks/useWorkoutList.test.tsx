@@ -172,6 +172,7 @@ describe('useWorkoutList', () => {
     expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 23), new Date(2026, 2, 29)));
     expect(result.current.items).toHaveLength(2);
     expect(result.current.items[0]?.hasConversation).toBe(true);
+    expect(listWorkoutSummaries).toHaveBeenCalledWith('', ['activity-101', 'activity-102']);
   });
 
   it('keeps activities whose matched event has an unknown category', async () => {
@@ -234,6 +235,11 @@ describe('useWorkoutList', () => {
 
     expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 23), new Date(2026, 2, 29)));
     expect(result.current.items).toHaveLength(6);
+    expect(listWorkoutSummaries).toHaveBeenNthCalledWith(
+      1,
+      '',
+      ['activity-200', 'activity-201', 'activity-202', 'activity-203', 'activity-204', 'activity-205'],
+    );
 
     act(() => {
       result.current.goToOlderWeek();
@@ -246,6 +252,21 @@ describe('useWorkoutList', () => {
     expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 16), new Date(2026, 2, 22)));
     expect(result.current.items[0]?.event?.name).toBe('Workout 7');
     expect(result.current.canGoToNewerWeek).toBe(true);
+    expect(listWorkoutSummaries).toHaveBeenNthCalledWith(
+      2,
+      '',
+      ['activity-206', 'activity-207', 'activity-208', 'activity-209'],
+    );
+
+    act(() => {
+      result.current.goToNewerWeek();
+    });
+
+    await waitFor(() => {
+      expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 23), new Date(2026, 2, 29)));
+    });
+
+    expect(listWorkoutSummaries).toHaveBeenCalledTimes(2);
   });
 
   it('matches hinted activities to their event without leaving duplicates behind', async () => {
@@ -519,6 +540,60 @@ describe('useWorkoutList', () => {
     expect(result.current.items[0]?.id).toBe('activity-990');
     expect(result.current.items[0]?.summary?.workoutId).toBe('activity-990');
     expect(listWorkoutSummaries).toHaveBeenCalledWith('', ['activity-990']);
+  });
+
+  it('loads summaries only for the currently visible week', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-26T12:00:00Z'));
+
+    try {
+      vi.mocked(listEvents).mockResolvedValue([
+        {
+          ...eventFixture,
+          id: 701,
+          startDateLocal: '2026-03-30T09:00:00',
+          name: 'Next Week Ride',
+        },
+        {
+          ...eventFixture,
+          id: 702,
+          startDateLocal: '2026-03-24T09:00:00',
+          name: 'Current Week Ride',
+        },
+      ]);
+      vi.mocked(listActivities).mockResolvedValue([
+        {
+          ...activityFixture,
+          id: 'activity-next-week',
+          startDateLocal: '2026-03-30T09:00:00',
+          startDate: '2026-03-30T08:00:00Z',
+          name: 'Next Week Ride',
+        },
+        {
+          ...activityFixture,
+          id: 'activity-current-week',
+          startDateLocal: '2026-03-24T09:00:00',
+          startDate: '2026-03-24T08:00:00Z',
+          name: 'Current Week Ride',
+        },
+      ]);
+      vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
+
+      const { result } = renderWorkoutListHook();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+
+      await waitFor(() => {
+        expect(result.current.state).toBe('ready');
+      });
+
+      expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 23), new Date(2026, 2, 29)));
+      expect(listWorkoutSummaries).toHaveBeenCalledWith('', ['activity-current-week']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('uses an activity-only item when no related event exists', async () => {

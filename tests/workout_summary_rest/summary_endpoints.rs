@@ -249,6 +249,39 @@ async fn list_summaries_rejects_empty_workout_ids() {
 }
 
 #[tokio::test]
+async fn list_summaries_rejects_more_than_31_workout_ids() {
+    let app = workout_summary_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::default(),
+    )
+    .await;
+
+    let workout_ids = (1..=32)
+        .map(|index| format!("workout-{index}"))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/workout-summaries?workoutIds={workout_ids}"))
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("error").and_then(Value::as_str),
+        Some("workoutIds must contain at most 31 workout ids")
+    );
+}
+
+#[tokio::test]
 async fn update_rpe_returns_updated_summary() {
     let app = workout_summary_test_app(
         TestIdentityServiceWithSession::default(),

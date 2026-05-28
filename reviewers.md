@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-28 | user | AI Coach weekly workout-summary range and batch limit
+
+- Problem: the AI Coach sidebar shows one visible week at a time, but `useWorkoutList` eagerly fetched workout summaries for a 12-week lookback window (`12 * 7 = 84` activities) on initial load. That widened `/api/workout-summaries` far beyond the visible date range and amplified an already expensive backend alias-resolution path, leading to timeout-prone `524` failures and an empty AI Coach tab.
+- Fix: changed the frontend hook to fetch summary state only for workouts in the currently visible week, cache already loaded summaries by `workoutId`, and reuse that cache when paging back to previously visited weeks. Added frontend regressions for visible-week-only fetches and cache reuse, and added a REST guard that rejects `/api/workout-summaries` batches above 31 ids with a focused endpoint test.
+- Prevention: when a UI presents a concrete date range, do not preload status data for a much larger hidden history window unless the product explicitly requires it and the backend path is proven cheap. For batch sidebar/status endpoints, align request scope to the visible range first, then add a backend max-id guard so one client regression cannot fan out into timeout-scale work.
+
 ### 2026-05-28 | user | completed workout summary handler pre-check hid valid cross-source recap
 
 - Problem: even after the alias-aware workout-summary target resolution was fixed, `GET /api/completed-workouts/{activity_id}/summary` still performed a separate `completed_workout_service.get_completed_workout(...)` pre-check in the REST handler. That read path uses the authoritative completed-workout repository, which intentionally hides same-day duplicates and can prefer the Wahoo canonical workout over the Intervals alias. For the 2026-05-27 ride, the Intervals alias `i151959404` was therefore rejected at the handler boundary with `404` before the alias-aware `workout_summary_service.get_summary(...)` could resolve the existing recap stored under `459893292`.
