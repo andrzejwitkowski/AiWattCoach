@@ -1,5 +1,6 @@
 import {useTranslation} from 'react-i18next';
 
+import {SummaryTextContent} from '../../../lib/markdown/SummaryTextContent';
 import type {CompletedWorkoutSummary} from '../../intervals/types';
 
 type WorkoutSummarySectionProps = {
@@ -22,7 +23,10 @@ export function WorkoutSummarySection({
         <p className="mt-4 text-sm text-slate-400">{t('calendar.loadingWorkoutSummary')}</p>
       ) : summary ? (
         <>
-          <div className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-100">{summary.text}</div>
+          <SummaryTextContent
+            text={summary.text}
+            className="mt-4 text-sm leading-7 text-slate-100"
+          />
           {summary.provider || summary.model ? (
             <p className="mt-4 text-xs text-slate-500">
               {[summary.provider, summary.model].filter(Boolean).join(' / ')}
