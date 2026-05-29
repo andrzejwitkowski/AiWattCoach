@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::workout_summary::PublicToolCall;
 
+const MAX_MESSAGE_CONTENT_CHARS: usize = 10_000;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CoachConversationSurface {
     Calendar,
@@ -182,10 +184,24 @@ pub fn validate_conversation_message_content(
             "message content must not be empty".to_string(),
         ));
     }
-    if trimmed.chars().count() > 2000 {
-        return Err(CoachConversationError::Validation(
-            "message must be 2000 characters or fewer".to_string(),
-        ));
+    if trimmed.chars().count() > MAX_MESSAGE_CONTENT_CHARS {
+        return Err(CoachConversationError::Validation(format!(
+            "message must be {MAX_MESSAGE_CONTENT_CHARS} characters or fewer"
+        )));
     }
     Ok(trimmed.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_conversation_message_content_accepts_detailed_user_feedback() {
+        let content = "a".repeat(8_000);
+
+        let validated = validate_conversation_message_content(&content).unwrap();
+
+        assert_eq!(validated.len(), 8_000);
+    }
 }

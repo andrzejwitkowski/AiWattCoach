@@ -4,6 +4,8 @@ use crate::domain::llm::{
 };
 use serde::{Deserialize, Serialize};
 
+const MAX_MESSAGE_CONTENT_CHARS: usize = 10_000;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CoachQuestion {
     pub id: String,
@@ -176,10 +178,24 @@ pub fn validate_message_content(content: &str) -> Result<String, WorkoutSummaryE
             "message content must not be empty".to_string(),
         ));
     }
-    if trimmed.chars().count() > 2000 {
-        return Err(WorkoutSummaryError::Validation(
-            "message must be 2000 characters or fewer".to_string(),
-        ));
+    if trimmed.chars().count() > MAX_MESSAGE_CONTENT_CHARS {
+        return Err(WorkoutSummaryError::Validation(format!(
+            "message must be {MAX_MESSAGE_CONTENT_CHARS} characters or fewer"
+        )));
     }
     Ok(trimmed.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_message_content_accepts_detailed_user_feedback() {
+        let content = "a".repeat(8_000);
+
+        let validated = validate_message_content(&content).unwrap();
+
+        assert_eq!(validated.len(), 8_000);
+    }
 }

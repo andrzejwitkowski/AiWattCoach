@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-29 | user | Coach message cap too low for detailed workout feedback
+
+- Problem: AI Coach rejected detailed ride feedback after a few turns with `message must be 2000 characters or fewer`. The cap came from hardcoded domain validation in both workout-summary chat and calendar coach conversation models, while calendar coach frontend Zod schemas also enforced `.max(2000)` before sending.
+- Fix: raised the coach user-message cap to 10,000 characters in both backend domains and aligned the calendar coach frontend schemas. Added regressions proving 8,000-character detailed feedback is accepted by backend validation and calendar coach API request validation.
+- Prevention: when a user-facing input limit is hit during normal usage, trace all layers that enforce it before changing only the UI or only the backend. Keep parallel coach surfaces aligned unless there is a deliberate product reason for different caps.
+
 ### 2026-05-29 | user | AI Coach tool calls flicker and final reply hidden by stale cache
 
 - Problem: after the websocket reconnect fixes, the AI Coach chat could show streamed tool-call cards while the final coach text disappeared or appeared only after switching workouts. The cache-hydration effect accepted any non-empty cached summary for the same workout, so an older tool-only cache update could overwrite the newer websocket `coach_message` summary. The message list also called `scrollIntoView` on every message/progress/typing update, which fought user scrolling during streamed tool-call updates.

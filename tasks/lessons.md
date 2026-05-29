@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-05-29 - Coach message limits must match realistic athlete feedback
+
+- A 2,000-character cap is too low for realistic post-workout feedback after a few chat turns; users can naturally paste detailed interval notes, symptoms, and context in one message.
+- The cap was enforced in backend domain validation for both workout-summary chat and calendar coach, and calendar coach frontend Zod schemas duplicated the same limit. When adjusting user input limits, trace every enforcing layer and align parallel coach surfaces.
+- Use a named constant for message limits and include a regression below the intended cap, such as 8,000 chars for a 10,000-char limit, so normal detailed feedback remains accepted while abuse protection still exists.
+
 ## 2026-05-29 - Long-lived websocket effects must not depend on unstable object props
 
 - If a React effect owns a websocket, subscription, or other long-lived connection, do not include parent-created object references in its dependency list unless a new reference truly means a new connection target.
