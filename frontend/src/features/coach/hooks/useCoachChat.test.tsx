@@ -16,6 +16,7 @@ import {
   isAvailabilityRequiredChatError,
   useCoachChat,
 } from './useCoachChat';
+import type { SendMessageResponse } from '../types';
 
 vi.mock('../api/workoutSummary', () => ({
   createWorkoutSummary: vi.fn(),
@@ -216,30 +217,7 @@ describe('useCoachChat', () => {
   it('falls back to REST send when websocket connection fails during send', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
-    let resolveFallback:
-      | ((value: {
-        summary: typeof summaryFixture & {
-          messages: Array<{
-            id: string;
-            role: 'user' | 'coach';
-            content: string;
-            createdAtEpochSeconds: number;
-          }>;
-        };
-        userMessage: {
-          id: string;
-          role: 'user';
-          content: string;
-          createdAtEpochSeconds: number;
-        };
-        coachMessage: {
-          id: string;
-          role: 'coach';
-          content: string;
-          createdAtEpochSeconds: number;
-        };
-      }) => void)
-      | undefined;
+    let resolveFallback: ((value: SendMessageResponse) => void) | undefined;
     vi.mocked(sendWorkoutSummaryMessage).mockImplementation(() => new Promise((resolve) => {
       resolveFallback = resolve;
     }));

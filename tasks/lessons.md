@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-05-29 - Test fixtures with empty arrays must use real response types
+
+- When a frontend test fixture starts with `messages: []`, do not build later async resolver types from `typeof fixture` unless the fixture itself is explicitly annotated. Otherwise TypeScript can infer `never[]` and make later realistic message objects fail only in `tsc -b` or production builds.
+- For mocked API responses in tests, prefer the exported feature type such as `SendMessageResponse` over a hand-written local type stitched together from `typeof summaryFixture` plus overrides.
+- After review-driven test edits in TypeScript-heavy frontend code, run the real `bun run --cwd frontend build`, not only Vitest, because stricter build-time checking can catch `never[]` inference that the test runner path misses.
+
 ## 2026-05-27 - Completed workout alias sets must include provider external ids
 
 - If workout summaries are looked up from completed-workout ids coming from the UI, the alias set cannot stop at `source_activity_id` plus canonical completed-workout id. For imported workouts that exist in both Intervals and Wahoo identity spaces, the persisted summary may still be keyed by the provider external id.
