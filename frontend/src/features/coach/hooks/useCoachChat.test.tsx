@@ -147,6 +147,37 @@ describe('useCoachChat', () => {
     expect(getWorkoutSummary).toHaveBeenCalledTimes(1);
   });
 
+  it('does not reconnect when parent cache hydrates with messages for the same workout', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+
+    const hydratedSummary = {
+      ...summaryFixture,
+      messages: [
+        {
+          id: 'message-1',
+          role: 'coach' as const,
+          content: 'Keep it easy today.',
+          createdAtEpochSeconds: 3,
+        },
+      ],
+    };
+
+    const { rerender, result } = renderHook(
+      ({ cachedSummary }) => useCoachChat({ apiBaseUrl: '', workoutId: '101', cachedSummary }),
+      { initialProps: { cachedSummary: null as typeof hydratedSummary | null } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    rerender({ cachedSummary: hydratedSummary });
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(getWorkoutSummary).toHaveBeenCalledTimes(1);
+  });
+
   it('creates a summary on first send when one does not exist', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     vi.mocked(getWorkoutSummary).mockRejectedValue(new HttpError(404, 'not found'));

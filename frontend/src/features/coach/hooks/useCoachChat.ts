@@ -131,17 +131,6 @@ export function useCoachChat({
   const [error, setError] = useState<string | null>(null);
   const aliasRangeOldest = aliasRange?.oldest ?? null;
   const aliasRangeNewest = aliasRange?.newest ?? null;
-  const cachedSummaryWithMessages = useMemo(() => {
-    if (!cachedSummary || cachedSummary.messages.length === 0) {
-      return null;
-    }
-
-    return cachedSummary;
-  }, [
-    cachedSummary?.messages.length,
-    cachedSummary?.updatedAtEpochSeconds,
-    cachedSummary?.workoutId,
-  ]);
   const socketRef = useRef<WebSocket | null>(null);
   const socketWorkoutIdRef = useRef<string | null>(null);
   const pendingSocketRef = useRef<PendingSocketState | null>(null);
@@ -184,6 +173,22 @@ export function useCoachChat({
     setDraftRpe(rpe);
     setError(null);
   }, []);
+
+  useEffect(() => {
+    if (!cachedSummary || cachedSummary.messages.length === 0 || cachedSummary.workoutId !== workoutId) {
+      return;
+    }
+
+    setSummary(cachedSummary);
+    setMessages(cachedSummary.messages);
+    setDraftRpe(cachedSummary.rpe);
+  }, [
+    cachedSummary?.messages.length,
+    cachedSummary?.rpe,
+    cachedSummary?.updatedAtEpochSeconds,
+    cachedSummary?.workoutId,
+    workoutId,
+  ]);
 
   const closeSocket = useCallback(() => {
     const pendingSocket = pendingSocketRef.current;
@@ -410,19 +415,6 @@ export function useCoachChat({
       setIsLoading(true);
 
       try {
-        if (
-          cachedSummaryWithMessages
-          && cachedSummaryWithMessages.workoutId === workoutId
-        ) {
-          if (cancelled) {
-            return;
-          }
-
-          applySummaryState(cachedSummaryWithMessages, workoutId);
-          await connectSocket(workoutId);
-          return;
-        }
-
         const loadedSummary = await getWorkoutSummary(
           apiBaseUrl,
           workoutId,
@@ -474,7 +466,6 @@ export function useCoachChat({
     aliasRangeOldest,
     apiBaseUrl,
     applySummaryState,
-    cachedSummaryWithMessages,
     clearSummaryState,
     closeSocket,
     connectSocket,
