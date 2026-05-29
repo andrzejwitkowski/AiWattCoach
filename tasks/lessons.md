@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-05-29 - Split large hook tests before they cross 1k lines
+
+- `frontend/src/features/coach/hooks/useCoachChat.test.tsx` crossed from 971 to 1044 lines once websocket lifecycle, cache hydration, fallback send, save workflow, and stale-selection coverage all accumulated in one file.
+- For frontend hook tests in this repo, split by behavior group early: connection/cache lifecycle, send-message behavior, save/reopen workflow, and stale-selection guards are separate concerns and should live in separate test files with a small local support module for shared fakes.
+- When the same hook ingests a full model from multiple sources such as initial load, cache hydration, websocket final reply, REST fallback, or save/reopen results, centralize the state write into one helper with an explicit freshness policy so transcript updates stay consistent and reviewable.
+
 ## 2026-05-29 - Coach message limits must match realistic athlete feedback
 
 - A 2,000-character cap is too low for realistic post-workout feedback after a few chat turns; users can naturally paste detailed interval notes, symptoms, and context in one message.

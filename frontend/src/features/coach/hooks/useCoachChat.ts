@@ -113,16 +113,18 @@ function appendUniqueMessage(messages: ConversationMessage[], message: Conversat
   return [...messages, message];
 }
 
-function cachedSummaryIsNewer(current: WorkoutSummary | null, cached: WorkoutSummary): boolean {
-  if (!current || current.workoutId !== cached.workoutId) {
+type SummaryApplyMode = 'force' | 'newer-only';
+
+function incomingSummaryIsNewer(current: WorkoutSummary | null, incoming: WorkoutSummary): boolean {
+  if (!current || current.workoutId !== incoming.workoutId) {
     return true;
   }
 
-  if (cached.updatedAtEpochSeconds !== current.updatedAtEpochSeconds) {
-    return cached.updatedAtEpochSeconds > current.updatedAtEpochSeconds;
+  if (incoming.updatedAtEpochSeconds !== current.updatedAtEpochSeconds) {
+    return incoming.updatedAtEpochSeconds > current.updatedAtEpochSeconds;
   }
 
-  return cached.messages.length > current.messages.length;
+  return incoming.messages.length > current.messages.length;
 }
 
 export function useCoachChat({
@@ -172,11 +174,22 @@ export function useCoachChat({
     setProgressState((current) => (current === 'awaiting-reply' ? 'idle' : current));
   }, []);
 
-  const applySummaryState = useCallback((nextSummary: WorkoutSummary, expectedWorkoutId: string) => {
+  const applyIncomingSummary = useCallback((
+    nextSummary: WorkoutSummary,
+    expectedWorkoutId: string,
+    mode: SummaryApplyMode = 'force',
+  ) => {
     assertCurrentWorkout(expectedWorkoutId);
+
+    if (mode === 'newer-only' && !incomingSummaryIsNewer(summaryRef.current, nextSummary)) {
+      return false;
+    }
+
+    summaryRef.current = nextSummary;
     setSummary(nextSummary);
     setMessages(nextSummary.messages);
     setDraftRpe(nextSummary.rpe);
+    return true;
   }, [assertCurrentWorkout]);
 
   const clearSummaryState = useCallback((expectedWorkoutId: string) => {
@@ -196,15 +209,9 @@ export function useCoachChat({
       return;
     }
 
-    if (!cachedSummaryIsNewer(summaryRef.current, cachedSummary)) {
-      return;
-    }
-
-    summaryRef.current = cachedSummary;
-    setSummary(cachedSummary);
-    setMessages(cachedSummary.messages);
-    setDraftRpe(cachedSummary.rpe);
+    applyIncomingSummary(cachedSummary, workoutId, 'newer-only');
   }, [
+    applyIncomingSummary,
     cachedSummary?.messages.length,
     cachedSummary?.rpe,
     cachedSummary?.updatedAtEpochSeconds,
@@ -242,7 +249,7 @@ export function useCoachChat({
 
     try {
       const created = await createWorkoutSummary(apiBaseUrl, requestedWorkoutId);
-      applySummaryState(created, requestedWorkoutId);
+      applyIncomingSummary(created, requestedWorkoutId);
       return created;
     } catch (createError) {
       if (createError instanceof AuthenticationError) {
@@ -251,13 +258,13 @@ export function useCoachChat({
 
       if (createError instanceof HttpError && createError.status === 409) {
         const existing = await getWorkoutSummary(apiBaseUrl, requestedWorkoutId);
-        applySummaryState(existing, requestedWorkoutId);
+        applyIncomingSummary(existing, requestedWorkoutId);
         return existing;
       }
 
       throw createError;
     }
-  }, [apiBaseUrl, applySummaryState, workoutId, summary]);
+  }, [apiBaseUrl, applyIncomingSummary, workoutId, summary]);
 
   const connectSocket = useCallback(async (currentWorkoutId: string) => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
@@ -317,9 +324,7 @@ export function useCoachChat({
           }
 
           if (parsed.type === 'coach_message') {
-            setSummary(parsed.summary);
-            setMessages(parsed.summary.messages);
-            setDraftRpe(parsed.summary.rpe);
+            applyIncomingSummary(parsed.summary, currentWorkoutId);
             setIsCoachTyping(false);
             clearReplyProgress();
             return;
@@ -450,9 +455,7 @@ export function useCoachChat({
         }
 
         onSummaryLoaded?.(loadedSummary);
-        setSummary(loadedSummary);
-        setMessages(loadedSummary.messages);
-        setDraftRpe(loadedSummary.rpe);
+        applyIncomingSummary(loadedSummary, workoutId);
         await connectSocket(workoutId);
       } catch (loadError) {
         if (cancelled) {
@@ -487,7 +490,7 @@ export function useCoachChat({
     aliasRangeNewest,
     aliasRangeOldest,
     apiBaseUrl,
-    applySummaryState,
+    applyIncomingSummary,
     clearSummaryState,
     closeSocket,
     connectSocket,
@@ -519,13 +522,13 @@ export function useCoachChat({
 
       if (draftRpe !== null && nextSummary.rpe !== draftRpe) {
         nextSummary = await updateWorkoutSummaryRpe(apiBaseUrl, requestedWorkoutId, draftRpe);
-        applySummaryState(nextSummary, requestedWorkoutId);
+        applyIncomingSummary(nextSummary, requestedWorkoutId);
       }
 
       const saveResult = await saveWorkoutSummary(apiBaseUrl, requestedWorkoutId);
       nextSummary = saveResult.summary;
 
-      applySummaryState(nextSummary, requestedWorkoutId);
+      applyIncomingSummary(nextSummary, requestedWorkoutId);
       if (saveResult.workflow.messages.length > 0) {
         const startId = localSystemMessageIdRef.current + 1;
         localSystemMessageIdRef.current += saveResult.workflow.messages.length;
@@ -559,7 +562,7 @@ export function useCoachChat({
         setProgressState('idle');
       }
     }
-  }, [apiBaseUrl, applySummaryState, assertCurrentWorkout, draftRpe, ensureSummaryExists, workoutId, summary]);
+  }, [apiBaseUrl, applyIncomingSummary, assertCurrentWorkout, draftRpe, ensureSummaryExists, workoutId, summary]);
 
   const reopenSummary = useCallback(async () => {
     if (!workoutId) {
@@ -576,7 +579,7 @@ export function useCoachChat({
 
     try {
       const reopenedSummary = await reopenWorkoutSummary(apiBaseUrl, requestedWorkoutId);
-      applySummaryState(reopenedSummary, requestedWorkoutId);
+      applyIncomingSummary(reopenedSummary, requestedWorkoutId);
       return reopenedSummary;
     } catch (saveError) {
       if (saveError instanceof StaleWorkoutSelectionError) {
@@ -596,7 +599,7 @@ export function useCoachChat({
         setProgressState('idle');
       }
     }
-  }, [apiBaseUrl, applySummaryState, workoutId]);
+  }, [apiBaseUrl, applyIncomingSummary, workoutId]);
 
   const sendMessage = useCallback(async (content: string) => {
     const trimmed = content.trim();
@@ -624,7 +627,7 @@ export function useCoachChat({
 
       if (nextSummary.rpe !== draftRpe) {
         nextSummary = await updateWorkoutSummaryRpe(apiBaseUrl, requestedWorkoutId, draftRpe);
-        applySummaryState(nextSummary, requestedWorkoutId);
+        applyIncomingSummary(nextSummary, requestedWorkoutId);
       }
 
       let socket: WebSocket | null = null;
@@ -652,9 +655,7 @@ export function useCoachChat({
       setError(null);
       const response = await sendWorkoutSummaryMessage(apiBaseUrl, requestedWorkoutId, { content: trimmed });
       assertCurrentWorkout(requestedWorkoutId);
-      setSummary(response.summary);
-      setMessages(response.summary.messages);
-      setDraftRpe(response.summary.rpe);
+      applyIncomingSummary(response.summary, requestedWorkoutId);
       return true;
     } catch (sendError) {
       if (sendError instanceof StaleWorkoutSelectionError) {
@@ -670,7 +671,7 @@ export function useCoachChat({
       clearReplyProgress();
       return false;
     }
-  }, [apiBaseUrl, applySummaryState, assertCurrentWorkout, clearReplyProgress, connectSocket, draftRpe, ensureSummaryExists, summary?.savedAtEpochSeconds, workoutId]);
+  }, [apiBaseUrl, applyIncomingSummary, assertCurrentWorkout, clearReplyProgress, connectSocket, draftRpe, ensureSummaryExists, summary?.savedAtEpochSeconds, workoutId]);
 
   const hasConversation = useMemo(
     () => messages.some((message) => message.role === 'coach'),
