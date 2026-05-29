@@ -17,15 +17,36 @@ export function ChatMessageList({
   progressState = 'idle',
   onSendMessage,
 }: ChatMessageListProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const hasMountedRef = useRef(false);
+  const shouldAutoScrollRef = useRef(true);
   const shouldShowProgressIndicator = progressState !== 'idle';
 
+  function updateShouldAutoScroll() {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    shouldAutoScrollRef.current = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+  }
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' });
+    if (!hasMountedRef.current || shouldAutoScrollRef.current) {
+      endRef.current?.scrollIntoView({ block: 'end' });
+    }
+
+    hasMountedRef.current = true;
   }, [isCoachTyping, messages, progressState]);
 
   return (
-      <div className="no-scrollbar flex-1 space-y-4 overflow-y-auto px-6 py-6">
+      <div
+        ref={containerRef}
+        className="no-scrollbar flex-1 space-y-4 overflow-y-auto px-6 py-6"
+        data-testid="coach-chat-message-list"
+        onScroll={updateShouldAutoScroll}
+      >
         {messages.map((message) => (
           <ChatMessage key={message.id} message={message} onSendMessage={onSendMessage} />
         ))}

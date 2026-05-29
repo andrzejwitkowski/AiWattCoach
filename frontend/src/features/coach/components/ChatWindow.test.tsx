@@ -11,6 +11,74 @@ afterEach(() => {
 });
 
 describe('ChatWindow', () => {
+  it('does not force-scroll when the user is reading older messages', () => {
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
+    const { rerender } = render(
+      <ChatWindow
+        messages={[
+          {
+            id: 'message-1',
+            role: 'coach',
+            content: 'Earlier coach message.',
+            createdAtEpochSeconds: 1711000200,
+          },
+        ]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        requiresAvailability={false}
+        error={null}
+        onSendMessage={async () => true}
+      />,
+    );
+
+    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+    vi.mocked(window.HTMLElement.prototype.scrollIntoView).mockClear();
+    const messageList = screen.getByTestId('coach-chat-message-list');
+    Object.defineProperty(messageList, 'scrollHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(messageList, 'clientHeight', { configurable: true, value: 300 });
+    Object.defineProperty(messageList, 'scrollTop', { configurable: true, writable: true, value: 100 });
+    fireEvent.scroll(messageList);
+
+    rerender(
+      <ChatWindow
+        messages={[
+          {
+            id: 'message-1',
+            role: 'coach',
+            content: 'Earlier coach message.',
+            createdAtEpochSeconds: 1711000200,
+          },
+          {
+            id: 'tool-1',
+            role: 'tool',
+            content: 'Tool call: get_selected_workout',
+            toolCall: {
+              id: 'tool-1',
+              name: 'get_selected_workout',
+              argumentsJson: '{"date":"2026-05-29"}',
+              argumentsPreview: 'date 2026-05-29',
+            },
+            createdAtEpochSeconds: 1711000300,
+          },
+        ]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        requiresAvailability={false}
+        error={null}
+        onSendMessage={async () => true}
+      />,
+    );
+
+    expect(window.HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
   it('renders coach messages and a typing indicator', () => {
     render(
       <ChatWindow

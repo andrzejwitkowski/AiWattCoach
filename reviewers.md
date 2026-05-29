@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-29 | user | AI Coach tool calls flicker and final reply hidden by stale cache
+
+- Problem: after the websocket reconnect fixes, the AI Coach chat could show streamed tool-call cards while the final coach text disappeared or appeared only after switching workouts. The cache-hydration effect accepted any non-empty cached summary for the same workout, so an older tool-only cache update could overwrite the newer websocket `coach_message` summary. The message list also called `scrollIntoView` on every message/progress/typing update, which fought user scrolling during streamed tool-call updates.
+- Fix: cache hydration now applies only when the cached summary is newer than the current local summary or has more messages at the same timestamp, so stale tool-only cache cannot remove the final coach reply. `ChatMessageList` now tracks whether the user is near the bottom and auto-scrolls only on first render or while still near the bottom.
+- Prevention: when realtime websocket messages and parent caches both hydrate the same transcript, compare freshness before applying cached data. For chat UIs with streamed tool/status updates, auto-scroll should be conditional on the user's current scroll position instead of firing on every render-changing signal.
+
 ### 2026-05-29 | CodeRabbit | AI Coach non-empty cache hydration still restarted websocket
 
 - Problem: the first reconnect-loop fix stabilized equivalent `aliasRange` objects and empty cached summaries, but still left the socket-owning effect dependent on `cachedSummaryWithMessages`. When the parent cache hydrated from `null` to a non-empty summary for the same workout, the effect closed the current websocket and opened another one even though the connection target had not changed.

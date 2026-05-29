@@ -178,6 +178,79 @@ describe('useCoachChat', () => {
     expect(getWorkoutSummary).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps a newer websocket coach reply when parent cache sends an older tool-only summary', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+
+    const toolOnlySummary = {
+      ...summaryFixture,
+      updatedAtEpochSeconds: 3,
+      messages: [
+        {
+          id: 'message-user-1',
+          role: 'user' as const,
+          content: 'Need feedback',
+          createdAtEpochSeconds: 2,
+        },
+        {
+          id: 'tool-1',
+          role: 'tool' as const,
+          content: 'Tool call: get_selected_workout',
+          toolCall: {
+            id: 'tool-1',
+            name: 'get_selected_workout',
+            argumentsJson: '{"date":"2026-05-29"}',
+            argumentsPreview: 'date 2026-05-29',
+          },
+          createdAtEpochSeconds: 3,
+        },
+      ],
+    };
+    const completeSummary = {
+      ...summaryFixture,
+      updatedAtEpochSeconds: 4,
+      messages: [
+        ...toolOnlySummary.messages,
+        {
+          id: 'message-coach-1',
+          role: 'coach' as const,
+          content: 'Coach reply after tools',
+          createdAtEpochSeconds: 4,
+        },
+      ],
+    };
+
+    const { rerender, result } = renderHook(
+      ({ cachedSummary }) => useCoachChat({ apiBaseUrl: '', workoutId: '101', cachedSummary }),
+      { initialProps: { cachedSummary: null as typeof toolOnlySummary | null } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'coach_message',
+            message: completeSummary.messages[2],
+            summary: completeSummary,
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.messages.map((message) => message.content)).toContain('Coach reply after tools');
+    });
+
+    rerender({ cachedSummary: toolOnlySummary });
+
+    expect(result.current.messages.map((message) => message.content)).toContain('Coach reply after tools');
+  });
+
   it('creates a summary on first send when one does not exist', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     vi.mocked(getWorkoutSummary).mockRejectedValue(new HttpError(404, 'not found'));

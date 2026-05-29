@@ -6,6 +6,8 @@
 - In AI Coach, equivalent `aliasRange` objects and empty `cachedSummary` metadata updates retriggered the chat loading effect, which closed the active workout-summary websocket and opened a new one for the same workout repeatedly.
 - Normalize dependencies to stable primitives such as `range.oldest`, `range.newest`, and the selected resource id. For cache-based fast paths, memoize only the subset that is actually usable by the effect; empty metadata cache updates should not reset realtime transports.
 - Keep cache hydration and socket lifecycle in separate effects when possible. A later `cachedSummary: null -> non-empty` transition may legitimately update local transcript state, but it must not tear down a websocket whose `workoutId` is unchanged.
+- Cache hydration must also compare freshness before applying transcript state. If websocket already delivered a newer coach reply, an older parent cache update with only tool messages must not overwrite it.
+- Chat auto-scroll should respect user intent during streamed updates. Scroll on first render or when the user is already near the bottom, but do not call `scrollIntoView` on every tool/progress/typing update while the user is reading older messages.
 - Add rerender regressions around socket-owning hooks whenever a page-load optimization introduces caches, metadata summaries, or new parent-derived props.
 
 ## 2026-05-29 - Frontend schemas must match metadata DTO omissions
