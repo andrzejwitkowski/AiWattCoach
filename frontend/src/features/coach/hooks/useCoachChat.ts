@@ -129,6 +129,19 @@ export function useCoachChat({
   const [isCoachTyping, setIsCoachTyping] = useState(false);
   const [progressState, setProgressState] = useState<CoachChatProgressState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const aliasRangeOldest = aliasRange?.oldest ?? null;
+  const aliasRangeNewest = aliasRange?.newest ?? null;
+  const cachedSummaryWithMessages = useMemo(() => {
+    if (!cachedSummary || cachedSummary.messages.length === 0) {
+      return null;
+    }
+
+    return cachedSummary;
+  }, [
+    cachedSummary?.messages.length,
+    cachedSummary?.updatedAtEpochSeconds,
+    cachedSummary?.workoutId,
+  ]);
   const socketRef = useRef<WebSocket | null>(null);
   const socketWorkoutIdRef = useRef<string | null>(null);
   const pendingSocketRef = useRef<PendingSocketState | null>(null);
@@ -398,15 +411,14 @@ export function useCoachChat({
 
       try {
         if (
-          cachedSummary
-          && cachedSummary.workoutId === workoutId
-          && cachedSummary.messages.length > 0
+          cachedSummaryWithMessages
+          && cachedSummaryWithMessages.workoutId === workoutId
         ) {
           if (cancelled) {
             return;
           }
 
-          applySummaryState(cachedSummary, workoutId);
+          applySummaryState(cachedSummaryWithMessages, workoutId);
           await connectSocket(workoutId);
           return;
         }
@@ -414,7 +426,9 @@ export function useCoachChat({
         const loadedSummary = await getWorkoutSummary(
           apiBaseUrl,
           workoutId,
-          aliasRange ?? undefined,
+          aliasRangeOldest && aliasRangeNewest
+            ? { oldest: aliasRangeOldest, newest: aliasRangeNewest }
+            : undefined,
         );
 
         if (cancelled) {
@@ -456,10 +470,11 @@ export function useCoachChat({
       closeSocket();
     };
   }, [
-    aliasRange,
+    aliasRangeNewest,
+    aliasRangeOldest,
     apiBaseUrl,
     applySummaryState,
-    cachedSummary,
+    cachedSummaryWithMessages,
     clearSummaryState,
     closeSocket,
     connectSocket,
