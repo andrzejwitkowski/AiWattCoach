@@ -7,6 +7,7 @@ import {
   getWorkoutSummary,
   reopenWorkoutSummary,
   saveWorkoutSummary,
+  sendWorkoutSummaryMessage,
   updateWorkoutSummaryRpe,
 } from '../api/workoutSummary';
 import {
@@ -21,11 +22,13 @@ vi.mock('../api/workoutSummary', () => ({
   getWorkoutSummary: vi.fn(),
   reopenWorkoutSummary: vi.fn(),
   saveWorkoutSummary: vi.fn(),
+  sendWorkoutSummaryMessage: vi.fn(),
   updateWorkoutSummaryRpe: vi.fn(),
 }));
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
+  static failNextConnection = false;
   static OPEN = 1;
   static CLOSED = 3;
 
@@ -35,6 +38,13 @@ class FakeWebSocket {
   constructor(public readonly url: string) {
     FakeWebSocket.instances.push(this);
     queueMicrotask(() => {
+      if (FakeWebSocket.failNextConnection) {
+        FakeWebSocket.failNextConnection = false;
+        this.emit('error');
+        this.close();
+        return;
+      }
+
       this.emit('open');
     });
   }
@@ -75,6 +85,7 @@ const summaryFixture = {
 afterEach(() => {
   vi.clearAllMocks();
   FakeWebSocket.instances = [];
+  FakeWebSocket.failNextConnection = false;
   global.WebSocket = originalWebSocket;
   Object.defineProperty(window, 'location', {
     configurable: true,
@@ -200,6 +211,70 @@ describe('useCoachChat', () => {
     expect(result.current.progressState).toBe('idle');
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.messages[0]?.content).toBe('Need feedback');
+  });
+
+  it('falls back to REST send when websocket connection fails during send', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+    vi.mocked(sendWorkoutSummaryMessage).mockResolvedValue({
+      summary: {
+        ...summaryFixture,
+        messages: [
+          {
+            id: 'message-user-1',
+            role: 'user',
+            content: 'Need feedback',
+            createdAtEpochSeconds: 2,
+          },
+          {
+            id: 'message-coach-1',
+            role: 'coach',
+            content: 'Coach reply',
+            createdAtEpochSeconds: 3,
+          },
+        ],
+      },
+      userMessage: {
+        id: 'message-user-1',
+        role: 'user',
+        content: 'Need feedback',
+        createdAtEpochSeconds: 2,
+      },
+      coachMessage: {
+        id: 'message-coach-1',
+        role: 'coach',
+        content: 'Coach reply',
+        createdAtEpochSeconds: 3,
+      },
+    });
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    FakeWebSocket.failNextConnection = true;
+    act(() => {
+      FakeWebSocket.instances[0]?.emit('error');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(false);
+    });
+
+    await act(async () => {
+      const sent = await result.current.sendMessage('Need feedback');
+      expect(sent).toBe(true);
+    });
+
+    expect(sendWorkoutSummaryMessage).toHaveBeenCalledWith('', '101', { content: 'Need feedback' });
+    expect(result.current.messages.map((message) => message.content)).toEqual([
+      'Need feedback',
+      'Coach reply',
+    ]);
+    expect(result.current.error).toBeNull();
+    expect(result.current.progressState).toBe('idle');
   });
 
   it('keeps awaiting reply state active after a system message until coach reply arrives', async () => {
