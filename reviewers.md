@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-29 | user | Thermo review cleanup for coach chat hook and tests
+
+- Problem: the AI Coach follow-up branch still had two maintainability regressions after behavior fixes: `frontend/src/features/coach/hooks/useCoachChat.test.tsx` grew from 971 to 1044 lines, crossing the repo's large-file review threshold, and `useCoachChat.ts` applied full summary state through multiple ad-hoc paths (cache hydration, websocket coach reply, initial load, REST fallback, save/reopen), making freshness rules and transcript updates harder to reason about.
+- Fix: split the oversized hook test into focused files for connection, send-message, save-workflow, and stale-selection behavior with shared local websocket fixtures in `useCoachChat.testUtils.ts`. Refactored `useCoachChat.ts` to use one `applyIncomingSummary(...)` helper with an explicit `'force' | 'newer-only'` mode, so cache hydration still honors freshness while all full-summary ingress paths reuse the same state application logic. Also named the chat auto-scroll threshold in `ChatMessageList`.
+- Prevention: when a focused bugfix adds another behavior group to an already-large test file, split by behavior before the file crosses 1k lines. If a hook or service accepts the same full read model from cache, realtime transport, load, and fallback paths, keep one canonical state-application helper and let callers choose freshness policy explicitly instead of duplicating `setSummary/setMessages/setDraftRpe` sequences.
+
 ### 2026-05-29 | user | Coach message cap too low for detailed workout feedback
 
 - Problem: AI Coach rejected detailed ride feedback after a few turns with `message must be 2000 characters or fewer`. The cap came from hardcoded domain validation in both workout-summary chat and calendar coach conversation models, while calendar coach frontend Zod schemas also enforced `.max(2000)` before sending.
