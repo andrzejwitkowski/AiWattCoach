@@ -201,4 +201,50 @@ describe('calendar api', () => {
     );
     expect(response.coachMessage.content).toBe('The week is front-loaded.');
   });
+
+  it('accepts detailed calendar coach messages longer than two thousand characters', async () => {
+    const fetchMock = useFetchMock(
+      createFetchMock().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversation: {
+              conversationId: 'conversation-1',
+              surface: 'calendar',
+              status: 'active',
+              focus: 'overview',
+              createdAtEpochSeconds: 1,
+              updatedAtEpochSeconds: 3,
+            },
+            messages: [],
+            userMessage: {
+              id: 'message-user-1',
+              role: 'user',
+              content: 'Detailed feedback',
+              createdAtEpochSeconds: 2,
+            },
+            coachMessage: {
+              id: 'message-coach-2',
+              role: 'coach',
+              content: 'The week is front-loaded.',
+              createdAtEpochSeconds: 3,
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+    const content = 'a'.repeat(8_000);
+
+    const { result } = renderHook(() => useCalendarCoachApi(), { wrapper: wrapper('') });
+
+    await result.current.sendCalendarCoachMessage('conversation-1', { content });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/calendar/coach/conversations/conversation-1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      }),
+    );
+  });
 });

@@ -113,6 +113,18 @@ function appendUniqueMessage(messages: ConversationMessage[], message: Conversat
   return [...messages, message];
 }
 
+function cachedSummaryIsNewer(current: WorkoutSummary | null, cached: WorkoutSummary): boolean {
+  if (!current || current.workoutId !== cached.workoutId) {
+    return true;
+  }
+
+  if (cached.updatedAtEpochSeconds !== current.updatedAtEpochSeconds) {
+    return cached.updatedAtEpochSeconds > current.updatedAtEpochSeconds;
+  }
+
+  return cached.messages.length > current.messages.length;
+}
+
 export function useCoachChat({
   apiBaseUrl,
   workoutId,
@@ -135,8 +147,13 @@ export function useCoachChat({
   const socketWorkoutIdRef = useRef<string | null>(null);
   const pendingSocketRef = useRef<PendingSocketState | null>(null);
   const currentWorkoutIdRef = useRef<string | null>(workoutId);
+  const summaryRef = useRef<WorkoutSummary | null>(null);
   const savingRequestIdRef = useRef(0);
   const localSystemMessageIdRef = useRef(0);
+
+  useEffect(() => {
+    summaryRef.current = summary;
+  }, [summary]);
 
   useEffect(() => {
     currentWorkoutIdRef.current = workoutId;
@@ -179,6 +196,11 @@ export function useCoachChat({
       return;
     }
 
+    if (!cachedSummaryIsNewer(summaryRef.current, cachedSummary)) {
+      return;
+    }
+
+    summaryRef.current = cachedSummary;
     setSummary(cachedSummary);
     setMessages(cachedSummary.messages);
     setDraftRpe(cachedSummary.rpe);

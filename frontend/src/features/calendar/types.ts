@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
 import { raceDisciplineSchema, racePrioritySchema, raceSyncStatusSchema } from '../races/types';
 
+const MAX_COACH_MESSAGE_CHARS = 10_000;
+
 export const calendarCoachMessageRoleSchema = z.enum(['user', 'coach', 'system', 'tool']);
 
 export const calendarCoachToolCallSchema = z.object({
@@ -40,7 +42,7 @@ export const calendarCoachConversationResponseSchema = z.object({
 });
 
 export const calendarCoachSendMessageRequestSchema = z.object({
-  content: z.string().trim().min(1).max(2000),
+  content: z.string().trim().min(1).max(MAX_COACH_MESSAGE_CHARS),
 });
 
 export const calendarCoachSendMessageResponseSchema = z.object({
@@ -52,7 +54,7 @@ export const calendarCoachSendMessageResponseSchema = z.object({
 
 export const calendarCoachClientWsMessageSchema = z.object({
   type: z.literal('send_message'),
-  content: z.string().trim().min(1).max(2000),
+  content: z.string().trim().min(1).max(MAX_COACH_MESSAGE_CHARS),
 });
 
 export const calendarCoachTypingWsMessageSchema = z.object({
