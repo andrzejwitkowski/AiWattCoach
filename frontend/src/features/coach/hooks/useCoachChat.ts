@@ -621,12 +621,12 @@ export function useCoachChat({
         return true;
       }
 
+      setError(null);
       const response = await sendWorkoutSummaryMessage(apiBaseUrl, requestedWorkoutId, { content: trimmed });
       assertCurrentWorkout(requestedWorkoutId);
       setSummary(response.summary);
       setMessages(response.summary.messages);
       setDraftRpe(response.summary.rpe);
-      setError(null);
       return true;
     } catch (sendError) {
       if (sendError instanceof StaleWorkoutSelectionError) {

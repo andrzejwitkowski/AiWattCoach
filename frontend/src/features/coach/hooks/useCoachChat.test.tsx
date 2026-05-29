@@ -216,37 +216,33 @@ describe('useCoachChat', () => {
   it('falls back to REST send when websocket connection fails during send', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
-    vi.mocked(sendWorkoutSummaryMessage).mockResolvedValue({
-      summary: {
-        ...summaryFixture,
-        messages: [
-          {
-            id: 'message-user-1',
-            role: 'user',
-            content: 'Need feedback',
-            createdAtEpochSeconds: 2,
-          },
-          {
-            id: 'message-coach-1',
-            role: 'coach',
-            content: 'Coach reply',
-            createdAtEpochSeconds: 3,
-          },
-        ],
-      },
-      userMessage: {
-        id: 'message-user-1',
-        role: 'user',
-        content: 'Need feedback',
-        createdAtEpochSeconds: 2,
-      },
-      coachMessage: {
-        id: 'message-coach-1',
-        role: 'coach',
-        content: 'Coach reply',
-        createdAtEpochSeconds: 3,
-      },
-    });
+    let resolveFallback:
+      | ((value: {
+        summary: typeof summaryFixture & {
+          messages: Array<{
+            id: string;
+            role: 'user' | 'coach';
+            content: string;
+            createdAtEpochSeconds: number;
+          }>;
+        };
+        userMessage: {
+          id: string;
+          role: 'user';
+          content: string;
+          createdAtEpochSeconds: number;
+        };
+        coachMessage: {
+          id: string;
+          role: 'coach';
+          content: string;
+          createdAtEpochSeconds: number;
+        };
+      }) => void)
+      | undefined;
+    vi.mocked(sendWorkoutSummaryMessage).mockImplementation(() => new Promise((resolve) => {
+      resolveFallback = resolve;
+    }));
 
     const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
 
@@ -263,8 +259,49 @@ describe('useCoachChat', () => {
       expect(result.current.isConnected).toBe(false);
     });
 
+    let sendPromise: Promise<boolean> | undefined;
     await act(async () => {
-      const sent = await result.current.sendMessage('Need feedback');
+      sendPromise = result.current.sendMessage('Need feedback');
+    });
+
+    expect(result.current.error).toBeNull();
+
+    act(() => {
+      resolveFallback?.({
+        summary: {
+          ...summaryFixture,
+          messages: [
+            {
+              id: 'message-user-1',
+              role: 'user',
+              content: 'Need feedback',
+              createdAtEpochSeconds: 2,
+            },
+            {
+              id: 'message-coach-1',
+              role: 'coach',
+              content: 'Coach reply',
+              createdAtEpochSeconds: 3,
+            },
+          ],
+        },
+        userMessage: {
+          id: 'message-user-1',
+          role: 'user',
+          content: 'Need feedback',
+          createdAtEpochSeconds: 2,
+        },
+        coachMessage: {
+          id: 'message-coach-1',
+          role: 'coach',
+          content: 'Coach reply',
+          createdAtEpochSeconds: 3,
+        },
+      });
+    });
+
+    await act(async () => {
+      const sent = await sendPromise;
       expect(sent).toBe(true);
     });
 

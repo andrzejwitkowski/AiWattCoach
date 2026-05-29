@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-29 | CodeRabbit | workout summary chat fallback error flash
+
+- Problem: after the initial websocket-to-REST fallback fix, `useCoachChat.sendMessage(...)` still left the websocket connection error visible while the REST fallback request was in flight. `connectSocket(...)` set `error = "Unable to connect to the coach chat right now."`, the fallback swallowed the rejection, and the code only cleared `error` after the REST response resolved.
+- Fix: moved `setError(null)` to immediately before `sendWorkoutSummaryMessage(...)` and strengthened the fallback regression to hold the REST promise open long enough to assert the stale websocket error is already cleared during the pending request.
+- Prevention: when a fallback path intentionally recovers from an earlier transport error, clear any stale user-facing error state before awaiting the fallback request, not only after success. For async fallback regressions, keep the fallback promise pending long enough to assert interim UI state, not just the final resolved state.
+
 ### 2026-05-29 | user | workout summary chat websocket fallback
 
 - Problem: `frontend/src/features/coach/hooks/useCoachChat.ts` tried to send every workout-summary chat message over websocket only. When the socket failed to reconnect, the UI stayed offline, the green online indicator never returned, and sending a message failed even though the REST `POST /api/workout-summaries/{workout_id}/messages` endpoint still existed for the same behavior.
