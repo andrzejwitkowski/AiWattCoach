@@ -36,7 +36,7 @@ export const workoutSummarySchema = z.object({
   workoutId: z.string(),
   rpe: z.number().int().min(1).max(10).nullable(),
   hasCoachMessage: z.boolean().optional(),
-  messages: z.array(conversationMessageSchema),
+  messages: z.array(conversationMessageSchema).default([]),
   savedAtEpochSeconds: z.number().int().nullable(),
   createdAtEpochSeconds: z.number().int(),
   updatedAtEpochSeconds: z.number().int(),

@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-05-29 - Frontend schemas must match metadata DTO omissions
+
+- If a backend DTO uses `skip_serializing_if = "Vec::is_empty"` for a field that full frontend screens parse through a shared schema, a missing field can surface as a raw Zod `invalid_type` before the user reaches the feature being debugged.
+- For metadata endpoints that intentionally omit empty arrays such as workout-summary `messages`, either use a separate metadata schema or default the shared field to `[]` at the frontend boundary.
+- When a screenshot shows a Zod path like `["messages"]` on page load, reproduce the exact GET/list response shape first. Do not assume the failing path is the later send/websocket action just because the user noticed it while trying to send.
+
 ## 2026-05-29 - Test fixtures with empty arrays must use real response types
 
 - When a frontend test fixture starts with `messages: []`, do not build later async resolver types from `typeof fixture` unless the fixture itself is explicitly annotated. Otherwise TypeScript can infer `never[]` and make later realistic message objects fail only in `tsc -b` or production builds.

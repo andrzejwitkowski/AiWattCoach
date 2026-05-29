@@ -117,6 +117,24 @@ describe('workoutSummary api', () => {
     );
   });
 
+  it('parses metadata summaries when messages are omitted', async () => {
+    const { messages: _messages, ...metadataSummary } = summaryFixture;
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([metadataSummary]), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ) as typeof fetch;
+
+    const result = await listWorkoutSummaries('', ['101'], { view: 'metadata' });
+
+    expect(result[0]?.messages).toEqual([]);
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/workout-summaries?workoutIds=101&view=metadata',
+      expect.any(Object),
+    );
+  });
+
   it('updates workout summary rpe', async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ ...summaryFixture, rpe: 8 }), {

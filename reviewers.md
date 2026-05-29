@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-29 | user | AI Coach metadata summaries omitted messages field
+
+- Problem: after the websocket fallback fix, the AI Coach page still showed a raw Zod error because `GET /api/workout-summaries?...&view=metadata` can omit `messages` for metadata/empty summaries while `workoutSummarySchema` required `messages` to be present. The UI parsed that metadata response through the same summary schema and failed with `path: ["messages"]` before chat send behavior mattered.
+- Fix: changed the frontend `workoutSummarySchema` to default omitted `messages` to `[]` and added a focused API regression for metadata summaries that omit `messages`.
+- Prevention: when backend DTOs intentionally omit empty arrays in lightweight/metadata responses, frontend Zod schemas that represent the shared read model must either default the field or use a separate metadata schema. Reproduce UI Zod errors from the actual endpoint response shape before focusing only on later interaction paths.
+
 ### 2026-05-29 | CodeRabbit | workout summary chat fallback error flash
 
 - Problem: after the initial websocket-to-REST fallback fix, `useCoachChat.sendMessage(...)` still left the websocket connection error visible while the REST fallback request was in flight. `connectSocket(...)` set `error = "Unable to connect to the coach chat right now."`, the fallback swallowed the rejection, and the code only cleared `error` after the REST response resolved.
