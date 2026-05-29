@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-29 | CodeRabbit | AI Coach non-empty cache hydration still restarted websocket
+
+- Problem: the first reconnect-loop fix stabilized equivalent `aliasRange` objects and empty cached summaries, but still left the socket-owning effect dependent on `cachedSummaryWithMessages`. When the parent cache hydrated from `null` to a non-empty summary for the same workout, the effect closed the current websocket and opened another one even though the connection target had not changed.
+- Fix: separated cached-summary hydration from the socket lifecycle. Cache hydration now updates local summary/messages/RPE in its own effect, while the socket-loading effect no longer depends on cached summary. Added a regression for `cachedSummary: null -> non-empty` on the same workout with no reconnect.
+- Prevention: when a fix claims to stabilize long-lived connection effects, test every prop transition introduced by the optimization: equivalent object references, empty metadata updates, and later full/non-empty cache hydration. Do not leave UI hydration data in the dependency list of the effect that owns the transport lifecycle.
+
+### 2026-05-29 | user | AI Coach websocket reconnect loop after page-load optimization
+
+- Problem: the AI Coach page-load optimization passed `aliasRange` and `cachedSummary` objects into `useCoachChat`, then the websocket-loading effect depended on those object references. Parent cache updates and equivalent date-range object rerenders retriggered the effect for the same workout, closing the active socket and opening a new one repeatedly, which flooded the browser network panel with finished `ws` requests.
+- Fix: changed `useCoachChat` to depend on stable primitive alias-range fields and a memoized non-empty cached summary, so empty metadata cache updates and equivalent range objects no longer reset the socket. Added hook regressions for both no-reconnect cases.
+- Prevention: effects that own sockets, subscriptions, or other long-lived connections must depend on stable identity primitives rather than parent-created object references. When optimizing page-load caches, add one rerender regression proving cache/status updates do not tear down active realtime connections for the same resource.
+
 ### 2026-05-29 | user | AI Coach metadata summaries omitted messages field
 
 - Problem: after the websocket fallback fix, the AI Coach page still showed a raw Zod error because `GET /api/workout-summaries?...&view=metadata` can omit `messages` for metadata/empty summaries while `workoutSummarySchema` required `messages` to be present. The UI parsed that metadata response through the same summary schema and failed with `path: ["messages"]` before chat send behavior mattered.

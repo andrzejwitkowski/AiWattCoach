@@ -129,6 +129,8 @@ export function useCoachChat({
   const [isCoachTyping, setIsCoachTyping] = useState(false);
   const [progressState, setProgressState] = useState<CoachChatProgressState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const aliasRangeOldest = aliasRange?.oldest ?? null;
+  const aliasRangeNewest = aliasRange?.newest ?? null;
   const socketRef = useRef<WebSocket | null>(null);
   const socketWorkoutIdRef = useRef<string | null>(null);
   const pendingSocketRef = useRef<PendingSocketState | null>(null);
@@ -171,6 +173,22 @@ export function useCoachChat({
     setDraftRpe(rpe);
     setError(null);
   }, []);
+
+  useEffect(() => {
+    if (!cachedSummary || cachedSummary.messages.length === 0 || cachedSummary.workoutId !== workoutId) {
+      return;
+    }
+
+    setSummary(cachedSummary);
+    setMessages(cachedSummary.messages);
+    setDraftRpe(cachedSummary.rpe);
+  }, [
+    cachedSummary?.messages.length,
+    cachedSummary?.rpe,
+    cachedSummary?.updatedAtEpochSeconds,
+    cachedSummary?.workoutId,
+    workoutId,
+  ]);
 
   const closeSocket = useCallback(() => {
     const pendingSocket = pendingSocketRef.current;
@@ -397,24 +415,12 @@ export function useCoachChat({
       setIsLoading(true);
 
       try {
-        if (
-          cachedSummary
-          && cachedSummary.workoutId === workoutId
-          && cachedSummary.messages.length > 0
-        ) {
-          if (cancelled) {
-            return;
-          }
-
-          applySummaryState(cachedSummary, workoutId);
-          await connectSocket(workoutId);
-          return;
-        }
-
         const loadedSummary = await getWorkoutSummary(
           apiBaseUrl,
           workoutId,
-          aliasRange ?? undefined,
+          aliasRangeOldest && aliasRangeNewest
+            ? { oldest: aliasRangeOldest, newest: aliasRangeNewest }
+            : undefined,
         );
 
         if (cancelled) {
@@ -456,10 +462,10 @@ export function useCoachChat({
       closeSocket();
     };
   }, [
-    aliasRange,
+    aliasRangeNewest,
+    aliasRangeOldest,
     apiBaseUrl,
     applySummaryState,
-    cachedSummary,
     clearSummaryState,
     closeSocket,
     connectSocket,

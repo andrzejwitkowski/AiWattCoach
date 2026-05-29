@@ -1,7 +1,7 @@
 # Graph Report - AiWattCoach-bugfix-chat-ws-fallback  (2026-05-29)
 
 ## Corpus Check
-- 865 files · ~577,639 words
+- 865 files · ~578,388 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -4922,7 +4922,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
 - **Are the 35 inferred relationships involving `test_credentials()` (e.g. with `intervals_client_gets_activity_with_intervals_and_streams()` and `intervals_client_ignores_time_streams_when_fetching_activity_details()`) actually correct?**
   _`test_credentials()` has 35 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 29 inferred relationships involving `health_test_app()` (e.g. with `existing_normal_static_asset_is_served_directly()` and `existing_extensionless_static_asset_is_served_directly()`) actually correct?**
+- **Are the 29 inferred relationships involving `health_test_app()` (e.g. with `health_check_with_traceparent_logs_matching_trace_id()` and `not_found_api_route_emits_warn_classification_log()`) actually correct?**
   _`health_test_app()` has 29 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `StoredConversation`, `DetailBackfillCall`, `MetricsBackfillRange` to the rest of the system?**
   _1847 weakly-connected nodes found - possible documentation gaps or missing edges._
