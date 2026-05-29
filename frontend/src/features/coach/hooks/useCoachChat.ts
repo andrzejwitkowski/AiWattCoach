@@ -6,6 +6,7 @@ import {
   getWorkoutSummary,
   reopenWorkoutSummary,
   saveWorkoutSummary,
+  sendWorkoutSummaryMessage,
   updateWorkoutSummaryRpe,
   type WorkoutSummaryDateRange,
 } from '../api/workoutSummary';
@@ -598,18 +599,34 @@ export function useCoachChat({
         applySummaryState(nextSummary, requestedWorkoutId);
       }
 
-      const socket = await connectSocket(requestedWorkoutId);
-      assertCurrentWorkout(requestedWorkoutId);
-      const payload = clientWsMessageSchema.parse({ type: 'send_message', content: trimmed });
-      setProgressState('awaiting-reply');
-      socket.send(JSON.stringify(payload));
-      setMessages((current) => {
-        if (currentWorkoutIdRef.current !== requestedWorkoutId) {
-          return current;
-        }
+      let socket: WebSocket | null = null;
+      try {
+        socket = await connectSocket(requestedWorkoutId);
+      } catch {
+        socket = null;
+      }
 
-        return [...current, temporaryMessage(trimmed)];
-      });
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        assertCurrentWorkout(requestedWorkoutId);
+        const payload = clientWsMessageSchema.parse({ type: 'send_message', content: trimmed });
+        setProgressState('awaiting-reply');
+        socket.send(JSON.stringify(payload));
+        setMessages((current) => {
+          if (currentWorkoutIdRef.current !== requestedWorkoutId) {
+            return current;
+          }
+
+          return [...current, temporaryMessage(trimmed)];
+        });
+        return true;
+      }
+
+      setError(null);
+      const response = await sendWorkoutSummaryMessage(apiBaseUrl, requestedWorkoutId, { content: trimmed });
+      assertCurrentWorkout(requestedWorkoutId);
+      setSummary(response.summary);
+      setMessages(response.summary.messages);
+      setDraftRpe(response.summary.rpe);
       return true;
     } catch (sendError) {
       if (sendError instanceof StaleWorkoutSelectionError) {

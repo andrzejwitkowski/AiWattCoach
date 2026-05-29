@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-29 | CodeRabbit | workout summary chat fallback error flash
+
+- Problem: after the initial websocket-to-REST fallback fix, `useCoachChat.sendMessage(...)` still left the websocket connection error visible while the REST fallback request was in flight. `connectSocket(...)` set `error = "Unable to connect to the coach chat right now."`, the fallback swallowed the rejection, and the code only cleared `error` after the REST response resolved.
+- Fix: moved `setError(null)` to immediately before `sendWorkoutSummaryMessage(...)` and strengthened the fallback regression to hold the REST promise open long enough to assert the stale websocket error is already cleared during the pending request.
+- Prevention: when a fallback path intentionally recovers from an earlier transport error, clear any stale user-facing error state before awaiting the fallback request, not only after success. For async fallback regressions, keep the fallback promise pending long enough to assert interim UI state, not just the final resolved state.
+
+### 2026-05-29 | user | workout summary chat websocket fallback
+
+- Problem: `frontend/src/features/coach/hooks/useCoachChat.ts` tried to send every workout-summary chat message over websocket only. When the socket failed to reconnect, the UI stayed offline, the green online indicator never returned, and sending a message failed even though the REST `POST /api/workout-summaries/{workout_id}/messages` endpoint still existed for the same behavior.
+- Fix: imported `sendWorkoutSummaryMessage(...)` into `useCoachChat` and added a minimal fallback path that uses the existing REST endpoint whenever websocket connection/open fails during `sendMessage(...)`. Added a focused hook regression proving a failed reconnect still sends the message, updates the transcript, and clears the error state.
+- Prevention: when a chat flow offers both websocket streaming and REST request/response paths, keep the REST path wired as the degraded-mode fallback instead of assuming the socket is always available. For online indicators backed by websocket state, add one regression that simulates a reconnect failure during send and verifies the user can still submit a message.
+
 ### 2026-05-28 | user + Copilot + CodeRabbit | PR #257 AI Coach weekly summary review follow-up
 
 - Problem: the first weekly-summary-range fix still had three review gaps: the frontend sent all visible-week ids in one request even though the backend now rejects batches above 31 ids, the visible-week regression test did not assert exclusivity and could still pass with an extra hidden fetch, and the backend error message hardcoded `31` instead of deriving it from the limit constant.
