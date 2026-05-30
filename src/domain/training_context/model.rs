@@ -30,6 +30,7 @@ pub struct RenderedTrainingContext {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrainingContextBuildResult {
+    pub focus_date: String,
     pub context: TrainingContext,
     pub rendered: RenderedTrainingContext,
 }

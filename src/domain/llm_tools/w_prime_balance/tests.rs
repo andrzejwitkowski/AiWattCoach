@@ -657,4 +657,26 @@ impl crate::domain::llm_tools::GetSelectedWorkoutDataPort for NoopDataPort {
     > {
         Box::pin(async { Ok(Vec::new()) })
     }
+
+    fn load_selected_workout_data_by_id(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> crate::domain::workout_summary::BoxFuture<
+        Result<
+            crate::domain::llm_tools::get_selected_workout::SelectedWorkoutData,
+            crate::domain::workout_summary::WorkoutSummaryError,
+        >,
+    > {
+        Box::pin(async {
+            Ok(
+                crate::domain::llm_tools::get_selected_workout::SelectedWorkoutData {
+                    completed: Vec::new(),
+                    planned: Vec::new(),
+                    races: Vec::new(),
+                    summaries: Vec::new(),
+                },
+            )
+        })
+    }
 }

@@ -5,6 +5,8 @@ use crate::domain::{
     workout_summary::{WorkoutSummary, WorkoutSummaryError},
 };
 
+use super::response::SelectedWorkoutData;
+
 /// Object-safe port for loading workout data needed by `get_selected_workout`.
 pub trait GetSelectedWorkoutDataPort: Send + Sync {
     fn list_completed_by_date_range(
@@ -35,6 +37,12 @@ pub trait GetSelectedWorkoutDataPort: Send + Sync {
         user_id: &str,
         workout_ids: Vec<String>,
     ) -> crate::domain::workout_summary::BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>>;
+
+    fn load_selected_workout_data_by_id(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> crate::domain::workout_summary::BoxFuture<Result<SelectedWorkoutData, WorkoutSummaryError>>;
 
     fn persist_power_curve_5s_if_missing(
         &self,

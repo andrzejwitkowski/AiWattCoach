@@ -17,7 +17,9 @@ mod port;
 mod response;
 
 pub use port::GetSelectedWorkoutDataPort;
-use response::{build_selected_workout_response, SelectedDate, SelectedWorkoutData};
+use response::build_selected_workout_response;
+pub(crate) use response::SelectedDate;
+pub use response::SelectedWorkoutData;
 
 const GET_SELECTED_WORKOUT_TOOL_NAME: &str = "get_selected_workout";
 
@@ -91,19 +93,12 @@ async fn get_selected_workout(arguments_json: &str, context: &ToolExecutionConte
         return json!({ "error": "data port not available" }).to_string();
     };
 
-    let data = match load_selected_workout_data(&date, context, port.as_ref()).await {
+    let data = match load_selected_workout_data_for_date(&date, context, port.as_ref()).await {
         Ok(data) => data,
         Err(err) => return json!({ "error": err }).to_string(),
     };
 
-    let response_date = date.value.clone();
-    json!(build_selected_workout_response(
-        response_date,
-        data,
-        &date,
-        &context.today,
-    ))
-    .to_string()
+    build_response_for_date(date, data, &context.today)
 }
 
 fn parse_args(arguments_json: &str) -> Result<SelectedDate, String> {
@@ -118,11 +113,26 @@ fn parse_args(arguments_json: &str) -> Result<SelectedDate, String> {
     })
 }
 
-fn parse_date(value: &str) -> Option<NaiveDate> {
+pub(crate) fn parse_date(value: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
 }
 
-async fn load_selected_workout_data(
+pub(crate) fn build_response_for_date(
+    date: SelectedDate,
+    data: SelectedWorkoutData,
+    today: &str,
+) -> String {
+    let response_date = date.value.clone();
+    json!(build_selected_workout_response(
+        response_date,
+        data,
+        &date,
+        today,
+    ))
+    .to_string()
+}
+
+pub(crate) async fn load_selected_workout_data_for_date(
     date: &SelectedDate,
     context: &ToolExecutionContext,
     port: &dyn GetSelectedWorkoutDataPort,

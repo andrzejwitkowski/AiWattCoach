@@ -443,6 +443,7 @@ impl RecordingTrainingContextBuilder {
 
     fn result_for(focus_id: Option<String>, focus_kind: &str) -> TrainingContextBuildResult {
         TrainingContextBuildResult {
+            focus_date: "2026-05-29".to_string(),
             context: TrainingContext {
                 generated_at_epoch_seconds: 1_700_000_000,
                 focus_workout_id: focus_id,

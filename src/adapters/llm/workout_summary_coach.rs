@@ -101,6 +101,7 @@ where
                 .await?;
             let stable_context = build_stable_context(
                 &summary,
+                &training_context.focus_date,
                 &training_context.rendered.stable_context,
                 athlete_summary_text.as_deref(),
             );
@@ -249,16 +250,20 @@ const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach help
 
 fn build_stable_context(
     summary: &WorkoutSummary,
+    selected_workout_date: &str,
     packed_training_context: &str,
     athlete_summary_text: Option<&str>,
 ) -> String {
     let mut context = format!(
-        "workout_summary={{\"workoutId\":\"{}\",\"rpe\":{}}}",
+        "workout_summary={{\"workoutId\":\"{}\",\"rpe\":{}}}\nselected_workout={{\"workoutId\":\"{}\",\"date\":\"{}\"}}\ncurrent_workout_context=You are discussing the completed workout from {}.",
         summary.workout_id,
         summary
             .rpe
             .map(|value| value.to_string())
             .unwrap_or_else(|| "null".to_string()),
+        summary.workout_id,
+        selected_workout_date,
+        selected_workout_date,
     );
 
     if let Some(summary_text) = athlete_summary_text.filter(|value| !value.trim().is_empty()) {
@@ -277,10 +282,12 @@ fn build_volatile_context(packed_training_context: &str) -> String {
 
 fn workout_coach_system_prompt() -> String {
     format!(
-        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\nworkout_summary_coach_reply_schema={}\n{PACKED_TRAINING_CONTEXT_LEGEND}",
+        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\nworkout_summary_coach_reply_schema={}\n{PACKED_TRAINING_CONTEXT_LEGEND}",
         workout_summary_coach_reply_json_schema()
     )
 }
+
+const WORKOUT_COACH_SELECTED_WORKOUT_PROMPT: &str = "Use the provided selected workout date as the active workout context for this conversation. When inspecting the current workout, prefer that exact selected workout date or id instead of inferring from nearby history.";
 
 fn build_conversation(
     messages: &[crate::domain::workout_summary::ConversationMessage],
@@ -325,7 +332,7 @@ fn build_conversation(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_conversation, workout_coach_system_prompt};
+    use super::{build_conversation, build_stable_context, workout_coach_system_prompt};
     use crate::domain::{
         llm::{LlmChatMessage, LlmMessageRole, LlmToolCall},
         workout_summary::{ConversationMessage, MessageRole, PublicToolCall},
@@ -356,8 +363,30 @@ mod tests {
             "Do not conclude poor interval execution just because whole-workout averages were lowered by recovery valleys, coasting, zeros, terrain, or wind"
         ));
         assert!(prompt.contains("When workout tools are available, use them for that fallback"));
+        assert!(
+            prompt.contains("Use the provided selected workout date as the active workout context")
+        );
         assert!(!prompt.contains(
             "If the packed evidence is insufficient for a confident execution judgment, use the available workout tools to inspect higher-fidelity data before making a strong claim"
+        ));
+    }
+
+    #[test]
+    fn build_stable_context_includes_selected_workout_date() {
+        let summary = crate::domain::workout_summary::WorkoutSummary::new(
+            "summary-1".to_string(),
+            "user-1".to_string(),
+            "workout-1".to_string(),
+            1,
+        );
+
+        let context = build_stable_context(&summary, "2026-05-29", "{}", None);
+
+        assert!(
+            context.contains(r#"selected_workout={"workoutId":"workout-1","date":"2026-05-29"}"#)
+        );
+        assert!(context.contains(
+            "current_workout_context=You are discussing the completed workout from 2026-05-29."
         ));
     }
 

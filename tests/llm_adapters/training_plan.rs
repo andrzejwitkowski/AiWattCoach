@@ -41,6 +41,7 @@ impl TrainingContextBuilder for LargeContextTrainingContextBuilder {
         let workout_id = workout_id.to_string();
         Box::pin(async move {
             Ok(TrainingContextBuildResult {
+                focus_date: "2026-05-29".to_string(),
                 context: TrainingContext {
                     generated_at_epoch_seconds: 1_700_000_000,
                     focus_workout_id: Some(workout_id),
@@ -90,6 +91,7 @@ impl TrainingContextBuilder for UnconfiguredAvailabilityTrainingContextBuilder {
         let workout_id = workout_id.to_string();
         Box::pin(async move {
             Ok(TrainingContextBuildResult {
+                focus_date: "2026-05-29".to_string(),
                 context: TrainingContext {
                     generated_at_epoch_seconds: 1_700_000_000,
                     focus_workout_id: Some(workout_id),
