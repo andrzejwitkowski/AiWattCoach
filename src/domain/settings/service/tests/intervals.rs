@@ -159,17 +159,19 @@ async fn update_intervals_credential_change_resets_cursor_for_fresh_backfill() {
     let service = UserSettingsService::new(repository, TestClock)
         .with_provider_poll_states(poll_states.clone());
 
-    service
+    let updated = service
         .update_intervals(
             "user-1",
             IntervalsConfig {
                 api_key: Some("new-key".to_string()),
                 athlete_id: Some("new-athlete".to_string()),
-                connected: false,
+                connected: true,
             },
         )
         .await
         .unwrap();
+
+    assert!(updated.intervals.connected);
 
     let stored = poll_states.stored();
     assert!(stored

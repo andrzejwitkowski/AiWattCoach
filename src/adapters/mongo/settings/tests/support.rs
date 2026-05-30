@@ -32,6 +32,7 @@ pub(super) fn build_settings_document(
 
 pub(super) async fn test_mongo_client_or_skip() -> Option<Client> {
     let mongo_uri = test_mongo_uri();
+    let redacted_uri = redact_mongo_uri(&mongo_uri);
     let mut options = match mongodb::options::ClientOptions::parse(&mongo_uri).await {
         Ok(options) => options,
         Err(error) => {
@@ -39,7 +40,7 @@ pub(super) async fn test_mongo_client_or_skip() -> Option<Client> {
                 panic!("mongo settings test requires Mongo in CI: {error}");
             }
             eprintln!(
-                "skipping mongo settings test: failed to parse client options for {mongo_uri}: {error}"
+                "skipping mongo settings test: failed to parse client options for {redacted_uri}: {error}"
             );
             return None;
         }
@@ -52,7 +53,7 @@ pub(super) async fn test_mongo_client_or_skip() -> Option<Client> {
                 panic!("mongo settings test requires Mongo in CI: {error}");
             }
             eprintln!(
-                "skipping mongo settings test: failed to create client for {mongo_uri}: {error}"
+                "skipping mongo settings test: failed to create client for {redacted_uri}: {error}"
             );
             return None;
         }
@@ -69,10 +70,27 @@ pub(super) async fn test_mongo_client_or_skip() -> Option<Client> {
                 panic!("mongo settings test requires Mongo in CI: {error}");
             }
             eprintln!(
-                "skipping mongo settings test: failed to connect to Mongo at {mongo_uri}: {error}"
+                "skipping mongo settings test: failed to connect to Mongo at {redacted_uri}: {error}"
             );
             None
         }
+    }
+}
+
+fn redact_mongo_uri(uri: &str) -> String {
+    match uri.find("://") {
+        Some(scheme_end) => {
+            let rest = &uri[scheme_end + 3..];
+            match rest.find('@') {
+                Some(at_pos) => format!(
+                    "{}://<redacted>@{}",
+                    &uri[..scheme_end + 3],
+                    &rest[at_pos + 1..]
+                ),
+                None => uri.to_string(),
+            }
+        }
+        None => uri.to_string(),
     }
 }
 

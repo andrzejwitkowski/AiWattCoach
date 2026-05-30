@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { renderHook, type RenderHookOptions, type RenderHookResult } from '@testing-library/react';
 
 import { CoachSessionCacheProvider } from '../context/CoachSessionCache';
@@ -13,8 +14,14 @@ export function renderCoachHook<TProps, TResult>(
   callback: HookCallback<TProps, TResult>,
   options?: RenderHookOptions<TProps>,
 ): RenderHookResult<TResult, TProps> {
+  const OuterWrapper = options?.wrapper ?? Fragment;
+
   return renderHook(callback, {
-    wrapper: ({ children }) => <CoachSessionCacheProvider>{children}</CoachSessionCacheProvider>,
     ...options,
+    wrapper: ({ children }) => (
+      <CoachSessionCacheProvider>
+        <OuterWrapper>{children}</OuterWrapper>
+      </CoachSessionCacheProvider>
+    ),
   });
 }

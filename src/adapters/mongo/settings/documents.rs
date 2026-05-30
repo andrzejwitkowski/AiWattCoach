@@ -22,7 +22,7 @@ pub(super) struct SettingsDocument {
     pub(super) updated_at: Option<DateTime>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Deserialize, Serialize, Default)]
 pub(super) struct AiAgentsDocument {
     pub(super) openai_api_key: Option<String>,
     pub(super) gemini_api_key: Option<String>,
@@ -32,7 +32,32 @@ pub(super) struct AiAgentsDocument {
     pub(super) selected_model: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+impl std::fmt::Debug for AiAgentsDocument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AiAgentsDocument")
+            .field(
+                "openai_api_key",
+                &RedactedOptionalText(&self.openai_api_key),
+            )
+            .field(
+                "gemini_api_key",
+                &RedactedOptionalText(&self.gemini_api_key),
+            )
+            .field(
+                "openrouter_api_key",
+                &RedactedOptionalText(&self.openrouter_api_key),
+            )
+            .field(
+                "deepseek_api_key",
+                &RedactedOptionalText(&self.deepseek_api_key),
+            )
+            .field("selected_provider", &self.selected_provider)
+            .field("selected_model", &self.selected_model)
+            .finish()
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize, Default)]
 pub(super) struct IntervalsDocument {
     pub(super) api_key: Option<String>,
     pub(super) athlete_id: Option<String>,
@@ -41,6 +66,18 @@ pub(super) struct IntervalsDocument {
     pub(super) updated_at_epoch_seconds: Option<i64>,
     #[serde(default)]
     pub(super) updated_at: Option<DateTime>,
+}
+
+impl std::fmt::Debug for IntervalsDocument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IntervalsDocument")
+            .field("api_key", &RedactedOptionalText(&self.api_key))
+            .field("athlete_id", &self.athlete_id)
+            .field("connected", &self.connected)
+            .field("updated_at_epoch_seconds", &self.updated_at_epoch_seconds)
+            .field("updated_at", &self.updated_at)
+            .finish()
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize, Default)]

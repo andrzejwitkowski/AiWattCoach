@@ -39,10 +39,17 @@ impl InMemoryUserSettingsRepository {
 impl UserSettingsRepository for InMemoryUserSettingsRepository {
     fn find_by_user_id(
         &self,
-        _user_id: &str,
+        user_id: &str,
     ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
         let settings = self.settings.clone();
-        Box::pin(async move { Ok(settings.lock().unwrap().clone()) })
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(settings
+                .lock()
+                .unwrap()
+                .clone()
+                .filter(|settings| settings.user_id == user_id))
+        })
     }
 
     fn find_by_wahoo_user_id(
@@ -96,15 +103,17 @@ impl UserSettingsRepository for InMemoryUserSettingsRepository {
 
     fn update_ai_agents(
         &self,
-        _user_id: &str,
+        user_id: &str,
         ai_agents: AiAgentsConfig,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), SettingsError>> {
         let settings = self.settings.clone();
+        let user_id = user_id.to_string();
         Box::pin(async move {
             let mut guard = settings.lock().unwrap();
             let current = guard
                 .as_mut()
+                .filter(|current| current.user_id == user_id)
                 .ok_or_else(|| SettingsError::Repository("settings not found".to_string()))?;
             current.ai_agents = ai_agents;
             current.updated_at_epoch_seconds = updated_at_epoch_seconds;
@@ -114,15 +123,17 @@ impl UserSettingsRepository for InMemoryUserSettingsRepository {
 
     fn update_intervals(
         &self,
-        _user_id: &str,
+        user_id: &str,
         intervals: IntervalsConfig,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), SettingsError>> {
         let settings = self.settings.clone();
+        let user_id = user_id.to_string();
         Box::pin(async move {
             let mut guard = settings.lock().unwrap();
             let current = guard
                 .as_mut()
+                .filter(|current| current.user_id == user_id)
                 .ok_or_else(|| SettingsError::Repository("settings not found".to_string()))?;
             current.intervals = intervals;
             current.updated_at_epoch_seconds = updated_at_epoch_seconds;
@@ -141,15 +152,17 @@ impl UserSettingsRepository for InMemoryUserSettingsRepository {
 
     fn update_cycling(
         &self,
-        _user_id: &str,
+        user_id: &str,
         cycling: CyclingSettings,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), SettingsError>> {
         let settings = self.settings.clone();
+        let user_id = user_id.to_string();
         Box::pin(async move {
             let mut guard = settings.lock().unwrap();
             let current = guard
                 .as_mut()
+                .filter(|current| current.user_id == user_id)
                 .ok_or_else(|| SettingsError::Repository("settings not found".to_string()))?;
             current.cycling = cycling;
             current.updated_at_epoch_seconds = updated_at_epoch_seconds;
@@ -159,15 +172,17 @@ impl UserSettingsRepository for InMemoryUserSettingsRepository {
 
     fn update_availability(
         &self,
-        _user_id: &str,
+        user_id: &str,
         availability: AvailabilitySettings,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), SettingsError>> {
         let settings = self.settings.clone();
+        let user_id = user_id.to_string();
         Box::pin(async move {
             let mut guard = settings.lock().unwrap();
             let current = guard
                 .as_mut()
+                .filter(|current| current.user_id == user_id)
                 .ok_or_else(|| SettingsError::Repository("settings not found".to_string()))?;
             current.availability = availability;
             current.updated_at_epoch_seconds = updated_at_epoch_seconds;

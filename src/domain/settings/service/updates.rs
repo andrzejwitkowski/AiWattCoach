@@ -163,7 +163,10 @@ where
             );
         }
 
-        let history_ftp_watts = updated.cycling.ftp_watts.map(|ftp| ftp as i32).unwrap_or(0);
+        let Some(history_ftp_watts) = updated.cycling.ftp_watts.map(|ftp| ftp as i32) else {
+            return;
+        };
+
         if let Err(error) = repository
             .upsert(FtpHistoryEntry {
                 user_id: user_id.to_string(),

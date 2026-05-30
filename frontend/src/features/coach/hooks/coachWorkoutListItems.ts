@@ -181,7 +181,11 @@ export function buildWorkoutItems(
 }
 
 export function isSameDay(left: Date, right: Date): boolean {
-  return left.getTime() === right.getTime();
+  return (
+    left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate()
+  );
 }
 
 function isWithinWeek(value: string, weekStart: Date): boolean {

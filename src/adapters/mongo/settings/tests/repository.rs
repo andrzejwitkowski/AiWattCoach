@@ -1,3 +1,4 @@
+use futures::TryStreamExt;
 use mongodb::bson::{doc, Document};
 
 use super::super::{
@@ -164,6 +165,38 @@ async fn ensure_indexes_creates_unique_wahoo_user_id_index() {
         .await
         .unwrap();
     assert!(index_names.contains(&"user_settings_wahoo_user_id_unique".to_string()));
+
+    let indexes = client
+        .database(&database_name)
+        .collection::<mongodb::bson::Document>("user_settings")
+        .list_indexes()
+        .await
+        .unwrap()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
+    let wahoo_index = indexes
+        .iter()
+        .find(|idx| {
+            idx.options.as_ref().and_then(|opts| opts.name.as_deref())
+                == Some("user_settings_wahoo_user_id_unique")
+        })
+        .expect("wahoo user_id index should exist");
+    assert_eq!(wahoo_index.keys.get_i32("wahoo.user_id").unwrap(), 1);
+    let unique = wahoo_index
+        .options
+        .as_ref()
+        .and_then(|opts| opts.unique)
+        .unwrap_or(false);
+    assert!(unique, "wahoo user_id index should be unique");
+    assert!(
+        wahoo_index
+            .options
+            .as_ref()
+            .and_then(|opts| opts.partial_filter_expression.as_ref())
+            .is_some(),
+        "wahoo user_id index should have partialFilterExpression"
+    );
 
     client.database(&database_name).drop().await.unwrap();
 }

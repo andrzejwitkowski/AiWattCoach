@@ -6,6 +6,7 @@ type PendingSocketState = {
   workoutId: string;
   socket: WebSocket;
   promise: Promise<WebSocket>;
+  reject: (error: Error) => void;
 };
 
 type UseCoachChatSocketOptions = {
@@ -31,7 +32,8 @@ export function buildWorkoutSummaryWebSocketUrl(apiBaseUrl: string, workoutId: s
   }
 
   if (apiBaseUrl.startsWith('/')) {
-    return `${buildProtocol(window.location.protocol)}//${window.location.host}${apiBaseUrl}${path}`;
+    const safeBase = apiBaseUrl.replace(/\/+$/, '');
+    return `${buildProtocol(window.location.protocol)}//${window.location.host}${safeBase}${path}`;
   }
 
   const url = new URL(apiBaseUrl);
@@ -106,7 +108,10 @@ export function useCoachChatSocket({
 
     const socket = new WebSocket(buildWorkoutSummaryWebSocketUrl(apiBaseUrl, currentWorkoutId));
 
+    let pendingReject: ((error: Error) => void) | null = null;
+
     const socketPromise = new Promise<WebSocket>((resolve, reject) => {
+      pendingReject = reject;
       socket.addEventListener('open', () => {
         if (pendingSocketRef.current?.socket !== socket || pendingSocketRef.current?.workoutId !== currentWorkoutId) {
           socket.close();
@@ -175,6 +180,7 @@ export function useCoachChatSocket({
           setIsConnected(false);
         }
         if (pendingSocketRef.current?.socket === socket) {
+          pendingSocketRef.current.reject(new Error('WebSocket closed before open'));
           pendingSocketRef.current = null;
         }
         setIsCoachTyping(false);
@@ -197,7 +203,7 @@ export function useCoachChatSocket({
       }, { once: true });
     });
 
-    pendingSocketRef.current = { workoutId: currentWorkoutId, socket, promise: socketPromise };
+    pendingSocketRef.current = { workoutId: currentWorkoutId, socket, promise: socketPromise, reject: pendingReject! };
 
     try {
       return await socketPromise;
