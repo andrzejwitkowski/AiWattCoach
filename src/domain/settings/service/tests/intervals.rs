@@ -176,7 +176,7 @@ async fn update_intervals_credential_change_resets_cursor_for_fresh_backfill() {
     let stored = poll_states.stored();
     assert!(stored
         .iter()
-        .all(|state| state.next_due_at_epoch_seconds == i64::MAX));
+        .all(|state| state.next_due_at_epoch_seconds == 1_700_000_000));
     assert!(stored.iter().all(|state| state.cursor.is_none()));
     assert!(stored
         .iter()

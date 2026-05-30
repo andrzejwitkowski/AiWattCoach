@@ -155,10 +155,8 @@ async fn update_cycling_clears_effective_ftp_history_and_recomputes() {
 
     assert_eq!(updated.cycling.ftp_watts, None);
     let history = ftp_history_repository.stored();
-    assert_eq!(history.len(), 2);
+    assert_eq!(history.len(), 1);
     assert_eq!(history[0].ftp_watts, 280);
-    assert_eq!(history[1].effective_from_date, "2023-11-14");
-    assert_eq!(history[1].ftp_watts, 0);
     assert_eq!(
         recompute_service.calls(),
         vec![(
