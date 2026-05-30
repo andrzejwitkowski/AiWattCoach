@@ -6,7 +6,6 @@ import { useCompletedWorkouts } from '../../intervals/context';
 import { useSettings } from '../../settings/context/SettingsContext';
 import { useMediaQuery } from '../../../lib/useMediaQuery';
 import { isAvailabilityConfigured } from '../../settings/types';
-import { useCoachSessionCache } from '../context/CoachSessionCache';
 import { useWorkoutList } from '../hooks/useWorkoutList';
 import { isAvailabilityRequiredChatError, useCoachChat } from '../hooks/useCoachChat';
 import { ChatWindow } from './ChatWindow';
@@ -25,7 +24,6 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
   const { t } = useTranslation();
   const isMobile = useMediaQuery('(max-width: 767px)');
   const settingsContext = useSettings();
-  const sessionCache = useCoachSessionCache();
   const workoutList = useWorkoutList({ apiBaseUrl });
   const completedWorkouts = useCompletedWorkouts();
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);

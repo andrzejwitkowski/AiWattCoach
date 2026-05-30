@@ -46,7 +46,7 @@ export function CoachSessionCacheProvider({ children }: { children: React.ReactN
     setRevision((current) => current + 1);
   }, []);
 
-  const hydrateMetadataSummaries = useCallback((requestedWorkoutIds: string[], summariesForRequest: WorkoutSummary[]) => {
+  const hydrateMetadataSummaries = useCallback((_requestedWorkoutIds: string[], summariesForRequest: WorkoutSummary[]) => {
     const next = new Map(summariesRef.current);
 
     for (const summary of summariesForRequest) {

@@ -10,10 +10,10 @@ export function renderCoachHook<TProps, TResult>(
   options: RenderHookOptions<TProps>,
 ): RenderHookResult<TResult, TProps>;
 export function renderCoachHook<TProps, TResult>(
-  callback: HookCallback<TProps, TResult> | (() => TResult),
+  callback: HookCallback<TProps, TResult>,
   options?: RenderHookOptions<TProps>,
-): RenderHookResult<TResult, TProps | undefined> {
-  return renderHook(callback as HookCallback<TProps | undefined, TResult>, {
+): RenderHookResult<TResult, TProps> {
+  return renderHook(callback, {
     wrapper: ({ children }) => <CoachSessionCacheProvider>{children}</CoachSessionCacheProvider>,
     ...options,
   });
