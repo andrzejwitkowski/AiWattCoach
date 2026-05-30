@@ -600,7 +600,11 @@ where
         };
         let rendered = render_training_context(&context);
 
-        Ok(TrainingContextBuildResult { context, rendered })
+        Ok(TrainingContextBuildResult {
+            focus_date: focus_date.format("%Y-%m-%d").to_string(),
+            context,
+            rendered,
+        })
     }
 
     fn load_detailed_recent_activities(

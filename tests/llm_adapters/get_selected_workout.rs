@@ -197,6 +197,23 @@ impl GetSelectedWorkoutDataPort for EmptyDataPort {
     > {
         Box::pin(async { Ok(Vec::new()) })
     }
+
+    fn load_selected_workout_data_by_id(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> aiwattcoach::domain::workout_summary::BoxFuture<
+        Result<aiwattcoach::domain::llm_tools::SelectedWorkoutData, WorkoutSummaryError>,
+    > {
+        Box::pin(async {
+            Ok(aiwattcoach::domain::llm_tools::SelectedWorkoutData {
+                completed: Vec::new(),
+                planned: Vec::new(),
+                races: Vec::new(),
+                summaries: Vec::new(),
+            })
+        })
+    }
 }
 
 #[tokio::test]

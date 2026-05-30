@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::GetSelectedWorkout;
+use super::{GetSelectedWorkout, SelectedWorkoutData};
 use crate::domain::{
     completed_workouts::{
         CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutSeries,
@@ -187,7 +187,7 @@ fn get_selected_workout_returns_error_for_invalid_date() {
 }
 
 #[derive(Clone, Default)]
-struct TestDataPort {
+pub(crate) struct TestDataPort {
     completed: Vec<CompletedWorkout>,
     planned: Vec<PlannedWorkout>,
     races: Vec<Race>,
@@ -268,9 +268,45 @@ impl GetSelectedWorkoutDataPort for TestDataPort {
                 .collect())
         })
     }
+
+    fn load_selected_workout_data_by_id(
+        &self,
+        _user_id: &str,
+        workout_id: &str,
+    ) -> crate::domain::workout_summary::BoxFuture<
+        Result<SelectedWorkoutData, crate::domain::workout_summary::WorkoutSummaryError>,
+    > {
+        let completed = self.completed.clone();
+        let planned = self.planned.clone();
+        let races = self.races.clone();
+        let summaries = self.summaries.clone();
+        let workout_id = workout_id.to_string();
+
+        Box::pin(async move {
+            Ok(SelectedWorkoutData {
+                completed: completed
+                    .into_iter()
+                    .filter(|workout| {
+                        workout.completed_workout_id == workout_id
+                            || workout.source_activity_id.as_deref() == Some(workout_id.as_str())
+                            || workout.external_id.as_deref() == Some(workout_id.as_str())
+                    })
+                    .collect(),
+                planned: planned
+                    .into_iter()
+                    .filter(|workout| workout.planned_workout_id == workout_id)
+                    .collect(),
+                races: races
+                    .into_iter()
+                    .filter(|race| race.race_id == workout_id)
+                    .collect(),
+                summaries,
+            })
+        })
+    }
 }
 
-fn sample_context(data_port: TestDataPort) -> ToolExecutionContext {
+pub(crate) fn sample_context(data_port: TestDataPort) -> ToolExecutionContext {
     ToolExecutionContext {
         user_id: "user-1".to_string(),
         training_context: TrainingContext {
@@ -292,7 +328,7 @@ fn sample_context(data_port: TestDataPort) -> ToolExecutionContext {
     }
 }
 
-fn sample_completed_workout(planned_workout_id: Option<&str>) -> CompletedWorkout {
+pub(crate) fn sample_completed_workout(planned_workout_id: Option<&str>) -> CompletedWorkout {
     CompletedWorkout::new(
         "completed-1".to_string(),
         "user-1".to_string(),
@@ -345,7 +381,7 @@ fn sample_completed_workout(planned_workout_id: Option<&str>) -> CompletedWorkou
     )
 }
 
-fn sample_planned_workout(id: &str, date: &str) -> PlannedWorkout {
+pub(crate) fn sample_planned_workout(id: &str, date: &str) -> PlannedWorkout {
     PlannedWorkout::new(
         id.to_string(),
         "user-1".to_string(),
@@ -366,7 +402,7 @@ fn sample_planned_workout(id: &str, date: &str) -> PlannedWorkout {
     .with_event_metadata(Some("Planned Endurance".to_string()), None, None)
 }
 
-fn sample_race(date: &str) -> Race {
+pub(crate) fn sample_race(date: &str) -> Race {
     Race {
         race_id: "race-1".to_string(),
         user_id: "user-1".to_string(),
@@ -381,7 +417,7 @@ fn sample_race(date: &str) -> Race {
     }
 }
 
-fn sample_summary(workout_id: &str) -> WorkoutSummary {
+pub(crate) fn sample_summary(workout_id: &str) -> WorkoutSummary {
     WorkoutSummary {
         id: "summary-1".to_string(),
         user_id: "user-1".to_string(),

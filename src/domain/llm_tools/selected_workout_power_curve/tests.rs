@@ -6,6 +6,7 @@ use crate::domain::{
         CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics,
         CompletedWorkoutPowerCurve, CompletedWorkoutSeries, CompletedWorkoutStream,
     },
+    llm_tools::get_selected_workout::SelectedWorkoutData,
     llm_tools::{GetSelectedWorkoutDataPort, LlmTool, ToolExecutionContext},
     training_context::TrainingContext,
 };
@@ -66,6 +67,23 @@ impl GetSelectedWorkoutDataPort for TestDataPort {
         >,
     > {
         Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn load_selected_workout_data_by_id(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> crate::domain::workout_summary::BoxFuture<
+        Result<SelectedWorkoutData, crate::domain::workout_summary::WorkoutSummaryError>,
+    > {
+        Box::pin(async {
+            Ok(SelectedWorkoutData {
+                completed: Vec::new(),
+                planned: Vec::new(),
+                races: Vec::new(),
+                summaries: Vec::new(),
+            })
+        })
     }
 
     fn persist_power_curve_5s_if_missing(

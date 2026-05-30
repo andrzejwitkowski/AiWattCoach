@@ -20,16 +20,16 @@ pub(super) struct GetSelectedWorkoutResponse {
     races: Vec<RaceEntry>,
 }
 
-pub(super) struct SelectedDate {
-    pub(super) value: String,
-    pub(super) parsed: NaiveDate,
+pub(crate) struct SelectedDate {
+    pub(crate) value: String,
+    pub(crate) parsed: NaiveDate,
 }
 
-pub(super) struct SelectedWorkoutData {
-    pub(super) completed: Vec<CompletedWorkout>,
-    pub(super) planned: Vec<PlannedWorkout>,
-    pub(super) races: Vec<Race>,
-    pub(super) summaries: Vec<WorkoutSummary>,
+pub struct SelectedWorkoutData {
+    pub completed: Vec<CompletedWorkout>,
+    pub planned: Vec<PlannedWorkout>,
+    pub races: Vec<Race>,
+    pub summaries: Vec<WorkoutSummary>,
 }
 
 #[derive(Serialize)]
@@ -143,7 +143,7 @@ fn build_workout_entries(
 fn map_completed_workout(workout: &CompletedWorkout, summaries: &[WorkoutSummary]) -> WorkoutEntry {
     let summary = summaries
         .iter()
-        .find(|s| s.workout_id == workout.completed_workout_id);
+        .find(|summary| summary_matches_completed_workout(summary, workout));
 
     WorkoutEntry::Completed {
         workout_id: workout.completed_workout_id.clone(),
@@ -185,6 +185,12 @@ fn map_completed_workout(workout: &CompletedWorkout, summaries: &[WorkoutSummary
             .unwrap_or_default(),
         ai_summary: summary.and_then(|s| s.workout_recap_text.clone()),
     }
+}
+
+fn summary_matches_completed_workout(summary: &WorkoutSummary, workout: &CompletedWorkout) -> bool {
+    summary.workout_id == workout.completed_workout_id
+        || workout.source_activity_id.as_deref() == Some(summary.workout_id.as_str())
+        || workout.external_id.as_deref() == Some(summary.workout_id.as_str())
 }
 
 fn map_conversation_message(

@@ -19,7 +19,13 @@ mod simulate_forward_load;
 pub use simulate_forward_load::SimulateForwardLoad;
 
 mod get_selected_workout;
+pub use get_selected_workout::SelectedWorkoutData;
 pub use get_selected_workout::{GetSelectedWorkout, GetSelectedWorkoutDataPort};
+
+mod get_selected_workout_by_id;
+pub use get_selected_workout_by_id::GetSelectedWorkoutById;
+#[cfg(test)]
+mod get_selected_workout_by_id_tests;
 
 mod update_planned_workout;
 use update_planned_workout::UPDATE_PLANNED_WORKOUT_TOOL_NAME;
@@ -425,6 +431,7 @@ fn all_tools() -> Vec<Box<dyn LlmTool>> {
     vec![
         Box::new(SimulateForwardLoad),
         Box::new(GetSelectedWorkout),
+        Box::new(GetSelectedWorkoutById),
         Box::new(UpdatePlannedWorkout),
         Box::new(SelectedWorkoutPowerCurve),
         Box::new(WPrimeBalance),
@@ -576,9 +583,20 @@ fn scope_specific_tool_guidance(
 
     let mut guidance = Vec::new();
     let selected_workout_tool_name = GetSelectedWorkout.name();
+    let selected_workout_by_id_tool_name = GetSelectedWorkoutById.name();
     let power_curve_tool_name = SelectedWorkoutPowerCurve.name();
     let has_selected_workout = available_tool_names.contains(&selected_workout_tool_name);
+    let has_selected_workout_by_id =
+        available_tool_names.contains(&selected_workout_by_id_tool_name);
     let has_power_curve = available_tool_names.contains(&power_curve_tool_name);
+
+    if has_selected_workout_by_id {
+        guidance.push(
+            format!(
+                "- For the currently selected workout, prefer `{selected_workout_by_id_tool_name}` so you can inspect exact workout details without guessing the date from nearby history."
+            ),
+        );
+    }
 
     if has_selected_workout {
         guidance.push(
@@ -691,6 +709,7 @@ mod tests {
         assert!(prompt.contains("Tool usage guidance"));
         assert!(prompt.contains("`simulate_forward_load`"));
         assert!(prompt.contains("`get_selected_workout`"));
+        assert!(prompt.contains("`get_selected_workout_by_id`"));
         assert!(prompt.contains("`selected_workout_power_curve`"));
         assert!(prompt.contains("`get_w_prime_balance`"));
         assert!(prompt.contains("call it instead of guessing"));
@@ -707,6 +726,7 @@ mod tests {
 
         assert!(prompt.contains("`simulate_forward_load`"));
         assert!(!prompt.contains("`get_selected_workout`"));
+        assert!(!prompt.contains("`get_selected_workout_by_id`"));
         assert!(!prompt.contains("`selected_workout_power_curve`"));
         assert!(!prompt.contains("`get_w_prime_balance`"));
     }
@@ -740,6 +760,13 @@ mod tests {
                     && line.contains("workout-summary execution judgments")
             })
             .expect("workout-summary prompt should include selected-workout fallback guidance");
+        let selected_workout_by_id_line = prompt
+            .lines()
+            .find(|line| {
+                line.contains("`get_selected_workout_by_id`")
+                    && line.contains("currently selected workout")
+            })
+            .expect("workout-summary prompt should include selected-workout-by-id guidance");
         let power_curve_line = prompt
             .lines()
             .find(|line| {
@@ -749,6 +776,8 @@ mod tests {
 
         assert!(prompt.contains("Tool usage guidance"));
         assert!(prompt.contains("workout-summary execution judgments"));
+        assert!(selected_workout_by_id_line.contains("currently selected workout"));
+        assert!(selected_workout_by_id_line.contains("without guessing the date"));
         assert!(selected_workout_line.contains("fallback"));
         assert!(selected_workout_line.contains("bl, pc, and c5"));
         assert!(selected_workout_line.contains("insufficient"));
@@ -921,6 +950,28 @@ mod tests {
             >,
         > {
             Box::pin(async { Ok(Vec::new()) })
+        }
+
+        fn load_selected_workout_data_by_id(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<
+                crate::domain::llm_tools::get_selected_workout::SelectedWorkoutData,
+                crate::domain::workout_summary::WorkoutSummaryError,
+            >,
+        > {
+            Box::pin(async {
+                Ok(
+                    crate::domain::llm_tools::get_selected_workout::SelectedWorkoutData {
+                        completed: Vec::new(),
+                        planned: Vec::new(),
+                        races: Vec::new(),
+                        summaries: Vec::new(),
+                    },
+                )
+            })
         }
     }
 }
