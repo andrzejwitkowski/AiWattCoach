@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../../../lib/httpClient';
@@ -15,6 +15,7 @@ import {
   resetCoachChatTestEnvironment,
   summaryFixture,
 } from './useCoachChat.testUtils';
+import { renderCoachHook } from './testRender';
 
 vi.mock('../api/workoutSummary', () => ({
   createWorkoutSummary: vi.fn(),
@@ -33,6 +34,10 @@ afterEach(() => {
 });
 
 describe('useCoachChat save workflow', () => {
+  function renderCoachChatHook() {
+    return renderCoachHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+  }
+
   it('saves draft rpe to the backend', async () => {
     installFakeWebSocket();
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
@@ -46,7 +51,7 @@ describe('useCoachChat save workflow', () => {
       },
     });
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.summary?.workoutId).toBe('101');
@@ -79,7 +84,7 @@ describe('useCoachChat save workflow', () => {
       resolveSave = resolve;
     }));
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.summary?.workoutId).toBe('101');
@@ -122,7 +127,7 @@ describe('useCoachChat save workflow', () => {
       rejectSave = reject;
     }));
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.summary?.workoutId).toBe('101');
@@ -157,7 +162,7 @@ describe('useCoachChat save workflow', () => {
       savedAtEpochSeconds: null,
     });
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.isSaved).toBe(true);
@@ -183,7 +188,7 @@ describe('useCoachChat save workflow', () => {
       },
     });
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.summary?.workoutId).toBe('101');
@@ -201,7 +206,7 @@ describe('useCoachChat save workflow', () => {
     installFakeWebSocket();
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
@@ -241,7 +246,7 @@ describe('useCoachChat save workflow', () => {
     installFakeWebSocket();
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.summary?.workoutId).toBe('101');

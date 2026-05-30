@@ -6,6 +6,7 @@ import { listActivities, listEvents } from '../../intervals/api/intervals';
 import { HttpError } from '../../../lib/httpClient';
 import { listWorkoutSummaries } from '../api/workoutSummary';
 import { useWorkoutList } from './useWorkoutList';
+import { CoachSessionCacheProvider } from '../context/CoachSessionCache';
 
 vi.mock('../../intervals/api/intervals', () => ({
   listActivities: vi.fn(),
@@ -129,9 +130,11 @@ const activityFixture = {
 function renderWorkoutListHook() {
   return renderHook(() => useWorkoutList({ apiBaseUrl: '' }), {
     wrapper: ({ children }) => (
-      <CompletedWorkoutsProvider apiBaseUrl="">
-        {children}
-      </CompletedWorkoutsProvider>
+      <CoachSessionCacheProvider>
+        <CompletedWorkoutsProvider apiBaseUrl="">
+          {children}
+        </CompletedWorkoutsProvider>
+      </CoachSessionCacheProvider>
     ),
   });
 }

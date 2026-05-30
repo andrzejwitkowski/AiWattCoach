@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../../../lib/httpClient';
@@ -16,6 +16,7 @@ import {
   summaryFixture,
 } from './useCoachChat.testUtils';
 import type { SendMessageResponse } from '../types';
+import { renderCoachHook } from './testRender';
 
 vi.mock('../api/workoutSummary', () => ({
   createWorkoutSummary: vi.fn(),
@@ -34,12 +35,16 @@ afterEach(() => {
 });
 
 describe('useCoachChat sendMessage', () => {
+  function renderCoachChatHook() {
+    return renderCoachHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+  }
+
   it('creates a summary on first send when one does not exist', async () => {
     installFakeWebSocket();
     vi.mocked(getWorkoutSummary).mockRejectedValue(new HttpError(404, 'not found'));
     vi.mocked(createWorkoutSummary).mockResolvedValue({ ...summaryFixture, rpe: 5 });
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -67,7 +72,7 @@ describe('useCoachChat sendMessage', () => {
       .mockResolvedValueOnce({ ...summaryFixture, rpe: 5 });
     vi.mocked(createWorkoutSummary).mockRejectedValue(new HttpError(409, 'conflict'));
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -90,7 +95,7 @@ describe('useCoachChat sendMessage', () => {
     installFakeWebSocket();
     vi.mocked(getWorkoutSummary).mockRejectedValue(new HttpError(404, 'not found'));
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -108,7 +113,7 @@ describe('useCoachChat sendMessage', () => {
     installFakeWebSocket();
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
@@ -147,7 +152,7 @@ describe('useCoachChat sendMessage', () => {
       resolveFallback = resolve;
     }));
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
@@ -221,7 +226,7 @@ describe('useCoachChat sendMessage', () => {
     installFakeWebSocket();
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
@@ -294,7 +299,7 @@ describe('useCoachChat sendMessage', () => {
     installFakeWebSocket();
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
@@ -400,7 +405,7 @@ describe('useCoachChat sendMessage', () => {
     installFakeWebSocket();
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
@@ -472,7 +477,7 @@ describe('useCoachChat sendMessage', () => {
     vi.mocked(createWorkoutSummary).mockResolvedValue(summaryFixture);
     vi.mocked(updateWorkoutSummaryRpe).mockResolvedValue({ ...summaryFixture, rpe: 8 });
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachChatHook();
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);

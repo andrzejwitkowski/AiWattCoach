@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getWorkoutSummary, saveWorkoutSummary } from '../api/workoutSummary';
@@ -8,6 +8,7 @@ import {
   resetCoachChatTestEnvironment,
   summaryFixture,
 } from './useCoachChat.testUtils';
+import { renderCoachHook } from './testRender';
 
 vi.mock('../api/workoutSummary', () => ({
   createWorkoutSummary: vi.fn(),
@@ -26,6 +27,12 @@ afterEach(() => {
 });
 
 describe('useCoachChat stale selection guards', () => {
+  function renderCoachChatHook<TProps>(callback: (props: TProps) => ReturnType<typeof useCoachChat>, options: {
+    initialProps: TProps;
+  }) {
+    return renderCoachHook(callback, options);
+  }
+
   it('ignores stale load responses after switching workouts', async () => {
     let resolveFirstSummary: ((value: typeof summaryFixture) => void) | undefined;
     let resolveSecondSummary: ((value: typeof summaryFixture) => void) | undefined;
@@ -39,7 +46,7 @@ describe('useCoachChat stale selection guards', () => {
         resolveSecondSummary = resolve;
       }));
 
-    const { result, rerender } = renderHook(
+    const { result, rerender } = renderCoachChatHook(
       ({ workoutId }) => useCoachChat({ apiBaseUrl: '', workoutId }),
       { initialProps: { workoutId: '101' } },
     );
@@ -74,7 +81,7 @@ describe('useCoachChat stale selection guards', () => {
       resolveSave = resolve;
     }));
 
-    const { result, rerender } = renderHook(
+    const { result, rerender } = renderCoachChatHook(
       ({ workoutId }) => useCoachChat({ apiBaseUrl: '', workoutId }),
       { initialProps: { workoutId: '101' } },
     );
