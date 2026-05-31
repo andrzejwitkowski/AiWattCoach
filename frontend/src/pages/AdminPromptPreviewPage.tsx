@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useAuth } from '../features/auth/context/AuthProvider';
 import { useAdminPromptPreviewApi } from '../features/admin-prompt-preview/api';
 import type { AdminPromptPreviewResponse } from '../features/admin-prompt-preview/types';
 
@@ -10,9 +11,10 @@ function todayIsoDate() {
 
 export function AdminPromptPreviewPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const { loadAdminPostWorkoutPromptPreview, loadAdminCalendarCoachPromptPreview } =
     useAdminPromptPreviewApi();
-  const [userId, setUserId] = useState('');
+  const [userId, setUserId] = useState(user?.id ?? '');
   const [date, setDate] = useState(todayIsoDate());
   const [preview, setPreview] = useState<AdminPromptPreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
