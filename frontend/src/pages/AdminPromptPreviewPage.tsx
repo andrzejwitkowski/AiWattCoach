@@ -3,6 +3,13 @@ import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../features/auth/context/AuthProvider';
 import { useAdminPromptPreviewApi } from '../features/admin-prompt-preview/api';
+import { MetaBar } from '../features/admin-prompt-preview/components/MetaBar';
+import { SystemPromptSection } from '../features/admin-prompt-preview/components/SystemPromptSection';
+import { StableContextSection } from '../features/admin-prompt-preview/components/StableContextSection';
+import { VolatileContextSection } from '../features/admin-prompt-preview/components/VolatileContextSection';
+import { ConversationSection } from '../features/admin-prompt-preview/components/ConversationSection';
+import { ToolsSection } from '../features/admin-prompt-preview/components/ToolsSection';
+import { ProviderMessagesSection } from '../features/admin-prompt-preview/components/ProviderMessagesSection';
 import type { AdminPromptPreviewResponse } from '../features/admin-prompt-preview/types';
 
 function todayIsoDate() {
@@ -27,6 +34,7 @@ export function AdminPromptPreviewPage() {
     () => (preview ? JSON.stringify(preview, null, 2) : ''),
     [preview],
   );
+  const [showRawJson, setShowRawJson] = useState(false);
 
   const runPreview = async (surface: 'post-workout' | 'calendar-coach') => {
     if (!userId.trim() || !date) {
@@ -113,19 +121,41 @@ export function AdminPromptPreviewPage() {
         </p>
       ) : null}
 
-      <div className="min-h-[60vh] rounded-2xl border border-white/10 bg-[#070b12] p-4">
-        {preview ? (
-          <div className="mb-3 text-xs uppercase tracking-[0.2em] text-slate-500">
-            {preview.meta.surface}
-            {preview.meta.selectedWorkoutId
-              ? ` · ${preview.meta.selectedWorkoutId}`
-              : ''}
+      {preview && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <MetaBar meta={preview.meta} />
+            <button
+              type="button"
+              onClick={() => setShowRawJson(!showRawJson)}
+              className="ml-auto rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200"
+            >
+              {showRawJson ? 'Structured view' : 'Raw JSON'}
+            </button>
           </div>
-        ) : null}
-        <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-slate-200">
-          {formattedPreview || t('adminPromptPreview.empty')}
-        </pre>
-      </div>
+
+          {showRawJson ? (
+            <pre className="max-h-[80vh] overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-white/10 bg-[#070b12] p-5 font-mono text-xs leading-5 text-slate-300">
+              {formattedPreview}
+            </pre>
+          ) : (
+            <div className="space-y-4">
+              <SystemPromptSection systemPrompt={preview.request.systemPrompt} />
+              <StableContextSection rawText={preview.request.stableContext} />
+              <VolatileContextSection rawText={preview.request.volatileContext} />
+              <ConversationSection conversation={preview.request.conversation} />
+              <ToolsSection tools={preview.request.tools} toolChoice={preview.request.toolChoice} />
+              <ProviderMessagesSection messages={preview.providerMessages} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {!preview && !error && (
+        <div className="flex min-h-[40vh] items-center justify-center rounded-2xl border border-dashed border-white/10">
+          <p className="text-sm text-slate-500">{t('adminPromptPreview.empty')}</p>
+        </div>
+      )}
     </section>
   );
 }
