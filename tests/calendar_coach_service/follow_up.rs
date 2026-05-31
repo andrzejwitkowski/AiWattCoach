@@ -126,7 +126,10 @@ async fn calendar_coach_follow_up_replays_last_hidden_assistant_tool_calls() {
         requests[0].conversation[2].tool_call_id.as_deref(),
         Some("tool-1")
     );
-    assert_eq!(requests[0].conversation[3].content, "What about tomorrow?");
+    assert_eq!(
+        requests[0].conversation[3].content,
+        "[sent_at=2023-11-14T22:13:20+00:00]\nWhat about tomorrow?"
+    );
 }
 
 #[tokio::test]

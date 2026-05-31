@@ -77,7 +77,10 @@ async fn calendar_coach_generate_reply_uses_calendar_overview_context_and_no_sum
         .volatile_context
         .contains("training_context_volatile={\"focus\":\"summary\"}"));
     assert_eq!(request.conversation.len(), 1);
-    assert_eq!(request.conversation[0].content, "What should I do today?");
+    assert_eq!(
+        request.conversation[0].content,
+        "[sent_at=2023-11-14T22:13:20+00:00]\nWhat should I do today?"
+    );
     assert_eq!(
         request.cache_scope_key.as_deref(),
         Some("calendar-coach:user-1:overview")
