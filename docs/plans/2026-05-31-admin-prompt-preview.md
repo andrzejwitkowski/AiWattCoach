@@ -44,8 +44,8 @@ Domain helper: `pick_representative_completed_workout_for_date(user_id, date)`.
 | 2 | `select_visible_workouts_by_day(..., wahoo_entity_ids)` — same dedupe as calendar visibility (`src/domain/completed_workouts/selection.rs`) |
 | 3 | 0 workouts → **404** `no_completed_workout_for_date` |
 | 4 | 1 workout → use it |
-| 5 | Multiple | Score planned↔completed pairs using existing **`find_best_activity_match`** (`src/domain/intervals/workout/matching.rs`) + **`build_event_activity_matches`** pattern (`src/domain/training_context/service/context.rs`): load workout-category events + map completed rows to `Activity` for that day, take **max `compliance_score`** across pairs |
-| 6 | No pair ≥ 0.45 | Fallback: highest `training_stress_score`, then latest `start_date_local` |
+| 5 | Multiple workouts → score planned↔completed pairs using existing **`find_best_activity_match`** (`src/domain/intervals/workout/matching.rs`) + **`build_event_activity_matches`** pattern (`src/domain/training_context/service/context.rs`): load workout-category events + map completed rows to `Activity` for that day, take **max `compliance_score`** across pairs |
+| 6 | No pair ≥ 0.45 → fallback: highest `training_stress_score`, then latest `start_date_local` |
 | 7 | Resolve canonical id via `CompletedWorkoutTargetService` → `preferred_workout_id` for `workout_id` in summary |
 
 Response `meta` includes selection diagnostics:

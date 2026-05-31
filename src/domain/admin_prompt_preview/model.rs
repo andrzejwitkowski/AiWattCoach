@@ -4,8 +4,8 @@ use crate::domain::llm::{
     LlmChatMessage, LlmToolChoice, LlmToolDefinition, PreviewProviderMessage,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AdminPromptPreviewSurface {
     PostWorkout,
     CalendarCoach,
