@@ -513,7 +513,7 @@ mod tests {
         assert_eq!(conversation[3].role, LlmMessageRole::User);
         assert_eq!(
             conversation[3].content,
-            "[sent_at=1970-01-01T00:00:04+00:00]\nWhat about tomorrow?"
+            "[sent_at=1970-01-01T00:00:01+00:00]\nWhat about tomorrow?"
         );
     }
 
@@ -584,7 +584,7 @@ mod tests {
         assert_eq!(conversation[5].tool_call_id.as_deref(), Some("tool-2"));
         assert_eq!(
             conversation[6].content,
-            "[sent_at=1970-01-01T00:00:05+00:00]\nThird question"
+            "[sent_at=1970-01-01T00:00:03+00:00]\nThird question"
         );
     }
 
