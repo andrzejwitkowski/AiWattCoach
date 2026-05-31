@@ -1,5 +1,13 @@
 use super::{LlmChatMessage, LlmChatResponse, LlmMessageRole};
 
+pub(crate) fn timestamped_message_content(content: &str, created_at_epoch_seconds: i64) -> String {
+    format!(
+        "[sent_at={}]\n{}",
+        super::epoch_seconds_to_rfc3339(created_at_epoch_seconds),
+        content
+    )
+}
+
 pub(crate) fn final_assistant_text(response: &LlmChatResponse) -> Option<String> {
     response
         .assistant_text()
@@ -114,6 +122,7 @@ mod tests {
     use super::{
         merge_provider_transcript_entries, next_provider_transcript_updated_at_epoch_seconds,
         provider_transcript_from_legacy_response, rebuild_conversation_with_provider_transcript,
+        timestamped_message_content,
     };
     use crate::domain::llm::{LlmChatMessage, LlmMessageRole, LlmToolCall};
 
@@ -178,6 +187,16 @@ mod tests {
         assert_eq!(
             next_provider_transcript_updated_at_epoch_seconds(42, 42),
             43
+        );
+    }
+
+    #[test]
+    fn timestamped_message_content_prefixes_rfc3339_timestamp() {
+        let content = timestamped_message_content("Need feedback", 1_746_489_600);
+
+        assert_eq!(
+            content,
+            "[sent_at=2025-05-06T00:00:00+00:00]\nNeed feedback"
         );
     }
 }

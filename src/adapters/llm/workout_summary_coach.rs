@@ -5,9 +5,10 @@ use super::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
 use crate::domain::{
     identity::Clock,
     llm::{
-        build_chat_request, current_date_string, find_reusable_context_cache,
-        persist_reusable_context_cache, rebuild_conversation_with_provider_transcript,
-        reusable_context_cache_key, BoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequestInput,
+        build_chat_request, conversation_timing_volatile_context, current_date_string,
+        find_reusable_context_cache, persist_reusable_context_cache,
+        rebuild_conversation_with_provider_transcript, reusable_context_cache_key,
+        timestamped_message_content, BoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequestInput,
         LlmContextCacheRepository, LlmError, LlmMessageRole, LlmProvider,
         ReusableContextCacheLookup, ReusableContextCacheUpsert, UserLlmConfigProvider,
     },
@@ -105,8 +106,11 @@ where
                 &training_context.rendered.stable_context,
                 athlete_summary_text.as_deref(),
             );
-            let volatile_context =
-                build_volatile_context(&training_context.rendered.volatile_context);
+            let volatile_context = build_volatile_context(
+                &training_context.rendered.volatile_context,
+                clock.now_epoch_seconds(),
+                latest_user_message_epoch_seconds(&summary, clock.now_epoch_seconds()),
+            );
             let tool_context = ToolExecutionContext {
                 user_id: user_id.clone(),
                 training_context: training_context.context.clone(),
@@ -124,6 +128,7 @@ where
                 summary.messages.as_slice(),
                 &summary.provider_transcript,
                 &user_message,
+                clock.now_epoch_seconds(),
             );
             let cache_scope_key = Some(format!("workout-summary:{user_id}:{}", summary.workout_id));
             let context_hash = reusable_context_cache_key(&system_prompt, &stable_context);
@@ -276,8 +281,18 @@ fn build_stable_context(
     context
 }
 
-fn build_volatile_context(packed_training_context: &str) -> String {
-    format!("training_context_volatile={packed_training_context}")
+fn build_volatile_context(
+    packed_training_context: &str,
+    current_conversation_epoch_seconds: i64,
+    latest_user_message_epoch_seconds: Option<i64>,
+) -> String {
+    format!(
+        "{}\ntraining_context_volatile={packed_training_context}",
+        conversation_timing_volatile_context(
+            current_conversation_epoch_seconds,
+            latest_user_message_epoch_seconds,
+        )
+    )
 }
 
 fn workout_coach_system_prompt() -> String {
@@ -293,20 +308,27 @@ fn build_conversation(
     messages: &[crate::domain::workout_summary::ConversationMessage],
     provider_transcript: &[LlmChatMessage],
     user_message: &str,
+    fallback_user_message_epoch_seconds: i64,
 ) -> Vec<LlmChatMessage> {
     let conversation = messages
         .iter()
         .filter_map(|message| match message.role {
             crate::domain::workout_summary::MessageRole::User => Some(LlmChatMessage {
                 role: LlmMessageRole::User,
-                content: message.content.clone(),
+                content: timestamped_message_content(
+                    &message.content,
+                    message.created_at_epoch_seconds,
+                ),
                 tool_calls: Vec::new(),
                 tool_call_id: None,
                 reasoning_content: None,
             }),
             crate::domain::workout_summary::MessageRole::Coach => Some(LlmChatMessage {
                 role: LlmMessageRole::Assistant,
-                content: message.content.clone(),
+                content: timestamped_message_content(
+                    &message.content,
+                    message.created_at_epoch_seconds,
+                ),
                 tool_calls: Vec::new(),
                 tool_call_id: None,
                 reasoning_content: None,
@@ -320,19 +342,53 @@ fn build_conversation(
 
     if let Some(last) = rebuilt.last_mut() {
         if last.role == LlmMessageRole::User {
-            last.content = user_message.to_string();
+            last.content = timestamped_message_content(
+                user_message,
+                latest_user_message_epoch_seconds_in_messages(messages)
+                    .unwrap_or(fallback_user_message_epoch_seconds),
+            );
             return rebuilt;
         }
     }
 
-    rebuilt.push(LlmChatMessage::user(user_message));
+    rebuilt.push(LlmChatMessage::user(timestamped_message_content(
+        user_message,
+        latest_user_message_epoch_seconds_in_messages(messages)
+            .unwrap_or(fallback_user_message_epoch_seconds),
+    )));
 
     rebuilt
 }
 
+fn latest_user_message_epoch_seconds(
+    summary: &WorkoutSummary,
+    fallback_epoch_seconds: i64,
+) -> Option<i64> {
+    latest_user_message_epoch_seconds_in_messages(&summary.messages)
+        .or(Some(fallback_epoch_seconds))
+}
+
+fn latest_user_message_epoch_seconds_in_messages(
+    messages: &[crate::domain::workout_summary::ConversationMessage],
+) -> Option<i64> {
+    messages
+        .iter()
+        .rev()
+        .find(|message| {
+            matches!(
+                message.role,
+                crate::domain::workout_summary::MessageRole::User
+            )
+        })
+        .map(|message| message.created_at_epoch_seconds)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{build_conversation, build_stable_context, workout_coach_system_prompt};
+    use super::{
+        build_conversation, build_stable_context, build_volatile_context,
+        workout_coach_system_prompt,
+    };
     use crate::domain::{
         llm::{LlmChatMessage, LlmMessageRole, LlmToolCall},
         workout_summary::{ConversationMessage, MessageRole, PublicToolCall},
@@ -391,6 +447,15 @@ mod tests {
     }
 
     #[test]
+    fn build_volatile_context_includes_conversation_timing() {
+        let context = build_volatile_context("{}", 1_746_489_600, Some(1_746_490_200));
+
+        assert!(context.contains("currentConversationDatetime"));
+        assert!(context.contains("2025-05-06T00:00:00+00:00"));
+        assert!(context.contains("latest_user_message_datetime=2025-05-06T00:10:00+00:00"));
+    }
+
+    #[test]
     fn build_conversation_replays_last_hidden_assistant_tool_calls() {
         let conversation = build_conversation(
             &[
@@ -436,6 +501,7 @@ mod tests {
                 LlmChatMessage::tool("tool-1", "Workout lookup result"),
             ],
             "What about tomorrow?",
+            4,
         );
 
         assert_eq!(conversation.len(), 4);
@@ -445,7 +511,10 @@ mod tests {
         assert_eq!(conversation[2].role, LlmMessageRole::Tool);
         assert_eq!(conversation[2].tool_call_id.as_deref(), Some("tool-1"));
         assert_eq!(conversation[3].role, LlmMessageRole::User);
-        assert_eq!(conversation[3].content, "What about tomorrow?");
+        assert_eq!(
+            conversation[3].content,
+            "[sent_at=1970-01-01T00:00:04+00:00]\nWhat about tomorrow?"
+        );
     }
 
     #[test]
@@ -506,12 +575,27 @@ mod tests {
                 LlmChatMessage::tool("tool-2", "second result"),
             ],
             "Third question",
+            5,
         );
 
         assert_eq!(conversation[1].tool_calls[0].id, "tool-1");
         assert_eq!(conversation[2].tool_call_id.as_deref(), Some("tool-1"));
         assert_eq!(conversation[4].tool_calls[0].id, "tool-2");
         assert_eq!(conversation[5].tool_call_id.as_deref(), Some("tool-2"));
-        assert_eq!(conversation[6].content, "Third question");
+        assert_eq!(
+            conversation[6].content,
+            "[sent_at=1970-01-01T00:00:05+00:00]\nThird question"
+        );
+    }
+
+    #[test]
+    fn build_conversation_uses_fallback_timestamp_when_history_has_no_user_message() {
+        let conversation = build_conversation(&[], &[], "Fresh question", 1_746_489_600);
+
+        assert_eq!(conversation.len(), 1);
+        assert_eq!(
+            conversation[0].content,
+            "[sent_at=2025-05-06T00:00:00+00:00]\nFresh question"
+        );
     }
 }

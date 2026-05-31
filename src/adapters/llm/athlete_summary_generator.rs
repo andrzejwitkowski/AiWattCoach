@@ -2,9 +2,11 @@ use std::sync::Arc;
 
 use crate::domain::{
     athlete_summary::AthleteSummaryGenerator,
+    identity::Clock,
     llm::{
-        build_chat_request, hash_text, LlmChatMessage, LlmChatPort, LlmChatRequestInput,
-        LlmChatResponse, LlmError, LlmMessageRole, UserLlmConfigProvider,
+        build_chat_request, conversation_timing_volatile_context, hash_text, LlmChatMessage,
+        LlmChatPort, LlmChatRequestInput, LlmChatResponse, LlmError, LlmMessageRole,
+        UserLlmConfigProvider,
     },
     training_context::TrainingContextBuilder,
 };
@@ -12,27 +14,39 @@ use crate::domain::{
 const ATHLETE_SUMMARY_SYSTEM_PROMPT: &str = "You are an elite endurance coach. Write a concise bird's-eye 360 view of the athlete using the supplied training context. Summarize profile, training patterns, strengths, weaknesses, likely limiters, fatigue/load tendencies, and practical coaching considerations. Do not dump raw data arrays or reproduce raw JSON. Prefer compact prose and short bullet-like sections in plain text.";
 
 #[derive(Clone)]
-pub struct AthleteSummaryLlmGenerator {
+pub struct AthleteSummaryLlmGenerator<Time>
+where
+    Time: Clock,
+{
     llm_chat_port: Arc<dyn LlmChatPort>,
     llm_config_provider: Arc<dyn UserLlmConfigProvider>,
     training_context_builder: Arc<dyn TrainingContextBuilder>,
+    clock: Time,
 }
 
-impl AthleteSummaryLlmGenerator {
+impl<Time> AthleteSummaryLlmGenerator<Time>
+where
+    Time: Clock,
+{
     pub fn new(
         llm_chat_port: Arc<dyn LlmChatPort>,
         llm_config_provider: Arc<dyn UserLlmConfigProvider>,
         training_context_builder: Arc<dyn TrainingContextBuilder>,
+        clock: Time,
     ) -> Self {
         Self {
             llm_chat_port,
             llm_config_provider,
             training_context_builder,
+            clock,
         }
     }
 }
 
-impl AthleteSummaryGenerator for AthleteSummaryLlmGenerator {
+impl<Time> AthleteSummaryGenerator for AthleteSummaryLlmGenerator<Time>
+where
+    Time: Clock,
+{
     fn generate(
         &self,
         user_id: &str,
@@ -40,6 +54,7 @@ impl AthleteSummaryGenerator for AthleteSummaryLlmGenerator {
         let llm_chat_port = self.llm_chat_port.clone();
         let llm_config_provider = self.llm_config_provider.clone();
         let training_context_builder = self.training_context_builder.clone();
+        let clock = self.clock.clone();
         let user_id = user_id.to_string();
 
         Box::pin(async move {
@@ -53,7 +68,8 @@ impl AthleteSummaryGenerator for AthleteSummaryLlmGenerator {
                 context.rendered.stable_context
             );
             let volatile_context = format!(
-                "athlete_summary_source_volatile={}",
+                "{}\nathlete_summary_source_volatile={}",
+                conversation_timing_volatile_context(clock.now_epoch_seconds(), None),
                 context.rendered.volatile_context
             );
             let user_prompt = "Create an up-to-date athlete summary for future coaching conversations. Keep it textual, high signal, and do not include raw data dumps.";
@@ -76,5 +92,19 @@ impl AthleteSummaryGenerator for AthleteSummaryLlmGenerator {
 
             llm_chat_port.chat(config, request).await
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn athlete_summary_volatile_context_includes_conversation_timing() {
+        let volatile_context = format!(
+            "{}\nathlete_summary_source_volatile={{}}",
+            crate::domain::llm::conversation_timing_volatile_context(1_746_489_600, None)
+        );
+
+        assert!(volatile_context.contains("currentConversationDatetime"));
+        assert!(volatile_context.contains("2025-05-06T00:00:00+00:00"));
     }
 }

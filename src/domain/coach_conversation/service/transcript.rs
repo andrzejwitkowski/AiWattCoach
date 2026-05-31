@@ -1,5 +1,6 @@
 use crate::domain::llm::{
-    rebuild_conversation_with_provider_transcript, LlmChatMessage, LlmChatResponse, LlmMessageRole,
+    conversation_timing_volatile_context, rebuild_conversation_with_provider_transcript,
+    timestamped_message_content, LlmChatMessage, LlmChatResponse, LlmMessageRole,
 };
 
 use super::super::{CoachConversation, CoachConversationMessage, CoachConversationMessageRole};
@@ -37,10 +38,16 @@ pub(super) fn build_calendar_stable_context(
 pub(super) fn build_calendar_volatile_context(
     conversation: &CoachConversation,
     packed_training_context: &str,
+    current_conversation_epoch_seconds: i64,
+    latest_user_message_epoch_seconds: Option<i64>,
 ) -> String {
     format!(
-        "calendar_focus={{\"kind\":\"{}\"}}\ntraining_context_volatile={packed_training_context}",
+        "calendar_focus={{\"kind\":\"{}\"}}\n{}\ntraining_context_volatile={packed_training_context}",
         conversation.focus.kind(),
+        conversation_timing_volatile_context(
+            current_conversation_epoch_seconds,
+            latest_user_message_epoch_seconds,
+        ),
     )
 }
 
@@ -59,14 +66,20 @@ pub(super) fn build_calendar_conversation(
         .filter_map(|message| match message.role {
             CoachConversationMessageRole::User => Some(LlmChatMessage {
                 role: LlmMessageRole::User,
-                content: message.content.clone(),
+                content: timestamped_message_content(
+                    &message.content,
+                    message.created_at_epoch_seconds,
+                ),
                 tool_calls: Vec::new(),
                 tool_call_id: None,
                 reasoning_content: None,
             }),
             CoachConversationMessageRole::Coach => Some(LlmChatMessage {
                 role: LlmMessageRole::Assistant,
-                content: message.content.clone(),
+                content: timestamped_message_content(
+                    &message.content,
+                    message.created_at_epoch_seconds,
+                ),
                 tool_calls: Vec::new(),
                 tool_call_id: None,
                 reasoning_content: message.reasoning_content.clone(),
@@ -76,4 +89,77 @@ pub(super) fn build_calendar_conversation(
         .collect::<Vec<_>>();
 
     rebuild_conversation_with_provider_transcript(conversation, provider_transcript)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_calendar_conversation, build_calendar_volatile_context};
+    use crate::domain::{
+        coach_conversation::{
+            CoachConversation, CoachConversationFocus, CoachConversationMessage,
+            CoachConversationMessageRole, CoachConversationSurface,
+        },
+        llm::LlmMessageRole,
+    };
+
+    #[test]
+    fn build_calendar_volatile_context_includes_conversation_timing() {
+        let conversation = CoachConversation::new(
+            "conv-1".to_string(),
+            "user-1".to_string(),
+            CoachConversationSurface::Calendar,
+            CoachConversationFocus::Overview,
+            1,
+        );
+
+        let context = build_calendar_volatile_context(
+            &conversation,
+            "{}",
+            1_746_489_600,
+            Some(1_746_490_200),
+        );
+
+        assert!(context.contains("currentConversationDatetime"));
+        assert!(context.contains("2025-05-06T00:00:00+00:00"));
+        assert!(context.contains("latest_user_message_datetime=2025-05-06T00:10:00+00:00"));
+    }
+
+    #[test]
+    fn build_calendar_conversation_prefixes_message_timestamps() {
+        let conversation = build_calendar_conversation(
+            &[
+                CoachConversationMessage {
+                    id: "msg-1".to_string(),
+                    conversation_id: "conv-1".to_string(),
+                    user_id: "user-1".to_string(),
+                    role: CoachConversationMessageRole::User,
+                    content: "How should I fuel this week?".to_string(),
+                    tool_call: None,
+                    reasoning_content: None,
+                    created_at_epoch_seconds: 1_746_489_600,
+                },
+                CoachConversationMessage {
+                    id: "msg-2".to_string(),
+                    conversation_id: "conv-1".to_string(),
+                    user_id: "user-1".to_string(),
+                    role: CoachConversationMessageRole::Coach,
+                    content: "Start with carbs before quality.".to_string(),
+                    tool_call: None,
+                    reasoning_content: None,
+                    created_at_epoch_seconds: 1_746_490_200,
+                },
+            ],
+            &[],
+            "msg-2",
+        );
+
+        assert_eq!(conversation[0].role, LlmMessageRole::User);
+        assert!(conversation[0]
+            .content
+            .starts_with("[sent_at=2025-05-06T00:00:00+00:00]\n"));
+        assert_eq!(conversation[1].role, LlmMessageRole::Assistant);
+        assert!(conversation[1]
+            .content
+            .starts_with("[sent_at=2025-05-06T00:10:00+00:00]\n"));
+    }
 }

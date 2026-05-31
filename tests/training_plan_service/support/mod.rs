@@ -319,10 +319,12 @@ pub(crate) fn sample_planning_context() -> TrainingPlanPlanningContext {
             TrainingPlanConversationMessage {
                 role: TrainingPlanConversationRole::Coach,
                 content: "Coach promised an easy recovery week with only light Z1 rides and no hard sessions unless truly necessary.".to_string(),
+                created_at_epoch_seconds: 1_746_489_600,
             },
             TrainingPlanConversationMessage {
                 role: TrainingPlanConversationRole::User,
                 content: "That easy week structure sounds good.".to_string(),
+                created_at_epoch_seconds: 1_746_490_200,
             },
         ],
     }

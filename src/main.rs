@@ -574,6 +574,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             llm_adapter.clone(),
             llm_config_provider.clone(),
             training_context_builder.clone(),
+            SystemClock,
         ),
         SystemClock,
     ));

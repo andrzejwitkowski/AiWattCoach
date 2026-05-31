@@ -142,10 +142,12 @@ fn sample_planning_context() -> TrainingPlanPlanningContext {
             TrainingPlanConversationMessage {
                 role: TrainingPlanConversationRole::Coach,
                 content: "I am planning a recovery week with easy endurance only and no hard sessions unless they become truly necessary.".to_string(),
+                created_at_epoch_seconds: 1_746_489_600,
             },
             TrainingPlanConversationMessage {
                 role: TrainingPlanConversationRole::User,
                 content: "Please keep it light because I feel stale.".to_string(),
+                created_at_epoch_seconds: 1_746_490_200,
             },
         ],
     }

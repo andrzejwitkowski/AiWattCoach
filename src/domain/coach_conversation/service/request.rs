@@ -108,6 +108,8 @@ where
         let volatile_context = build_calendar_volatile_context(
             conversation,
             &training_context.rendered.volatile_context,
+            self.clock.now_epoch_seconds(),
+            Some(user_message.created_at_epoch_seconds),
         );
         let llm_conversation = build_calendar_conversation(
             messages,
