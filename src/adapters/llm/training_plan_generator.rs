@@ -8,7 +8,8 @@ use crate::domain::{
     ai_workflow::ValidationIssue,
     identity::Clock,
     llm::{
-        build_chat_request, merge_provider_transcript_entries, BoxFuture, LlmChatMessage,
+        build_chat_request, conversation_timing_volatile_context,
+        merge_provider_transcript_entries, timestamped_message_content, BoxFuture, LlmChatMessage,
         LlmChatPort, LlmChatRequestInput, LlmChatResponse, LlmError, LlmMessageRole,
         UserLlmConfigProvider,
     },
@@ -106,7 +107,8 @@ where
                 context.rendered.stable_context
             );
             let volatile_context = format!(
-                "training_plan_source_volatile={}",
+                "{}\ntraining_plan_source_volatile={}",
+                conversation_timing_volatile_context(clock.now_epoch_seconds(), None),
                 context.rendered.volatile_context
             );
             let user_prompt = "Generate a concise workout recap for the completed workout. Focus on execution quality, response to the session, and what matters for planning the next training window.";
@@ -214,6 +216,7 @@ where
         let workout_recap = workout_recap.clone();
         let planning_context = planning_context.cloned();
         let repair_user_id = user_id.clone();
+        let clock = self.clock.clone();
 
         Box::pin(async move {
             let config = llm_config_provider
@@ -232,7 +235,11 @@ where
                 &context.rendered.stable_context,
             );
             let volatile_context = format!(
-                "training_plan_source_volatile={}",
+                "{}\ntraining_plan_source_volatile={}",
+                conversation_timing_volatile_context(
+                    clock.now_epoch_seconds(),
+                    latest_training_plan_user_message_epoch_seconds(planning_context.as_ref()),
+                ),
                 context.rendered.volatile_context
             );
             let user_prompt = "Generate the next 14 dated days starting the day after the completed workout. Return only the JSON envelope requested by the system prompt. Put parser-friendly workout-builder text in the `plan` field, include rest days explicitly when needed, and use `Rest Day: <reason>` when you prescribe full rest.";
@@ -321,6 +328,7 @@ where
         let planning_context = planning_context.cloned();
         let invalid_day_sections = invalid_day_sections.to_string();
         let repair_user_id = user_id.clone();
+        let clock = self.clock.clone();
 
         Box::pin(async move {
             let config = llm_config_provider
@@ -339,7 +347,11 @@ where
                 &context.rendered.stable_context,
             );
             let volatile_context = format!(
-                "training_plan_source_volatile={}",
+                "{}\ntraining_plan_source_volatile={}",
+                conversation_timing_volatile_context(
+                    clock.now_epoch_seconds(),
+                    latest_training_plan_user_message_epoch_seconds(planning_context.as_ref()),
+                ),
                 context.rendered.volatile_context
             );
             let issues_text = issues
@@ -614,7 +626,10 @@ fn planning_conversation_messages(
                 TrainingPlanConversationRole::Coach => LlmMessageRole::Assistant,
                 TrainingPlanConversationRole::User => LlmMessageRole::User,
             },
-            content: message.content.clone(),
+            content: timestamped_message_content(
+                &message.content,
+                message.created_at_epoch_seconds,
+            ),
             tool_calls: Vec::new(),
             tool_call_id: None,
             reasoning_content: None,
@@ -622,9 +637,23 @@ fn planning_conversation_messages(
         .collect()
 }
 
+fn latest_training_plan_user_message_epoch_seconds(
+    planning_context: Option<&TrainingPlanPlanningContext>,
+) -> Option<i64> {
+    planning_context.and_then(|context| {
+        context
+            .messages
+            .iter()
+            .rev()
+            .find(|message| matches!(message.role, TrainingPlanConversationRole::User))
+            .map(|message| message.created_at_epoch_seconds)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
+        latest_training_plan_user_message_epoch_seconds, planning_conversation_messages,
         training_plan_correction_system_prompt, training_plan_initial_window_system_prompt,
         training_plan_tool_context_today,
     };
@@ -632,6 +661,7 @@ mod tests {
         llm::LlmProvider,
         llm_tools::{with_tool_prompt_guidance, ToolExecutionContext, ToolScope},
         training_context::TrainingContext,
+        training_plan::{TrainingPlanConversationMessage, TrainingPlanConversationRole},
     };
 
     #[test]
@@ -697,6 +727,74 @@ mod tests {
         });
 
         assert_eq!(today, "2026-05-01");
+    }
+
+    #[test]
+    fn training_plan_volatile_context_includes_conversation_timing() {
+        let volatile_context = format!(
+            "{}\ntraining_plan_source_volatile={{}}",
+            crate::domain::llm::conversation_timing_volatile_context(
+                1_746_489_600,
+                Some(1_746_490_200),
+            )
+        );
+
+        assert!(volatile_context.contains("currentConversationDatetime"));
+        assert!(volatile_context.contains("2025-05-06T00:00:00+00:00"));
+        assert!(volatile_context.contains("latest_user_message_datetime=2025-05-06T00:10:00+00:00"));
+    }
+
+    #[test]
+    fn planning_conversation_messages_prefix_timestamps() {
+        let messages = planning_conversation_messages(Some(
+            &crate::domain::training_plan::TrainingPlanPlanningContext {
+                rpe: Some(7),
+                messages: vec![
+                    TrainingPlanConversationMessage {
+                        role: TrainingPlanConversationRole::Coach,
+                        content: "Keep this light.".to_string(),
+                        created_at_epoch_seconds: 1_746_489_600,
+                    },
+                    TrainingPlanConversationMessage {
+                        role: TrainingPlanConversationRole::User,
+                        content: "I feel stale.".to_string(),
+                        created_at_epoch_seconds: 1_746_490_200,
+                    },
+                ],
+            },
+        ));
+
+        assert_eq!(
+            messages[0].content,
+            "[sent_at=2025-05-06T00:00:00+00:00]\nKeep this light."
+        );
+        assert_eq!(
+            messages[1].content,
+            "[sent_at=2025-05-06T00:10:00+00:00]\nI feel stale."
+        );
+    }
+
+    #[test]
+    fn latest_training_plan_user_message_epoch_seconds_uses_latest_user_turn() {
+        let latest = latest_training_plan_user_message_epoch_seconds(Some(
+            &crate::domain::training_plan::TrainingPlanPlanningContext {
+                rpe: Some(7),
+                messages: vec![
+                    TrainingPlanConversationMessage {
+                        role: TrainingPlanConversationRole::Coach,
+                        content: "Coach message".to_string(),
+                        created_at_epoch_seconds: 1_746_489_600,
+                    },
+                    TrainingPlanConversationMessage {
+                        role: TrainingPlanConversationRole::User,
+                        content: "User message".to_string(),
+                        created_at_epoch_seconds: 1_746_490_200,
+                    },
+                ],
+            },
+        ));
+
+        assert_eq!(latest, Some(1_746_490_200));
     }
 
     fn sample_tool_context() -> ToolExecutionContext {

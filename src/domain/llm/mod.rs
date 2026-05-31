@@ -13,7 +13,7 @@ pub(crate) use context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
 pub(crate) use transcript::{
     final_assistant_text, last_nonempty_assistant_content, merge_provider_transcript_entries,
     next_provider_transcript_updated_at_epoch_seconds, provider_transcript_from_legacy_response,
-    rebuild_conversation_with_provider_transcript,
+    rebuild_conversation_with_provider_transcript, timestamped_message_content,
 };
 
 pub use error::LlmError;
@@ -33,7 +33,8 @@ pub(crate) use orchestrator::{
 };
 pub use ports::{BoxFuture, LlmChatPort, LlmContextCacheRepository, UserLlmConfigProvider};
 pub use request_builder::{
-    build_chat_request, current_date_string, find_reusable_context_cache,
+    build_chat_request, conversation_timing_volatile_context, current_date_string,
+    current_datetime_rfc3339, epoch_seconds_to_rfc3339, find_reusable_context_cache,
     persist_reusable_context_cache, reusable_context_cache_key, LlmChatRequestInput,
     ReusableContextCacheLookup, ReusableContextCacheUpsert,
 };

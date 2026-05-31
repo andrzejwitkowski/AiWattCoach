@@ -52,6 +52,38 @@ where
         })
 }
 
+pub fn current_datetime_rfc3339<Time>(clock: &Time) -> String
+where
+    Time: Clock,
+{
+    epoch_seconds_to_rfc3339(clock.now_epoch_seconds())
+}
+
+pub fn epoch_seconds_to_rfc3339(epoch_seconds: i64) -> String {
+    chrono::DateTime::from_timestamp(epoch_seconds, 0)
+        .map(|time| time.to_rfc3339())
+        .unwrap_or_else(|| chrono::DateTime::UNIX_EPOCH.to_rfc3339())
+}
+
+pub fn conversation_timing_volatile_context(
+    current_conversation_epoch_seconds: i64,
+    latest_user_message_epoch_seconds: Option<i64>,
+) -> String {
+    let mut context = format!(
+        "conversation_timing={{\"currentConversationDatetime\":\"{}\",\"instruction\":\"Treat this timing as authoritative for now in this conversation. Do not assume the athlete is writing the day after a workout unless timestamps explicitly show that.\"}}",
+        epoch_seconds_to_rfc3339(current_conversation_epoch_seconds)
+    );
+
+    if let Some(latest_user_message_epoch_seconds) = latest_user_message_epoch_seconds {
+        context.push_str(&format!(
+            "\nlatest_user_message_datetime={}",
+            epoch_seconds_to_rfc3339(latest_user_message_epoch_seconds)
+        ));
+    }
+
+    context
+}
+
 pub fn reusable_context_cache_key(system_prompt: &str, stable_context: &str) -> String {
     hash_text(&format!("{system_prompt}\n{stable_context}"))
 }
@@ -136,7 +168,8 @@ mod tests {
     use futures::executor::block_on;
 
     use super::{
-        build_chat_request, current_date_string, find_reusable_context_cache,
+        build_chat_request, conversation_timing_volatile_context, current_date_string,
+        current_datetime_rfc3339, epoch_seconds_to_rfc3339, find_reusable_context_cache,
         persist_reusable_context_cache, reusable_context_cache_key, LlmChatRequestInput,
         ReusableContextCacheLookup, ReusableContextCacheUpsert,
     };
@@ -225,6 +258,33 @@ mod tests {
         });
 
         assert_eq!(date, "1970-01-01");
+    }
+
+    #[test]
+    fn current_datetime_rfc3339_formats_clock_time() {
+        let datetime = current_datetime_rfc3339(&FixedClock {
+            now_epoch_seconds: 1_746_489_600,
+        });
+
+        assert_eq!(datetime, "2025-05-06T00:00:00+00:00");
+    }
+
+    #[test]
+    fn epoch_seconds_to_rfc3339_falls_back_for_invalid_timestamp() {
+        assert_eq!(
+            epoch_seconds_to_rfc3339(i64::MAX),
+            "1970-01-01T00:00:00+00:00"
+        );
+    }
+
+    #[test]
+    fn conversation_timing_volatile_context_includes_current_and_latest_user_time() {
+        let context = conversation_timing_volatile_context(1_746_489_600, Some(1_746_490_200));
+
+        assert!(context.contains("currentConversationDatetime"));
+        assert!(context.contains("2025-05-06T00:00:00+00:00"));
+        assert!(context.contains("latest_user_message_datetime=2025-05-06T00:10:00+00:00"));
+        assert!(context.contains("Do not assume the athlete is writing the day after a workout"));
     }
 
     #[test]

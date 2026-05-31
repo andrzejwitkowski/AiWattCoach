@@ -97,6 +97,7 @@ fn map_workout_summary_to_planning_context(
                     crate::domain::workout_summary::MessageRole::Tool => unreachable!(),
                 },
                 content: message.content,
+                created_at_epoch_seconds: message.created_at_epoch_seconds,
             },
         )
         .collect::<Vec<_>>();

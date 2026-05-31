@@ -34,10 +34,12 @@ async fn llm_workout_coach_does_not_fail_when_gemini_cache_lookup_errors() {
     let requests = chat_port.requests();
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].reusable_cache_id, None);
-    assert_eq!(
-        requests[0].volatile_context,
-        "training_context_volatile={\"volatile\":true}"
-    );
+    assert!(requests[0]
+        .volatile_context
+        .contains("currentConversationDatetime"));
+    assert!(requests[0]
+        .volatile_context
+        .contains("training_context_volatile={\"volatile\":true}"));
 }
 
 #[tokio::test]

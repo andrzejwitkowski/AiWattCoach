@@ -30,6 +30,7 @@ impl TrainingPlanConversationRole {
 pub struct TrainingPlanConversationMessage {
     pub role: TrainingPlanConversationRole,
     pub content: String,
+    pub created_at_epoch_seconds: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
