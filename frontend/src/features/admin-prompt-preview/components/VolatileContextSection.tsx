@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 
-import { tryParseJson } from '../utils/parseContextLines';
+import { parseKeyValueLines, tryParseJson } from '../utils/parseContextLines';
 import { DecodedPackedContext } from './DecodedPackedContext';
-import { SectionCard } from './SystemPromptSection';
+import { SectionCard } from './SectionCard';
 
 type VolatileContextSectionProps = {
   rawText: string;
@@ -12,7 +12,16 @@ export function VolatileContextSection({ rawText }: VolatileContextSectionProps)
   const [showRaw, setShowRaw] = useState(false);
   const [expanded, setExpanded] = useState(true);
 
-  const parsed = useMemo(() => parseVolatileContext(rawText), [rawText]);
+  const parsed = useMemo(() => {
+    const lines = parseKeyValueLines(rawText);
+    const timing = tryParseJson<Record<string, unknown>>(lines.conversation_timing ?? '');
+    const packedJson = tryParseJson<Record<string, unknown>>(lines.training_context_volatile ?? '');
+    return {
+      timing,
+      latestUserMessageDatetime: lines.latest_user_message_datetime?.trim() ?? null,
+      packedJson,
+    };
+  }, [rawText]);
 
   return (
     <SectionCard title={`Volatile Context (${rawText.length} chars)`} expanded={expanded} onToggle={() => setExpanded(!expanded)}>
@@ -57,41 +66,4 @@ export function VolatileContextSection({ rawText }: VolatileContextSectionProps)
       )}
     </SectionCard>
   );
-}
-
-function parseVolatileContext(text: string) {
-  let timing: Record<string, unknown> | null = null;
-  let latestUserMessageDatetime: string | null = null;
-  let packedJson: Record<string, unknown> | null = null;
-
-  const lines = text.split('\n');
-  let currentKey: string | null = null;
-  let currentValue = '';
-
-  for (const line of lines) {
-    if (currentKey === null) {
-      const eqIdx = line.indexOf('=');
-      if (eqIdx < 0) continue;
-      currentKey = line.slice(0, eqIdx);
-      currentValue = line.slice(eqIdx + 1);
-    } else {
-      currentValue += '\n' + line;
-    }
-
-    if (currentKey === 'conversation_timing') {
-      timing = tryParseJson<Record<string, unknown>>(currentValue);
-      currentKey = null;
-      currentValue = '';
-    } else if (currentKey === 'latest_user_message_datetime') {
-      latestUserMessageDatetime = currentValue.trim();
-      currentKey = null;
-      currentValue = '';
-    } else if (currentKey === 'training_context_volatile') {
-      packedJson = tryParseJson<Record<string, unknown>>(currentValue);
-      currentKey = null;
-      currentValue = '';
-    }
-  }
-
-  return { timing, latestUserMessageDatetime, packedJson };
 }

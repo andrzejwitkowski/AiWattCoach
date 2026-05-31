@@ -81,20 +81,9 @@ export function decodeShortKey(key: string): string {
   return KEY_LABEL[key] ?? key;
 }
 
-const SKIP_KEYS = new Set(['pc', 'c5', 'bl', 'doc']);
-
-export function isSkippableBulkKey(key: string): boolean {
-  return SKIP_KEYS.has(key);
-}
-
 export function formatSeconds(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
-}
-
-export function formatEpochSeconds(epoch: number): string {
-  const d = new Date(epoch * 1000);
-  return d.toISOString().replace('T', ' ').slice(0, 19) + 'Z';
 }

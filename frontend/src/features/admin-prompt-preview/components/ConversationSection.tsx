@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import type { AdminPromptPreviewResponse } from '../types';
-import { SectionCard } from './SystemPromptSection';
+import { SectionCard } from './SectionCard';
 
 type ConversationSectionProps = {
   conversation: AdminPromptPreviewResponse['request']['conversation'];

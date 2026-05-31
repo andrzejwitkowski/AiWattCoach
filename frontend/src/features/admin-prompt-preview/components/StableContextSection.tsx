@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 
 import { MarkdownContent } from '../../../lib/markdown/MarkdownContent';
-import { tryParseJson } from '../utils/parseContextLines';
-import { SectionCard } from './SystemPromptSection';
+import { parseKeyValueLines, tryParseJson } from '../utils/parseContextLines';
 import { DecodedPackedContext } from './DecodedPackedContext';
+import { SectionCard } from './SectionCard';
 
 type StableContextSectionProps = {
   rawText: string;
@@ -13,7 +13,20 @@ export function StableContextSection({ rawText }: StableContextSectionProps) {
   const [showRaw, setShowRaw] = useState(false);
   const [expanded, setExpanded] = useState(true);
 
-  const parsed = useMemo(() => parseStableContext(rawText), [rawText]);
+  const parsed = useMemo(() => {
+    const lines = parseKeyValueLines(rawText);
+    const workoutSummary = tryParseJson<Record<string, unknown>>(lines.workout_summary ?? '');
+    const selectedWorkout = tryParseJson<Record<string, unknown>>(lines.selected_workout ?? '');
+    const packedJson = tryParseJson<Record<string, unknown>>(lines.training_context_stable ?? '');
+    return {
+      workoutId: workoutSummary ? String(workoutSummary.workoutId ?? '') : null,
+      rpe: workoutSummary ? (workoutSummary.rpe != null ? Number(workoutSummary.rpe) : null) : null,
+      workoutDate: selectedWorkout ? String(selectedWorkout.date ?? '') : null,
+      workoutContext: lines.current_workout_context?.trim() ?? null,
+      athleteSummary: lines.athlete_summary_text?.trim() ?? null,
+      packedJson,
+    };
+  }, [rawText]);
 
   return (
     <SectionCard title={`Stable Context (${rawText.length} chars)`} expanded={expanded} onToggle={() => setExpanded(!expanded)}>
@@ -74,71 +87,4 @@ export function StableContextSection({ rawText }: StableContextSectionProps) {
       )}
     </SectionCard>
   );
-}
-
-function parseStableContext(text: string) {
-  const result: {
-    workoutId: string | null;
-    rpe: number | null;
-    workoutDate: string | null;
-    workoutContext: string | null;
-    athleteSummary: string | null;
-    packedJson: Record<string, unknown> | null;
-  } = {
-    workoutId: null,
-    rpe: null,
-    workoutDate: null,
-    workoutContext: null,
-    athleteSummary: null,
-    packedJson: null,
-  };
-
-  const lines = text.split('\n');
-  let currentKey: string | null = null;
-  let currentValue = '';
-
-  for (const line of lines) {
-    if (currentKey === null) {
-      const eqIdx = line.indexOf('=');
-      if (eqIdx < 0) continue;
-      currentKey = line.slice(0, eqIdx);
-      currentValue = line.slice(eqIdx + 1);
-    } else {
-      currentValue += '\n' + line;
-    }
-
-    if (currentKey === 'workout_summary') {
-      const parsed = tryParseJson<Record<string, unknown>>(currentValue);
-      if (parsed) {
-        result.workoutId = String(parsed.workoutId ?? '');
-        result.rpe = parsed.rpe != null ? Number(parsed.rpe) : null;
-      }
-      currentKey = null;
-      currentValue = '';
-    } else if (currentKey === 'selected_workout') {
-      const parsed = tryParseJson<Record<string, unknown>>(currentValue);
-      if (parsed) result.workoutDate = String(parsed.date ?? '');
-      currentKey = null;
-      currentValue = '';
-    } else if (currentKey === 'current_workout_context') {
-      result.workoutContext = currentValue.trim();
-      currentKey = null;
-      currentValue = '';
-    } else if (currentKey === 'athlete_summary_text') {
-      result.athleteSummary = (result.athleteSummary ?? '') + currentValue;
-      currentKey = null;
-      currentValue = '';
-    } else if (currentKey === 'training_context_stable') {
-      const parsed = tryParseJson<Record<string, unknown>>(currentValue);
-      if (parsed) result.packedJson = parsed;
-      currentKey = null;
-      currentValue = '';
-    }
-  }
-
-  if (currentKey === 'athlete_summary_text') {
-    result.athleteSummary = (result.athleteSummary ?? '') + currentValue;
-  }
-
-  return result;
 }
