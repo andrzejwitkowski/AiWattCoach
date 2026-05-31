@@ -11,14 +11,14 @@ pub(super) fn final_assistant_text(response: &LlmChatResponse) -> Option<String>
     crate::domain::llm::final_assistant_text(response)
 }
 
-pub(super) fn calendar_coach_system_prompt() -> String {
+pub fn calendar_coach_system_prompt() -> String {
     format!(
         "{CALENDAR_COACH_SYSTEM_PROMPT_BASE} {}",
         crate::domain::llm::PACKED_TRAINING_CONTEXT_LEGEND,
     )
 }
 
-pub(super) fn build_calendar_stable_context(
+pub fn build_calendar_stable_context(
     conversation: &CoachConversation,
     packed_training_context: &str,
 ) -> String {
@@ -35,7 +35,7 @@ pub(super) fn build_calendar_stable_context(
     context
 }
 
-pub(super) fn build_calendar_volatile_context(
+pub fn build_calendar_volatile_context(
     conversation: &CoachConversation,
     packed_training_context: &str,
     current_conversation_epoch_seconds: i64,
@@ -51,7 +51,7 @@ pub(super) fn build_calendar_volatile_context(
     )
 }
 
-pub(super) fn build_calendar_conversation(
+pub fn build_calendar_conversation(
     messages: &[CoachConversationMessage],
     provider_transcript: &[LlmChatMessage],
     up_to_message_id: &str,

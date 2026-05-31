@@ -54,6 +54,11 @@ use context::{
 use dates::{activity_date, epoch_seconds_to_date, event_date};
 use history::build_recent_interval_blocks_by_activity_id;
 
+mod workout_pick;
+pub use workout_pick::{
+    pick_representative_completed_workout_for_day, DayWorkoutPick, DayWorkoutPickMethod,
+};
+
 pub trait TrainingContextBuilder: Send + Sync {
     fn build(
         &self,
@@ -61,9 +66,22 @@ pub trait TrainingContextBuilder: Send + Sync {
         workout_id: &str,
     ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
 
+    fn build_as_of(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        focus_date: chrono::NaiveDate,
+    ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
+
     fn build_calendar_overview_context(
         &self,
         user_id: &str,
+    ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
+
+    fn build_calendar_overview_context_as_of(
+        &self,
+        user_id: &str,
+        focus_date: chrono::NaiveDate,
     ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
 
     fn build_athlete_summary_context(
@@ -332,7 +350,23 @@ where
         let builder = self.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
-        Box::pin(async move { builder.build_impl(&user_id, &workout_id).await })
+        Box::pin(async move { builder.build_impl(&user_id, &workout_id, None).await })
+    }
+
+    fn build_as_of(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        focus_date: chrono::NaiveDate,
+    ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        let builder = self.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            builder
+                .build_impl(&user_id, &workout_id, Some(focus_date))
+                .await
+        })
     }
 
     fn build_calendar_overview_context(
@@ -343,7 +377,21 @@ where
         let user_id = user_id.to_string();
         Box::pin(async move {
             builder
-                .build_impl(&user_id, CALENDAR_OVERVIEW_FOCUS_ID)
+                .build_impl(&user_id, CALENDAR_OVERVIEW_FOCUS_ID, None)
+                .await
+        })
+    }
+
+    fn build_calendar_overview_context_as_of(
+        &self,
+        user_id: &str,
+        focus_date: chrono::NaiveDate,
+    ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        let builder = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            builder
+                .build_impl(&user_id, CALENDAR_OVERVIEW_FOCUS_ID, Some(focus_date))
                 .await
         })
     }
@@ -354,7 +402,11 @@ where
     ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>> {
         let builder = self.clone();
         let user_id = user_id.to_string();
-        Box::pin(async move { builder.build_impl(&user_id, ATHLETE_SUMMARY_FOCUS_ID).await })
+        Box::pin(async move {
+            builder
+                .build_impl(&user_id, ATHLETE_SUMMARY_FOCUS_ID, None)
+                .await
+        })
     }
 }
 
@@ -366,13 +418,15 @@ where
         &self,
         user_id: &str,
         workout_id: &str,
+        as_of_focus_day: Option<chrono::NaiveDate>,
     ) -> Result<TrainingContextBuildResult, LlmError> {
         let settings = self
             .settings_service
             .get_settings(user_id)
             .await
             .map_err(|error| LlmError::Internal(error.to_string()))?;
-        let today = epoch_seconds_to_date(self.clock.now_epoch_seconds());
+        let clock_today = epoch_seconds_to_date(self.clock.now_epoch_seconds());
+        let today = as_of_focus_day.unwrap_or(clock_today);
         let focus_date = self
             .resolve_focus_date(user_id, workout_id)
             .await
@@ -868,7 +922,7 @@ where
     }
 }
 
-fn build_local_events(
+pub(super) fn build_local_events(
     planned_workouts: &[PlannedWorkout],
     special_days: &[SpecialDay],
 ) -> Vec<Event> {
@@ -886,7 +940,7 @@ fn build_local_events(
     events
 }
 
-fn build_direct_event_matches(
+pub(super) fn build_direct_event_matches(
     completed_workouts: &[CompletedWorkout],
     planned_events_by_id: &HashMap<String, Event>,
 ) -> HashMap<String, Event> {

@@ -119,6 +119,7 @@
 - Read `reviewers.md` and `tasks/lessons.md` before planning and before implementation.
 - After any correction from the user, record the lesson in an appropriate category above.
 - After implementing a non-trivial change, verify: relevant test suite, `cargo fmt --all --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `bun run verify:arch`, `./scripts/rebuild_graphify.sh`.
+- **This Linux dev box is RAM-limited:** use `CARGO_BUILD_JOBS=1` / `cargo -j 1`, run only one `cargo` process at a time, and prefer narrow `cargo test <filter> -- --test-threads=1` instead of full-workspace `cargo test`. Parallel `rustc` can OOM the host and kill the IDE.
 - Do not run multiple heavy verification commands in parallel on this machine.
 
 ### Git and PR workflow

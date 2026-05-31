@@ -99,6 +99,46 @@ async fn admin_system_info_returns_payload_for_admin() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn admin_prompt_preview_post_workout_requires_admin() {
+    let app = auth_test_app(TestIdentityService {
+        admin_cookie_role: aiwattcoach::domain::identity::Role::User,
+        ..Default::default()
+    })
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/users/user-1/prompt-preview/post-workout?date=2026-05-01")
+                .header(header::COOKIE, "aiwattcoach_session=session-1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn admin_prompt_preview_calendar_coach_returns_service_unavailable_without_wiring() {
+    let app = auth_test_app(TestIdentityService::default()).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/users/user-1/prompt-preview/calendar-coach?date=2026-05-01")
+                .header(header::COOKIE, "aiwattcoach_session=session-1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn admin_task_scheduler_list_requires_admin() {
     let app = auth_test_app_with_admin_task_scheduler(
         TestIdentityService {

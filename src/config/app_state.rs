@@ -7,6 +7,7 @@ use std::{
 use mongodb::Client;
 
 use crate::adapters::rest::WorkoutSummarySaveNotifier;
+use crate::domain::admin_prompt_preview::AdminPromptPreviewUseCases;
 use crate::domain::athlete_summary::AthleteSummaryUseCases;
 use crate::domain::calendar::CalendarUseCases;
 use crate::domain::calendar_coach::CalendarCoachUseCases;
@@ -45,6 +46,7 @@ pub struct AppState {
     pub race_service: Option<Arc<dyn RaceUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     pub admin_task_scheduler_service: Option<Arc<dyn AdminTaskSchedulerUseCases>>,
+    pub admin_prompt_preview_service: Option<Arc<dyn AdminPromptPreviewUseCases>>,
     pub training_load_dashboard_service: Option<Arc<dyn TrainingLoadDashboardReadUseCases>>,
     pub athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
     pub workout_summary_service: Option<Arc<dyn WorkoutSummaryUseCases>>,
@@ -127,6 +129,7 @@ impl AppState {
             race_service: None,
             settings_service: None,
             admin_task_scheduler_service: None,
+            admin_prompt_preview_service: None,
             training_load_dashboard_service: None,
             athlete_summary_service: None,
             workout_summary_service: None,
@@ -180,6 +183,14 @@ impl AppState {
         admin_task_scheduler_service: Arc<dyn AdminTaskSchedulerUseCases>,
     ) -> Self {
         self.admin_task_scheduler_service = Some(admin_task_scheduler_service);
+        self
+    }
+
+    pub fn with_admin_prompt_preview_service(
+        mut self,
+        admin_prompt_preview_service: Arc<dyn AdminPromptPreviewUseCases>,
+    ) -> Self {
+        self.admin_prompt_preview_service = Some(admin_prompt_preview_service);
         self
     }
 

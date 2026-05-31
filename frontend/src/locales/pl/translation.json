@@ -16,7 +16,8 @@
     "aiCoach": "AI Trener",
     "workspace": "Obszar roboczy",
     "systemInfo": "Info systemowe",
-    "taskScheduler": "Harmonogram zadań"
+    "taskScheduler": "Harmonogram zadań",
+    "promptPreview": "Podgląd promptu"
   },
   "appShell": {
     "brand": {
@@ -32,8 +33,23 @@
       "aiCoach": "AI Trener",
       "workspace": "Obszar roboczy",
       "systemInfo": "Info systemowe",
-      "taskScheduler": "Harmonogram zadań"
+      "taskScheduler": "Harmonogram zadań",
+      "promptPreview": "Podgląd promptu"
     }
+  },
+  "adminPromptPreview": {
+    "title": "Podgląd promptu LLM",
+    "subtitle": "Podejrzyj złożone żądanie LLM dla użytkownika i daty bez wywoływania providera.",
+    "userIdLabel": "ID użytkownika",
+    "userIdPlaceholder": "uuid-użytkownika",
+    "dateLabel": "Data",
+    "postWorkoutButton": "Podgląd post-workout",
+    "calendarCoachButton": "Podgląd coacha kalendarza",
+    "loading": "Ładowanie podglądu...",
+    "empty": "Wybierz użytkownika, datę i akcję podglądu, aby wyświetlić JSON żądania.",
+    "validation": "Podaj ID użytkownika i datę.",
+    "futureDate": "Data nie może być w przyszłości.",
+    "loadError": "Nie udało się załadować podglądu promptu."
   },
   "adminTaskScheduler": {
     "kicker": "Operacje administratora",

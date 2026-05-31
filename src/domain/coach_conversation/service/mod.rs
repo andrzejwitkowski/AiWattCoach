@@ -18,7 +18,7 @@ use super::{
 mod internals;
 mod request;
 mod scheduler;
-mod transcript;
+pub mod transcript;
 mod use_cases;
 
 pub use scheduler::{
