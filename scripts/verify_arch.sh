@@ -2,44 +2,61 @@
 
 set -eu
 
-TOOLCHAIN="nightly-2026-01-22"
+ERRORS=0
+SRC="src"
 
-if ! rustup toolchain list | grep -q "^${TOOLCHAIN}"; then
-  echo "Missing Rust toolchain: ${TOOLCHAIN}" >&2
-  echo "Install it with:" >&2
-  echo "  rustup toolchain install ${TOOLCHAIN}" >&2
-  exit 1
-fi
+check_no_import() {
+  dir="$1"
+  pattern="$2"
+  label="$3"
+  exclude="${4:-}"
 
-for component in rust-src rustc-dev llvm-tools-preview; do
-  if [ "${component}" = "llvm-tools-preview" ]; then
-    if ! rustup component list --toolchain "${TOOLCHAIN}" | grep -Eq '^llvm-tools([^-]|-.*)? .*\(installed\)$'; then
-      echo "Missing Rust component '${component}' for ${TOOLCHAIN}" >&2
-      echo "Install required components with:" >&2
-      echo "  rustup component add --toolchain ${TOOLCHAIN} rust-src rustc-dev llvm-tools-preview" >&2
-      exit 1
-    fi
-  elif ! rustup component list --toolchain "${TOOLCHAIN}" | grep -q "^${component}.*(installed)"; then
-    echo "Missing Rust component '${component}' for ${TOOLCHAIN}" >&2
-    echo "Install required components with:" >&2
-    echo "  rustup component add --toolchain ${TOOLCHAIN} rust-src rustc-dev llvm-tools-preview" >&2
-    exit 1
+  if [ ! -d "$dir" ]; then
+    echo "FAIL: $label"
+    echo "  directory does not exist: $dir"
+    ERRORS=$((ERRORS + 1))
+    return
   fi
-done
 
-if ! command -v cargo-pup >/dev/null 2>&1; then
-  echo "Missing cargo_pup CLI" >&2
-  echo "Install it with:" >&2
-  echo "  cargo +${TOOLCHAIN} install cargo_pup --version 0.1.7 --locked" >&2
+  matches=$(grep -rEn "$pattern" "$dir" --include='*.rs' 2>/dev/null || true)
+
+  if [ -n "$exclude" ]; then
+    # shellcheck disable=SC2001
+    matches=$(echo "$matches" | sed "\#$exclude#d" || true)
+  fi
+
+  if [ -n "$matches" ]; then
+    echo "FAIL: $label"
+    echo "$matches" | while IFS= read -r line; do
+      echo "  $line"
+    done
+    ERRORS=$((ERRORS + 1))
+  fi
+}
+
+# 1. domain must not import adapters
+check_no_import "$SRC/domain" '(crate::)?adapters::' "domain imports adapters"
+
+# 2. domain must not import config
+check_no_import "$SRC/domain" '(crate::)?config::' "domain imports config"
+
+# 3. rest must not import mongo / intervals_icu / llm / google_oauth
+# NOTE: health.rs probes mongo directly for readiness checks — known exception
+check_no_import "$SRC/adapters/rest" 'adapters::mongo' "rest imports mongo" "health\.rs"
+check_no_import "$SRC/adapters/rest" 'adapters::intervals_icu' "rest imports intervals_icu"
+check_no_import "$SRC/adapters/rest" 'adapters::llm' "rest imports llm"
+check_no_import "$SRC/adapters/rest" 'adapters::google_oauth' "rest imports google_oauth"
+
+# 4. infra adapters must not import rest
+check_no_import "$SRC/adapters/mongo" 'adapters::rest' "mongo imports rest"
+check_no_import "$SRC/adapters/intervals_icu" 'adapters::rest' "intervals_icu imports rest"
+check_no_import "$SRC/adapters/llm" 'adapters::rest' "llm imports rest"
+check_no_import "$SRC/adapters/google_oauth" 'adapters::rest' "google_oauth imports rest"
+
+if [ "$ERRORS" -gt 0 ]; then
+  echo "---"
+  echo "FAILED: $ERRORS architecture violation(s) found."
   exit 1
 fi
 
-INSTALLED_CARGO_PUP_VERSION=$(cargo-pup --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
-if [ "${INSTALLED_CARGO_PUP_VERSION}" != "0.1.7" ]; then
-  echo "Expected cargo_pup version 0.1.7, found '${INSTALLED_CARGO_PUP_VERSION:-unknown}'" >&2
-  echo "Install it with:" >&2
-  echo "  cargo +${TOOLCHAIN} install cargo_pup --version 0.1.7 --locked" >&2
-  exit 1
-fi
-
-RUSTUP_TOOLCHAIN="${TOOLCHAIN}" RUSTC=rustc cargo pup check
+echo "PASS: architecture boundaries are clean."

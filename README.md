@@ -136,9 +136,6 @@ For local end-to-end verification, run:
 ```bash
 bun install
 bun install --cwd frontend
-rustup toolchain install nightly-2026-01-22
-rustup component add --toolchain nightly-2026-01-22 rust-src rustc-dev llvm-tools-preview
-cargo +nightly-2026-01-22 install cargo_pup --version 0.1.7 --locked
 bun run verify:arch
 bun run verify:rust
 bun run test:all
