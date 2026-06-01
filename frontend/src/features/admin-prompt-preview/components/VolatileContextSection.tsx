@@ -28,7 +28,7 @@ export function VolatileContextSection({ rawText }: VolatileContextSectionProps)
       {expanded && (
         <div className="space-y-4">
           {parsed.timing && (
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm">
+            <div className="whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm">
               <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Conversation Timing</div>
               <p className="text-slate-200">
                 Current:{' '}

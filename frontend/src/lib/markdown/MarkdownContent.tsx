@@ -40,7 +40,7 @@ const mdComponents: Components = {
   code: ({ children }) => (
     <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs text-amber-200">{children}</code>
   ),
-  p: ({ children }) => <p className="mb-2 leading-7">{children}</p>,
+  p: ({ children }) => <p className="mb-2 whitespace-pre-wrap break-words leading-7">{children}</p>,
   blockquote: ({ children }) => (
     <blockquote className="my-2 border-l-2 border-amber-400/30 pl-3 italic text-slate-300">
       {children}
