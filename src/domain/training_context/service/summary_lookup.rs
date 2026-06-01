@@ -111,8 +111,11 @@ pub(super) fn build_recent_workout_recaps(
     use std::collections::HashSet;
 
     let mut seen_summary_ids = HashSet::new();
-    let mut recaps = summaries_by_requested_id
-        .iter()
+    let mut entries = summaries_by_requested_id.iter().collect::<Vec<_>>();
+    entries.sort_by_key(|(workout_id, _)| *workout_id);
+
+    let mut recaps = entries
+        .into_iter()
         .filter_map(|(workout_id, summary)| {
             if !seen_summary_ids.insert(summary.id.clone()) {
                 return None;
