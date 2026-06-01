@@ -203,7 +203,7 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
 
 ## Import Conventions
 
-- `src/domain/**` must not import `crate::adapters::**`; this is enforced by `cargo_pup`.
+- `src/domain/**` must not import `crate::adapters::**`; this is enforced by `scripts/verify_arch.sh`.
 
 - Group imports by std / external crates / crate-local modules.
 - Use nested imports when they improve readability.
