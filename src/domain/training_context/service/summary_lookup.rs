@@ -108,35 +108,41 @@ pub(super) fn build_recent_workout_recaps(
     summaries_by_requested_id: &HashMap<String, WorkoutSummary>,
     activity_dates_by_id: &HashMap<String, NaiveDate>,
 ) -> Vec<RecentWorkoutRecapContext> {
-    use std::collections::HashSet;
+    use std::collections::BTreeMap;
 
-    let mut seen_summary_ids = HashSet::new();
-    let mut entries = summaries_by_requested_id.iter().collect::<Vec<_>>();
-    entries.sort_by_key(|(workout_id, _)| *workout_id);
+    let mut recaps_by_summary_id = BTreeMap::<String, RecentWorkoutRecapContext>::new();
 
-    let mut recaps = entries
-        .into_iter()
-        .filter_map(|(workout_id, summary)| {
-            if !seen_summary_ids.insert(summary.id.clone()) {
-                return None;
+    for (workout_id, summary) in summaries_by_requested_id {
+        let Some(recap) = summary
+            .workout_recap_text
+            .as_deref()
+            .filter(|text| !text.trim().is_empty())
+        else {
+            continue;
+        };
+        let Some(workout_date) = activity_dates_by_id.get(workout_id) else {
+            continue;
+        };
+        if *workout_date < recent_start || *workout_date > focus_date {
+            continue;
+        }
+
+        let candidate = RecentWorkoutRecapContext {
+            date: workout_date.format("%Y-%m-%d").to_string(),
+            workout_id: workout_id.clone(),
+            rpe: summary.rpe,
+            recap: recap.to_string(),
+        };
+
+        match recaps_by_summary_id.get(&summary.id) {
+            Some(existing) if existing.workout_id <= candidate.workout_id => {}
+            _ => {
+                recaps_by_summary_id.insert(summary.id.clone(), candidate);
             }
-            let recap = summary
-                .workout_recap_text
-                .as_deref()
-                .filter(|text| !text.trim().is_empty())?;
-            let workout_date = activity_dates_by_id.get(workout_id)?;
-            if *workout_date < recent_start || *workout_date > focus_date {
-                return None;
-            }
-            Some(RecentWorkoutRecapContext {
-                date: workout_date.format("%Y-%m-%d").to_string(),
-                workout_id: workout_id.clone(),
-                rpe: summary.rpe,
-                recap: recap.to_string(),
-            })
-        })
-        .collect::<Vec<_>>();
+        }
+    }
 
+    let mut recaps = recaps_by_summary_id.into_values().collect::<Vec<_>>();
     recaps.sort_by(|left, right| {
         right
             .date
