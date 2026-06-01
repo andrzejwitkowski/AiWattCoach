@@ -1,3 +1,4 @@
+pub(crate) mod alias_batch_lookup;
 mod coach;
 mod coach_output;
 mod model;

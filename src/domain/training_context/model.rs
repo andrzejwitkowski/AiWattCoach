@@ -15,6 +15,10 @@ impl std::fmt::Debug for RedactedTrainingContextDebug<'_> {
             .field("races", &context.races.len())
             .field("future_events", &context.future_events.len())
             .field("recent_days", &context.recent_days.len())
+            .field(
+                "recent_workout_recaps",
+                &context.recent_workout_recaps.len(),
+            )
             .field("upcoming_days", &context.upcoming_days.len())
             .field("projected_days", &context.projected_days.len())
             .finish()
@@ -46,8 +50,17 @@ pub struct TrainingContext {
     pub future_events: Vec<FuturePlannedEventContext>,
     pub history: HistoricalTrainingContext,
     pub recent_days: Vec<RecentDayContext>,
+    pub recent_workout_recaps: Vec<RecentWorkoutRecapContext>,
     pub upcoming_days: Vec<UpcomingDayContext>,
     pub projected_days: Vec<ProjectedDayContext>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecentWorkoutRecapContext {
+    pub date: String,
+    pub workout_id: String,
+    pub rpe: Option<u8>,
+    pub recap: String,
 }
 
 impl TrainingContext {

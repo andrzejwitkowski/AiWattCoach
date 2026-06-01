@@ -1,6 +1,8 @@
 use crate::domain::workout_summary::{
-    BoxFuture as WorkoutSummaryBoxFuture, ConversationMessage, MessageRole, WorkoutRecap,
-    WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
+    BoxFuture as WorkoutSummaryBoxFuture, CompletedWorkoutAliasScope,
+    CompletedWorkoutTargetUseCases, ConversationMessage, MessageRole,
+    ResolvedCompletedWorkoutTarget, WorkoutRecap, WorkoutSummary, WorkoutSummaryError,
+    WorkoutSummaryRepository,
 };
 
 #[derive(Clone)]
@@ -11,6 +13,15 @@ pub(crate) struct EventIdOnlySummaryRepository;
 
 #[derive(Clone)]
 pub(crate) struct AliasSummaryRepository;
+
+#[derive(Clone)]
+pub(crate) struct StorageBackedSummaryRepository;
+
+#[derive(Clone)]
+pub(crate) struct DirectCompletedWorkoutTargetService;
+
+#[derive(Clone)]
+pub(crate) struct StaticCompletedWorkoutTargetService;
 
 fn summary_for_workout_id(workout_id: &str) -> WorkoutSummary {
     WorkoutSummary {
@@ -65,6 +76,24 @@ fn alias_backed_summary(requested_workout_id: &str) -> WorkoutSummary {
         provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: Some("Recovered alias-backed recap".to_string()),
+        workout_recap_provider: Some("openrouter".to_string()),
+        workout_recap_model: Some("test-model".to_string()),
+        workout_recap_generated_at_epoch_seconds: Some(1),
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 1,
+    }
+}
+
+fn storage_backed_summary(workout_id: &str) -> WorkoutSummary {
+    WorkoutSummary {
+        id: "summary-wahoo-storage".to_string(),
+        user_id: "user-1".to_string(),
+        workout_id: workout_id.to_string(),
+        rpe: Some(6),
+        messages: Vec::new(),
+        provider_transcript: Vec::new(),
+        saved_at_epoch_seconds: Some(1),
+        workout_recap_text: Some("Alias storage recap".to_string()),
         workout_recap_provider: Some("openrouter".to_string()),
         workout_recap_model: Some("test-model".to_string()),
         workout_recap_generated_at_epoch_seconds: Some(1),
@@ -343,5 +372,177 @@ impl WorkoutSummaryRepository for AliasSummaryRepository {
         _message_id: &str,
     ) -> WorkoutSummaryBoxFuture<Result<Option<ConversationMessage>, WorkoutSummaryError>> {
         unreachable!()
+    }
+}
+
+impl WorkoutSummaryRepository for StorageBackedSummaryRepository {
+    fn find_by_user_id_and_workout_id(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> WorkoutSummaryBoxFuture<Result<Option<WorkoutSummary>, WorkoutSummaryError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_user_id_and_workout_ids(
+        &self,
+        _user_id: &str,
+        workout_ids: Vec<String>,
+    ) -> WorkoutSummaryBoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
+        Box::pin(async move {
+            Ok(workout_ids
+                .into_iter()
+                .filter(|id| id == "wahoo-workout:999")
+                .map(|id| storage_backed_summary(&id))
+                .collect())
+        })
+    }
+
+    fn create(
+        &self,
+        _summary: WorkoutSummary,
+    ) -> WorkoutSummaryBoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        unreachable!()
+    }
+
+    fn update_rpe(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _rpe: u8,
+        _updated_at_epoch_seconds: i64,
+    ) -> WorkoutSummaryBoxFuture<Result<(), WorkoutSummaryError>> {
+        unreachable!()
+    }
+
+    fn append_message(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _message: ConversationMessage,
+        _updated_at_epoch_seconds: i64,
+    ) -> WorkoutSummaryBoxFuture<Result<(), WorkoutSummaryError>> {
+        unreachable!()
+    }
+
+    fn set_saved_state(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: Option<i64>,
+        _updated_at_epoch_seconds: i64,
+    ) -> WorkoutSummaryBoxFuture<Result<(), WorkoutSummaryError>> {
+        unreachable!()
+    }
+
+    fn replace_provider_transcript(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _provider_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+        _expected_updated_at_epoch_seconds: i64,
+        _updated_at_epoch_seconds: i64,
+    ) -> WorkoutSummaryBoxFuture<Result<(), WorkoutSummaryError>> {
+        unreachable!()
+    }
+
+    fn persist_workout_recap(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _recap: WorkoutRecap,
+        _updated_at_epoch_seconds: i64,
+    ) -> WorkoutSummaryBoxFuture<Result<(), WorkoutSummaryError>> {
+        unreachable!()
+    }
+
+    fn find_message_by_id(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _message_id: &str,
+    ) -> WorkoutSummaryBoxFuture<Result<Option<ConversationMessage>, WorkoutSummaryError>> {
+        unreachable!()
+    }
+}
+
+impl CompletedWorkoutTargetUseCases for DirectCompletedWorkoutTargetService {
+    fn is_completed_workout_target(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> WorkoutSummaryBoxFuture<Result<bool, WorkoutSummaryError>> {
+        Box::pin(async { Ok(true) })
+    }
+
+    fn resolve_completed_workout_targets_in_scope(
+        &self,
+        _user_id: &str,
+        workout_ids: &[String],
+        _alias_scope: &CompletedWorkoutAliasScope,
+    ) -> WorkoutSummaryBoxFuture<
+        Result<
+            std::collections::HashMap<String, ResolvedCompletedWorkoutTarget>,
+            WorkoutSummaryError,
+        >,
+    > {
+        let workout_ids = workout_ids.to_vec();
+        Box::pin(async move {
+            Ok(workout_ids
+                .into_iter()
+                .map(|workout_id| {
+                    (
+                        workout_id.clone(),
+                        ResolvedCompletedWorkoutTarget {
+                            preferred_workout_id: workout_id.clone(),
+                            equivalent_workout_ids: vec![workout_id],
+                        },
+                    )
+                })
+                .collect())
+        })
+    }
+}
+
+impl CompletedWorkoutTargetUseCases for StaticCompletedWorkoutTargetService {
+    fn is_completed_workout_target(
+        &self,
+        _user_id: &str,
+        workout_id: &str,
+    ) -> WorkoutSummaryBoxFuture<Result<bool, WorkoutSummaryError>> {
+        let workout_id = workout_id.to_string();
+        Box::pin(async move { Ok(workout_id == "ride-1") })
+    }
+
+    fn resolve_completed_workout_targets_in_scope(
+        &self,
+        _user_id: &str,
+        workout_ids: &[String],
+        _alias_scope: &CompletedWorkoutAliasScope,
+    ) -> WorkoutSummaryBoxFuture<
+        Result<
+            std::collections::HashMap<String, ResolvedCompletedWorkoutTarget>,
+            WorkoutSummaryError,
+        >,
+    > {
+        let workout_ids = workout_ids.to_vec();
+        Box::pin(async move {
+            Ok(workout_ids
+                .into_iter()
+                .filter(|workout_id| workout_id == "ride-1")
+                .map(|workout_id| {
+                    (
+                        workout_id,
+                        ResolvedCompletedWorkoutTarget {
+                            preferred_workout_id: "wahoo-workout:999".to_string(),
+                            equivalent_workout_ids: vec![
+                                "wahoo-workout:999".to_string(),
+                                "ride-1".to_string(),
+                            ],
+                        },
+                    )
+                })
+                .collect())
+        })
     }
 }

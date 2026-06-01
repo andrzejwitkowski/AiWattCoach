@@ -1,11 +1,12 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
+
+use crate::domain::workout_summary::alias_batch_lookup::{
+    collect_unique_lookup_workout_ids, finalize_presented_summaries,
+    identity_workout_summary_lookup, load_summaries_by_workout_ids_in_scope,
+    lookup_workout_ids_for_target, WorkoutSummaryLookupRequest,
+};
 
 use super::*;
-
-struct ListSummaryLookup {
-    requested_workout_id: String,
-    lookup_workout_ids: Vec<String>,
-}
 
 impl<Repo, Ops, Time, Ids> WorkoutSummaryService<Repo, Ops, Time, Ids>
 where
@@ -68,133 +69,70 @@ where
         workout_ids: Vec<String>,
         options: WorkoutSummaryListOptions,
     ) -> Result<Vec<WorkoutSummary>, WorkoutSummaryError> {
-        let lookup_requests = if let Some(alias_scope) = options.alias_scope.clone() {
-            self.resolve_list_summary_lookups_in_scope(user_id, &workout_ids, &alias_scope)
-                .await?
-        } else {
-            let mut lookup_requests = Vec::new();
-            for workout_id in workout_ids {
-                if let Some(lookup) = self
-                    .resolve_list_summary_lookup(user_id, workout_id)
-                    .await?
-                {
-                    lookup_requests.push(lookup);
-                }
-            }
-            lookup_requests
-        };
+        if let Some(alias_scope) = options.alias_scope.clone() {
+            let summaries_by_requested_id = load_summaries_by_workout_ids_in_scope(
+                &self.repository,
+                self.completed_workout_target_service.as_deref(),
+                user_id,
+                &workout_ids,
+                &alias_scope,
+            )
+            .await?;
 
-        let mut lookup_workout_ids = Vec::new();
-        let mut seen_lookup_workout_ids = HashSet::new();
-        for request in &lookup_requests {
-            for workout_id in &request.lookup_workout_ids {
-                push_unique_list_summary_lookup_workout_id(
-                    &mut lookup_workout_ids,
-                    &mut seen_lookup_workout_ids,
-                    workout_id.clone(),
-                );
+            let summaries = workout_ids
+                .iter()
+                .filter_map(|requested_workout_id| {
+                    summaries_by_requested_id
+                        .get(requested_workout_id)
+                        .cloned()
+                        .map(|summary| self.present_summary(summary, requested_workout_id))
+                })
+                .collect::<Vec<_>>();
+
+            return Ok(finalize_presented_summaries(summaries));
+        }
+
+        let mut lookup_requests = Vec::new();
+        for workout_id in workout_ids {
+            if let Some(lookup) = self
+                .resolve_list_summary_lookup(user_id, workout_id)
+                .await?
+            {
+                lookup_requests.push(lookup);
             }
         }
 
-        let summaries_by_lookup_workout_id = self
+        let lookup_workout_ids = collect_unique_lookup_workout_ids(&lookup_requests);
+        let summaries_by_lookup_id = self
             .repository
             .find_by_user_id_and_workout_ids(user_id, lookup_workout_ids)
             .await?
             .into_iter()
             .map(|summary| (summary.workout_id.clone(), summary))
-            .collect::<std::collections::BTreeMap<_, _>>();
+            .collect::<HashMap<_, _>>();
 
-        let mut summaries = lookup_requests
+        let summaries = lookup_requests
             .into_iter()
             .filter_map(|request| {
-                request
-                    .lookup_workout_ids
-                    .iter()
-                    .find_map(|workout_id| summaries_by_lookup_workout_id.get(workout_id))
-                    .cloned()
-                    .map(|summary| self.present_summary(summary, &request.requested_workout_id))
+                request.lookup_workout_ids.iter().find_map(|lookup_id| {
+                    summaries_by_lookup_id
+                        .get(lookup_id)
+                        .cloned()
+                        .map(|summary| self.present_summary(summary, &request.requested_workout_id))
+                })
             })
             .collect::<Vec<_>>();
 
-        let mut seen_summary_ids = HashSet::new();
-        summaries.retain(|summary| seen_summary_ids.insert(summary.id.clone()));
-
-        summaries.sort_by(|left, right| {
-            right
-                .updated_at_epoch_seconds
-                .cmp(&left.updated_at_epoch_seconds)
-                .then_with(|| {
-                    right
-                        .created_at_epoch_seconds
-                        .cmp(&left.created_at_epoch_seconds)
-                })
-        });
-
-        Ok(summaries)
-    }
-
-    async fn resolve_list_summary_lookups_in_scope(
-        &self,
-        user_id: &str,
-        workout_ids: &[String],
-        alias_scope: &CompletedWorkoutAliasScope,
-    ) -> Result<Vec<ListSummaryLookup>, WorkoutSummaryError> {
-        let Some(service) = &self.completed_workout_target_service else {
-            return Ok(workout_ids
-                .iter()
-                .map(|workout_id| ListSummaryLookup {
-                    requested_workout_id: workout_id.clone(),
-                    lookup_workout_ids: vec![workout_id.clone()],
-                })
-                .collect());
-        };
-
-        let resolved_targets = service
-            .resolve_completed_workout_targets_in_scope(user_id, workout_ids, alias_scope)
-            .await?;
-
-        Ok(workout_ids
-            .iter()
-            .filter_map(|workout_id| {
-                let resolved_target = resolved_targets.get(workout_id)?;
-                let mut lookup_workout_ids = Vec::new();
-                let mut seen_lookup_workout_ids = HashSet::new();
-                push_unique_list_summary_lookup_workout_id(
-                    &mut lookup_workout_ids,
-                    &mut seen_lookup_workout_ids,
-                    resolved_target.preferred_workout_id.clone(),
-                );
-                push_unique_list_summary_lookup_workout_id(
-                    &mut lookup_workout_ids,
-                    &mut seen_lookup_workout_ids,
-                    workout_id.clone(),
-                );
-                for equivalent_workout_id in &resolved_target.equivalent_workout_ids {
-                    push_unique_list_summary_lookup_workout_id(
-                        &mut lookup_workout_ids,
-                        &mut seen_lookup_workout_ids,
-                        equivalent_workout_id.clone(),
-                    );
-                }
-
-                Some(ListSummaryLookup {
-                    requested_workout_id: workout_id.clone(),
-                    lookup_workout_ids,
-                })
-            })
-            .collect())
+        Ok(finalize_presented_summaries(summaries))
     }
 
     async fn resolve_list_summary_lookup(
         &self,
         user_id: &str,
         workout_id: String,
-    ) -> Result<Option<ListSummaryLookup>, WorkoutSummaryError> {
+    ) -> Result<Option<WorkoutSummaryLookupRequest>, WorkoutSummaryError> {
         let Some(service) = &self.completed_workout_target_service else {
-            return Ok(Some(ListSummaryLookup {
-                requested_workout_id: workout_id.clone(),
-                lookup_workout_ids: vec![workout_id],
-            }));
+            return Ok(Some(identity_workout_summary_lookup(workout_id)));
         };
 
         let Some(resolved_target) = service
@@ -204,29 +142,9 @@ where
             return Ok(None);
         };
 
-        let mut lookup_workout_ids = Vec::new();
-        let mut seen_lookup_workout_ids = HashSet::new();
-        push_unique_list_summary_lookup_workout_id(
-            &mut lookup_workout_ids,
-            &mut seen_lookup_workout_ids,
-            resolved_target.preferred_workout_id,
-        );
-        push_unique_list_summary_lookup_workout_id(
-            &mut lookup_workout_ids,
-            &mut seen_lookup_workout_ids,
-            workout_id.clone(),
-        );
-        for equivalent_workout_id in resolved_target.equivalent_workout_ids {
-            push_unique_list_summary_lookup_workout_id(
-                &mut lookup_workout_ids,
-                &mut seen_lookup_workout_ids,
-                equivalent_workout_id,
-            );
-        }
-
-        Ok(Some(ListSummaryLookup {
-            requested_workout_id: workout_id,
-            lookup_workout_ids,
+        Ok(Some(WorkoutSummaryLookupRequest {
+            requested_workout_id: workout_id.clone(),
+            lookup_workout_ids: lookup_workout_ids_for_target(&workout_id, &resolved_target),
         }))
     }
 
@@ -309,15 +227,5 @@ where
         self.get_existing_summary(user_id, &target.storage_workout_id)
             .await
             .map(|summary| self.present_summary(summary, &target.requested_workout_id))
-    }
-}
-
-fn push_unique_list_summary_lookup_workout_id(
-    workout_ids: &mut Vec<String>,
-    seen_workout_ids: &mut HashSet<String>,
-    workout_id: String,
-) {
-    if seen_workout_ids.insert(workout_id.clone()) {
-        workout_ids.push(workout_id);
     }
 }

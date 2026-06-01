@@ -551,10 +551,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         (*planned_workout_update_service).clone(),
     ));
 
+    let completed_workout_target_service = Arc::new(CompletedWorkoutTargetAdapter::new(
+        authoritative_completed_workout_repository.clone(),
+    ));
+
     let training_context_builder = Arc::new(
         DefaultTrainingContextBuilder::new(
             settings_service.clone(),
             Arc::new(workout_summary_repository.clone()),
+            completed_workout_target_service.clone(),
             SystemClock,
         )
         .with_completed_workout_repository(authoritative_completed_workout_repository.clone())
@@ -600,9 +605,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )
         .with_athlete_summary_service(athlete_summary_direct_service.clone())
         .with_settings_service(settings_service.clone())
-        .with_completed_workout_target_service(Arc::new(CompletedWorkoutTargetAdapter::new(
-            authoritative_completed_workout_repository.clone(),
-        )))
+        .with_completed_workout_target_service(completed_workout_target_service)
         .with_latest_completed_activity_service(Arc::new(
             LatestCompletedActivityAdapter::new(authoritative_completed_workout_repository.clone()),
         )),

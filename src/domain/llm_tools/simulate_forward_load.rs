@@ -541,6 +541,7 @@ mod tests {
             future_events: Vec::new(),
             history: Default::default(),
             recent_days: Vec::new(),
+            recent_workout_recaps: Vec::new(),
             upcoming_days: vec![UpcomingDayContext {
                 date: "2026-05-05".to_string(),
                 free_day: false,

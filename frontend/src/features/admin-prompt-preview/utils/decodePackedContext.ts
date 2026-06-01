@@ -9,6 +9,7 @@ const KEY_LABEL: Record<string, string> = {
   fe: 'Future Events',
   h: 'Historical Training',
   rd: 'Recent Days',
+  wr: 'Workout Recaps',
   ud: 'Upcoming Days',
   pd: 'Projected Days',
   a: 'Activities Status',

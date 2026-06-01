@@ -319,6 +319,7 @@ pub(crate) fn sample_context(data_port: TestDataPort) -> ToolExecutionContext {
             future_events: Vec::new(),
             history: Default::default(),
             recent_days: Vec::new(),
+            recent_workout_recaps: Vec::new(),
             upcoming_days: Vec::new(),
             projected_days: Vec::new(),
         },

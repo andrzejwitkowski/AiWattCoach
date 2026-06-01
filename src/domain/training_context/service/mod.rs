@@ -34,13 +34,14 @@ use crate::domain::{
         TrainingLoadSnapshotRange,
     },
     training_plan::TrainingPlanProjectionRepository,
-    workout_summary::WorkoutSummaryRepository,
+    workout_summary::{CompletedWorkoutTargetUseCases, WorkoutSummaryRepository},
 };
 
 mod context;
 mod dates;
 mod history;
 mod power;
+mod summary_lookup;
 
 #[cfg(test)]
 mod tests;
@@ -53,6 +54,7 @@ use context::{
 };
 use dates::{activity_date, epoch_seconds_to_date, event_date};
 use history::build_recent_interval_blocks_by_activity_id;
+use summary_lookup::{load_workout_summary_fields, WorkoutSummaryDateScope};
 
 mod workout_pick;
 pub use workout_pick::{
@@ -248,6 +250,7 @@ where
 {
     settings_service: Arc<dyn UserSettingsUseCases>,
     workout_summary_repository: Arc<dyn WorkoutSummaryRepository>,
+    completed_workout_target_service: Arc<dyn CompletedWorkoutTargetUseCases>,
     completed_workout_repository: Option<Arc<dyn CompletedWorkoutReadPort>>,
     planned_workout_repository: Option<Arc<dyn PlannedWorkoutReadPort>>,
     special_day_repository: Option<Arc<dyn SpecialDayReadPort>>,
@@ -265,11 +268,13 @@ where
     pub fn new(
         settings_service: Arc<dyn UserSettingsUseCases>,
         workout_summary_repository: Arc<dyn WorkoutSummaryRepository>,
+        completed_workout_target_service: Arc<dyn CompletedWorkoutTargetUseCases>,
         clock: Time,
     ) -> Self {
         Self {
             settings_service,
             workout_summary_repository,
+            completed_workout_target_service,
             completed_workout_repository: None,
             planned_workout_repository: None,
             special_day_repository: None,
@@ -515,26 +520,34 @@ where
             .ftp_watts
             .and_then(|value| i32::try_from(value).ok());
 
-        let recent_activity_ids = history_activities
-            .iter()
-            .filter(|activity| {
-                activity_date(activity) >= recent_start && activity_date(activity) <= focus_date
-            })
-            .map(|activity| activity.id.clone())
-            .collect::<Vec<_>>();
-
         let detailed_recent_activities =
             self.load_detailed_recent_activities(&history_activities, recent_start, focus_date);
         let historical_activity_ids = history_activities
             .iter()
             .map(|activity| activity.id.clone())
             .collect::<Vec<_>>();
-        let summaries_by_id = self
-            .load_rpe_by_workout_id(user_id, &recent_activity_ids, &all_events)
-            .await;
-        let workout_recaps_by_id = self
-            .load_workout_recaps_by_workout_id(user_id, &historical_activity_ids, &all_events)
-            .await;
+        let activity_dates_by_id = history_activities
+            .iter()
+            .map(|activity| (activity.id.clone(), activity_date(activity)))
+            .collect::<HashMap<_, _>>();
+        let summary_date_scope = WorkoutSummaryDateScope {
+            recent_start,
+            focus_date,
+            activity_dates_by_id: &activity_dates_by_id,
+        };
+        let summary_fields = load_workout_summary_fields(
+            self.workout_summary_repository.as_ref(),
+            self.completed_workout_target_service.as_ref(),
+            user_id,
+            &historical_activity_ids,
+            &all_events,
+            &summary_date_scope,
+        )
+        .await
+        .map_err(|error| LlmError::Internal(error.to_string()))?;
+        let summaries_by_id = summary_fields.rpe_by_workout_id;
+        let workout_recaps_by_id = summary_fields.recap_by_workout_id;
+        let recent_workout_recaps = summary_fields.recent_workout_recaps;
         let projected_days = self.load_projected_day_contexts(user_id, focus_date).await;
         let races = self.load_race_contexts(user_id).await;
         let future_events =
@@ -649,6 +662,7 @@ where
             future_events,
             history,
             recent_days,
+            recent_workout_recaps,
             upcoming_days,
             projected_days,
         };
@@ -672,64 +686,6 @@ where
             .filter(|activity| activity_date(activity) >= start && activity_date(activity) <= end)
             .cloned()
             .collect()
-    }
-
-    async fn load_rpe_by_workout_id(
-        &self,
-        user_id: &str,
-        activity_ids: &[String],
-        events: &[Event],
-    ) -> HashMap<String, u8> {
-        let mut ids = activity_ids.to_vec();
-        ids.extend(events.iter().map(|event| event.id.to_string()));
-        ids.sort();
-        ids.dedup();
-        if ids.is_empty() {
-            return HashMap::new();
-        }
-
-        match self
-            .workout_summary_repository
-            .find_by_user_id_and_workout_ids(user_id, ids)
-            .await
-        {
-            Ok(summaries) => summaries
-                .into_iter()
-                .filter_map(|summary| summary.rpe.map(|rpe| (summary.workout_id, rpe)))
-                .collect(),
-            Err(_) => HashMap::new(),
-        }
-    }
-
-    async fn load_workout_recaps_by_workout_id(
-        &self,
-        user_id: &str,
-        activity_ids: &[String],
-        events: &[Event],
-    ) -> HashMap<String, String> {
-        let mut ids = activity_ids.to_vec();
-        ids.extend(events.iter().map(|event| event.id.to_string()));
-        ids.sort();
-        ids.dedup();
-        if ids.is_empty() {
-            return HashMap::new();
-        }
-
-        match self
-            .workout_summary_repository
-            .find_by_user_id_and_workout_ids(user_id, ids)
-            .await
-        {
-            Ok(summaries) => summaries
-                .into_iter()
-                .filter_map(|summary| {
-                    summary
-                        .workout_recap_text
-                        .map(|text| (summary.workout_id, text))
-                })
-                .collect(),
-            Err(_) => HashMap::new(),
-        }
     }
 
     async fn load_projected_day_contexts(

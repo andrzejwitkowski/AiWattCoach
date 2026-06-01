@@ -13,5 +13,7 @@ pub(super) use workout_repositories::{
     TestCompletedWorkoutRepository, TestPlannedWorkoutRepository,
 };
 pub(super) use workout_summaries::{
-    AliasSummaryRepository, EventIdOnlySummaryRepository, TestWorkoutSummaryRepository,
+    AliasSummaryRepository, DirectCompletedWorkoutTargetService, EventIdOnlySummaryRepository,
+    StaticCompletedWorkoutTargetService, StorageBackedSummaryRepository,
+    TestWorkoutSummaryRepository,
 };
