@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::domain::workout_summary::alias_batch_lookup::{
     collect_unique_lookup_workout_ids, finalize_presented_summaries,
     identity_workout_summary_lookup, load_summaries_by_workout_ids_in_scope,
-    lookup_workout_ids_for_target, map_lookup_requests_to_summaries, WorkoutSummaryLookupRequest,
+    lookup_workout_ids_for_target, WorkoutSummaryLookupRequest,
 };
 
 use super::*;
@@ -79,10 +79,13 @@ where
             )
             .await?;
 
-            let summaries = summaries_by_requested_id
-                .into_iter()
-                .map(|(requested_workout_id, summary)| {
-                    self.present_summary(summary, &requested_workout_id)
+            let summaries = workout_ids
+                .iter()
+                .filter_map(|requested_workout_id| {
+                    summaries_by_requested_id
+                        .get(requested_workout_id)
+                        .cloned()
+                        .map(|summary| self.present_summary(summary, requested_workout_id))
                 })
                 .collect::<Vec<_>>();
 
@@ -108,12 +111,15 @@ where
             .map(|summary| (summary.workout_id.clone(), summary))
             .collect::<HashMap<_, _>>();
 
-        let summaries_by_requested_id =
-            map_lookup_requests_to_summaries(lookup_requests, &summaries_by_lookup_id);
-        let summaries = summaries_by_requested_id
+        let summaries = lookup_requests
             .into_iter()
-            .map(|(requested_workout_id, summary)| {
-                self.present_summary(summary, &requested_workout_id)
+            .filter_map(|request| {
+                request.lookup_workout_ids.iter().find_map(|lookup_id| {
+                    summaries_by_lookup_id
+                        .get(lookup_id)
+                        .cloned()
+                        .map(|summary| self.present_summary(summary, &request.requested_workout_id))
+                })
             })
             .collect::<Vec<_>>();
 
