@@ -20,7 +20,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install latest stable Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
+        with:
+          toolchain: stable
 
       - name: Run architecture guard
         run: ./scripts/verify_arch.sh

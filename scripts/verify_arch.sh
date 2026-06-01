@@ -11,7 +11,14 @@ check_no_import() {
   label="$3"
   exclude="${4:-}"
 
-  matches=$(grep -rn "$pattern" "$dir" --include='*.rs' 2>/dev/null || true)
+  if [ ! -d "$dir" ]; then
+    echo "FAIL: $label"
+    echo "  directory does not exist: $dir"
+    ERRORS=$((ERRORS + 1))
+    return
+  fi
+
+  matches=$(grep -rEn "$pattern" "$dir" --include='*.rs' 2>/dev/null || true)
 
   if [ -n "$exclude" ]; then
     # shellcheck disable=SC2001
