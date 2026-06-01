@@ -123,7 +123,7 @@ export function AdminPromptPreviewPage() {
 
       {preview && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex min-w-0 items-center justify-between">
             <MetaBar meta={preview.meta} />
             <button
               type="button"

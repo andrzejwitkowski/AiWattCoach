@@ -9,7 +9,7 @@ type SectionCardProps = {
 
 export function SectionCard({ title, expanded, onToggle, children }: SectionCardProps) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03]">
+    <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
       <button
         type="button"
         onClick={onToggle}
