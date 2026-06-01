@@ -63,7 +63,7 @@ export function AdminPromptPreviewPage() {
   };
 
   return (
-    <section className="space-y-6">
+    <section className="min-w-0 max-w-full space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-white">{t('adminPromptPreview.title')}</h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-400">{t('adminPromptPreview.subtitle')}</p>
@@ -122,9 +122,11 @@ export function AdminPromptPreviewPage() {
       ) : null}
 
       {preview && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <MetaBar meta={preview.meta} />
+        <div className="min-w-0 max-w-full space-y-4">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <MetaBar meta={preview.meta} />
+            </div>
             <button
               type="button"
               onClick={() => setShowRawJson(!showRawJson)}
@@ -135,7 +137,7 @@ export function AdminPromptPreviewPage() {
           </div>
 
           {showRawJson ? (
-            <pre className="max-h-[80vh] overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-white/10 bg-[#070b12] p-5 font-mono text-xs leading-5 text-slate-300">
+            <pre className="prompt-preview-text max-h-[80vh] overflow-auto rounded-2xl border border-white/10 bg-[#070b12] p-5 font-mono text-xs leading-5 text-slate-300">
               {formattedPreview}
             </pre>
           ) : (

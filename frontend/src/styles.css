@@ -61,6 +61,16 @@ select {
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
+/* Long LLM prompts / JSON: wrap inside flex layouts without expanding the page */
+.prompt-preview-text {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 767px) {
   .safe-bottom {
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);

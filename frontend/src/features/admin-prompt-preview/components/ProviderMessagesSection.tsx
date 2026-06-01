@@ -37,7 +37,7 @@ export function ProviderMessagesSection({ messages }: ProviderMessagesSectionPro
               <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 {ROLE_LABELS[msg.role] ?? msg.role}
               </div>
-              <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-5 text-slate-300">
+              <pre className="prompt-preview-text font-mono text-xs leading-5 text-slate-300">
                 {msg.content.length > 5000 ? msg.content.slice(0, 5000) + '\n… (truncated)' : msg.content}
               </pre>
             </div>

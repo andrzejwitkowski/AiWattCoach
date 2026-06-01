@@ -42,11 +42,11 @@ export function ConversationSection({ conversation }: ConversationSectionProps) 
                   </span>
                   <span className="text-[10px] text-slate-600">#{i}</span>
                 </div>
-                <div className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{content}</div>
+                <div className="prompt-preview-text text-sm leading-6 text-slate-200">{content}</div>
                 {Array.isArray(toolCalls) && toolCalls.length > 0 && (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs text-slate-500">Tool calls ({toolCalls.length})</summary>
-                    <pre className="mt-1 overflow-auto rounded-lg bg-[#070b12] p-2 font-mono text-xs text-slate-400">
+                    <pre className="prompt-preview-text mt-1 max-h-80 overflow-auto rounded-lg bg-[#070b12] p-2 font-mono text-xs text-slate-400">
                       {JSON.stringify(toolCalls, null, 2)}
                     </pre>
                   </details>

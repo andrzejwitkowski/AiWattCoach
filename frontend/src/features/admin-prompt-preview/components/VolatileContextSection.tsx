@@ -28,7 +28,7 @@ export function VolatileContextSection({ rawText }: VolatileContextSectionProps)
       {expanded && (
         <div className="space-y-4">
           {parsed.timing && (
-            <div className="whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm">
+            <div className="prompt-preview-text rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm">
               <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Conversation Timing</div>
               <p className="text-slate-200">
                 Current:{' '}
@@ -54,7 +54,7 @@ export function VolatileContextSection({ rawText }: VolatileContextSectionProps)
                 {showRaw ? 'Decoded view' : 'Show raw JSON'}
               </button>
               {showRaw ? (
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-[#070b12] p-4 font-mono text-xs leading-5 text-slate-400">
+                <pre className="prompt-preview-text max-h-80 overflow-auto rounded-xl border border-white/10 bg-[#070b12] p-4 font-mono text-xs leading-5 text-slate-400">
                   {JSON.stringify(parsed.packedJson, null, 2)}
                 </pre>
               ) : (
