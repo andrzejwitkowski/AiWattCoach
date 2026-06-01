@@ -1,3 +1,4 @@
+pub mod admin_prompt_preview;
 pub mod ai_workflow;
 pub mod athlete_summary;
 pub mod calendar;

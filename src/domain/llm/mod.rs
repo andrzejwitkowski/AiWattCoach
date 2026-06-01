@@ -6,6 +6,7 @@ mod operation;
 mod orchestrator;
 pub(crate) mod persistence;
 mod ports;
+mod preview_messages;
 mod request_builder;
 mod transcript;
 
@@ -32,6 +33,7 @@ pub(crate) use orchestrator::{
     resolve_llm_reply_operation, LlmReplyResolutionWorkflow, ResolvedLlmReplyOperation,
 };
 pub use ports::{BoxFuture, LlmChatPort, LlmContextCacheRepository, UserLlmConfigProvider};
+pub use preview_messages::{preview_provider_messages, PreviewProviderMessage};
 pub use request_builder::{
     build_chat_request, conversation_timing_volatile_context, current_date_string,
     current_datetime_rfc3339, epoch_seconds_to_rfc3339, find_reusable_context_cache,

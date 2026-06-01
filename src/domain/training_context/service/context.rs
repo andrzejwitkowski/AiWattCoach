@@ -642,7 +642,7 @@ pub(super) struct RecentWorkoutSummaryLookup<'a> {
     pub(super) recap_by_workout_id: &'a HashMap<String, String>,
 }
 
-pub(super) fn build_event_activity_matches(
+pub fn build_event_activity_matches(
     events: &[Event],
     activities: &[Activity],
     direct_matches: &HashMap<String, Event>,

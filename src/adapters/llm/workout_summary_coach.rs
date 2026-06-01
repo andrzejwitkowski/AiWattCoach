@@ -1,23 +1,18 @@
 use std::sync::Arc;
 
-use super::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
-
 use crate::domain::{
     identity::Clock,
     llm::{
-        build_chat_request, conversation_timing_volatile_context, current_date_string,
-        find_reusable_context_cache, persist_reusable_context_cache,
-        rebuild_conversation_with_provider_transcript, reusable_context_cache_key,
-        timestamped_message_content, BoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequestInput,
-        LlmContextCacheRepository, LlmError, LlmMessageRole, LlmProvider,
-        ReusableContextCacheLookup, ReusableContextCacheUpsert, UserLlmConfigProvider,
+        current_date_string, find_reusable_context_cache, persist_reusable_context_cache,
+        reusable_context_cache_key, BoxFuture, LlmChatPort, LlmContextCacheRepository, LlmError,
+        LlmProvider, ReusableContextCacheLookup, ReusableContextCacheUpsert, UserLlmConfigProvider,
     },
-    llm_tools::{
-        run_tool_loop, with_tool_prompt_guidance, GetSelectedWorkoutDataPort, LlmToolLoopOutput,
-        ToolExecutionContext, ToolScope,
-    },
+    llm_tools::{run_tool_loop, GetSelectedWorkoutDataPort, LlmToolLoopOutput, ToolScope},
     training_context::TrainingContextBuilder,
-    workout_summary::{workout_summary_coach_reply_json_schema, WorkoutCoach, WorkoutSummary},
+    workout_summary::{
+        assemble_workout_summary_coach_request, WorkoutCoach, WorkoutSummary,
+        WorkoutSummaryCoachPromptInput,
+    },
 };
 
 #[derive(Clone)]
@@ -100,38 +95,16 @@ where
             let training_context = training_context_builder
                 .build(&user_id, &summary.workout_id)
                 .await?;
-            let stable_context = build_stable_context(
-                &summary,
-                &training_context.focus_date,
-                &training_context.rendered.stable_context,
-                athlete_summary_text.as_deref(),
-            );
-            let volatile_context = build_volatile_context(
-                &training_context.rendered.volatile_context,
-                clock.now_epoch_seconds(),
-                latest_user_message_epoch_seconds(&summary, clock.now_epoch_seconds()),
-            );
-            let tool_context = ToolExecutionContext {
-                user_id: user_id.clone(),
-                training_context: training_context.context.clone(),
-                today: current_date_string(&clock),
-                data_port,
-                planned_workout_update_port: None,
-            };
-            let system_prompt = with_tool_prompt_guidance(
-                &workout_coach_system_prompt(),
-                ToolScope::WorkoutSummaryChat,
-                &config.provider,
-                &tool_context,
-            );
-            let conversation = build_conversation(
-                summary.messages.as_slice(),
-                &summary.provider_transcript,
-                &user_message,
-                clock.now_epoch_seconds(),
-            );
             let cache_scope_key = Some(format!("workout-summary:{user_id}:{}", summary.workout_id));
-            let context_hash = reusable_context_cache_key(&system_prompt, &stable_context);
+            let context_hash = reusable_context_cache_key(
+                &crate::domain::workout_summary::workout_coach_system_prompt(),
+                &crate::domain::workout_summary::build_stable_context(
+                    &summary,
+                    &training_context.focus_date,
+                    &training_context.rendered.stable_context,
+                    athlete_summary_text.as_deref(),
+                ),
+            );
             let reusable_cache_id = if config.provider == LlmProvider::Gemini {
                 match (
                     context_cache_repository.as_deref(),
@@ -187,16 +160,29 @@ where
             } else {
                 None
             };
-            let request = build_chat_request(LlmChatRequestInput {
+            let today = current_date_string(&clock);
+            let tool_context = crate::domain::llm_tools::ToolExecutionContext {
                 user_id: user_id.clone(),
-                system_prompt,
-                stable_context,
-                volatile_context,
-                conversation,
-                cache_scope_key: cache_scope_key.clone(),
-                cache_key: Some(context_hash.clone()),
-                reusable_cache_id,
-            });
+                training_context: training_context.context.clone(),
+                today: today.clone(),
+                data_port: data_port.clone(),
+                planned_workout_update_port: None,
+            };
+            let mut request =
+                assemble_workout_summary_coach_request(WorkoutSummaryCoachPromptInput {
+                    user_id: user_id.clone(),
+                    config: config.clone(),
+                    summary: summary.clone(),
+                    training_context,
+                    user_message,
+                    athlete_summary_text,
+                    conversation_epoch_seconds: clock.now_epoch_seconds(),
+                    today,
+                    data_port,
+                    reusable_cache_id,
+                });
+            request.cache_key = Some(context_hash.clone());
+            request.cache_scope_key = cache_scope_key.clone();
             tracing::info!(
                 user_id = %user_id,
                 workout_id = %summary.workout_id,
@@ -251,141 +237,9 @@ where
     }
 }
 
-const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background. Be direct, adult, and concise. Do not flatter, hedge, or act like a yes-man. Challenge weak reasoning when the context does not support it. Keep the conversation focused and practical rather than digressive. In your first reply after a workout, ask all follow-up questions you genuinely need at once instead of stretching them across many turns. The athlete should still feel coached, not interrogated. Ask concrete questions about the workout limiter, legs, breathing, fueling, sleep, stress, pain, readiness for the next days, and any plan constraints when relevant. Add other questions only when the workout characteristics clearly justify them. You may also ask about nutrition, race strategy, or the desired direction of the next 14 days when that would materially improve the next plan. For completed interval workouts, judge execution quality primarily from packed workout evidence: bl as intended block structure/targets, pc as executed power pattern, and c5 as supporting cadence evidence. Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only and are not sufficient proof that interval blocks were or were not executed correctly. Do not conclude poor interval execution just because whole-workout averages were lowered by recovery valleys, coasting, zeros, terrain, or wind. If the packed evidence is insufficient for a confident execution judgment, inspect higher-fidelity data before making a strong claim. When workout tools are available, use them for that fallback. If you already have enough information to generate the plan, say that clearly and tell the athlete to save the summary. Return your final answer as JSON only matching the workout summary coach reply schema. The summary may use markdown. Questions may be an empty array when you are ready. Do not output any text outside the JSON object. Do not invent details beyond the provided context.";
-
-fn build_stable_context(
-    summary: &WorkoutSummary,
-    selected_workout_date: &str,
-    packed_training_context: &str,
-    athlete_summary_text: Option<&str>,
-) -> String {
-    let mut context = format!(
-        "workout_summary={{\"workoutId\":\"{}\",\"rpe\":{}}}\nselected_workout={{\"workoutId\":\"{}\",\"date\":\"{}\"}}\ncurrent_workout_context=You are discussing the completed workout from {}.",
-        summary.workout_id,
-        summary
-            .rpe
-            .map(|value| value.to_string())
-            .unwrap_or_else(|| "null".to_string()),
-        summary.workout_id,
-        selected_workout_date,
-        selected_workout_date,
-    );
-
-    if let Some(summary_text) = athlete_summary_text.filter(|value| !value.trim().is_empty()) {
-        context.push_str(&format!("\nathlete_summary_text={summary_text}"));
-    }
-
-    context.push_str(&format!(
-        "\ntraining_context_stable={packed_training_context}"
-    ));
-    context
-}
-
-fn build_volatile_context(
-    packed_training_context: &str,
-    current_conversation_epoch_seconds: i64,
-    latest_user_message_epoch_seconds: Option<i64>,
-) -> String {
-    format!(
-        "{}\ntraining_context_volatile={packed_training_context}",
-        conversation_timing_volatile_context(
-            current_conversation_epoch_seconds,
-            latest_user_message_epoch_seconds,
-        )
-    )
-}
-
-fn workout_coach_system_prompt() -> String {
-    format!(
-        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\nworkout_summary_coach_reply_schema={}\n{PACKED_TRAINING_CONTEXT_LEGEND}",
-        workout_summary_coach_reply_json_schema()
-    )
-}
-
-const WORKOUT_COACH_SELECTED_WORKOUT_PROMPT: &str = "Use the provided selected workout date as the active workout context for this conversation. When inspecting the current workout, prefer that exact selected workout date or id instead of inferring from nearby history.";
-
-fn build_conversation(
-    messages: &[crate::domain::workout_summary::ConversationMessage],
-    provider_transcript: &[LlmChatMessage],
-    user_message: &str,
-    fallback_user_message_epoch_seconds: i64,
-) -> Vec<LlmChatMessage> {
-    let conversation = messages
-        .iter()
-        .filter_map(|message| match message.role {
-            crate::domain::workout_summary::MessageRole::User => Some(LlmChatMessage {
-                role: LlmMessageRole::User,
-                content: timestamped_message_content(
-                    &message.content,
-                    message.created_at_epoch_seconds,
-                ),
-                tool_calls: Vec::new(),
-                tool_call_id: None,
-                reasoning_content: None,
-            }),
-            crate::domain::workout_summary::MessageRole::Coach => Some(LlmChatMessage {
-                role: LlmMessageRole::Assistant,
-                content: timestamped_message_content(
-                    &message.content,
-                    message.created_at_epoch_seconds,
-                ),
-                tool_calls: Vec::new(),
-                tool_call_id: None,
-                reasoning_content: None,
-            }),
-            crate::domain::workout_summary::MessageRole::Tool => None,
-        })
-        .collect::<Vec<_>>();
-
-    let mut rebuilt =
-        rebuild_conversation_with_provider_transcript(conversation, provider_transcript);
-
-    if let Some(last) = rebuilt.last_mut() {
-        if last.role == LlmMessageRole::User {
-            last.content = timestamped_message_content(
-                user_message,
-                latest_user_message_epoch_seconds_in_messages(messages)
-                    .unwrap_or(fallback_user_message_epoch_seconds),
-            );
-            return rebuilt;
-        }
-    }
-
-    rebuilt.push(LlmChatMessage::user(timestamped_message_content(
-        user_message,
-        latest_user_message_epoch_seconds_in_messages(messages)
-            .unwrap_or(fallback_user_message_epoch_seconds),
-    )));
-
-    rebuilt
-}
-
-fn latest_user_message_epoch_seconds(
-    summary: &WorkoutSummary,
-    fallback_epoch_seconds: i64,
-) -> Option<i64> {
-    latest_user_message_epoch_seconds_in_messages(&summary.messages)
-        .or(Some(fallback_epoch_seconds))
-}
-
-fn latest_user_message_epoch_seconds_in_messages(
-    messages: &[crate::domain::workout_summary::ConversationMessage],
-) -> Option<i64> {
-    messages
-        .iter()
-        .rev()
-        .find(|message| {
-            matches!(
-                message.role,
-                crate::domain::workout_summary::MessageRole::User
-            )
-        })
-        .map(|message| message.created_at_epoch_seconds)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
+    use crate::domain::workout_summary::{
         build_conversation, build_stable_context, build_volatile_context,
         workout_coach_system_prompt,
     };

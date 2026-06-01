@@ -9,6 +9,18 @@ This file is for coding agents working in `AiWattCoach`.
 - Deploy shape: one Rust server also serves the built SPA from `frontend/dist`.
 - Architecture: hexagonal / ports-and-adapters style.
 
+## Local Machine Constraints (Andrzej Linux dev box)
+
+**Memory / IDE stability:** On this machine, do not run parallel Rust compilation or multiple heavy `cargo` invocations at once. Parallel `rustc` processes can exhaust RAM and crash the IDE.
+
+Agents must:
+
+- Set **`CARGO_BUILD_JOBS=1`** (or `cargo … -j 1`) for every `cargo build`, `cargo test`, `cargo clippy`, and `cargo fmt` check that compiles.
+- Run **at most one** `cargo` command at a time; wait for it to finish before starting another.
+- Prefer **one narrow test filter per invocation** (e.g. `cargo test workout_pick -- --test-threads=1`) instead of `cargo test` for the whole workspace.
+- Never launch several `cargo test` binaries or `verify:rust` steps in parallel in the same turn.
+- Frontend checks (`bun test`, `bun run build`) are lighter; still avoid running them in parallel with an active `cargo` compile on this host.
+
 ## Instruction Sources
 
 - Before starting meaningful work, read the Obsidian handbook entry at `/Users/andrzej.witkowski/obsidian/andrzej.witkowski/opencode/OpenCode Start Here.md`.

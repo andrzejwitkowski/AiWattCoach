@@ -12,6 +12,7 @@ import { SettingsProvider } from './features/settings/context/SettingsContext';
 import { CompletedWorkoutsProvider } from './features/intervals/context';
 import { AppHomePage } from './pages/AppHomePage';
 import { AdminSystemInfoPage } from './pages/AdminSystemInfoPage';
+import { AdminPromptPreviewPage } from './pages/AdminPromptPreviewPage';
 import { AdminTaskSchedulerPage } from './pages/AdminTaskSchedulerPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { AICoachPage } from './pages/AICoachPage';
@@ -133,6 +134,14 @@ export function App() {
                     </ApiBaseUrlProvider>
                   }
                   path="/admin/task-scheduler"
+                />
+                <Route
+                  element={
+                    <ApiBaseUrlProvider value={API_BASE_URL}>
+                      <AdminPromptPreviewPage />
+                    </ApiBaseUrlProvider>
+                  }
+                  path="/admin/prompt-preview"
                 />
                 <Route
                   element={

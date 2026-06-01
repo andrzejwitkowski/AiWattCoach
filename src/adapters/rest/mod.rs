@@ -1,4 +1,5 @@
 mod admin;
+mod admin_prompt_preview;
 mod admin_task_scheduler;
 mod athlete_summary;
 mod auth;
@@ -86,6 +87,14 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                     post(auth::join_whitelist).layer(DefaultBodyLimit::max(4 * 1024)),
                 )
                 .route("/api/admin/system-info", get(admin::system_info))
+                .route(
+                    "/api/admin/users/{user_id}/prompt-preview/post-workout",
+                    get(admin_prompt_preview::preview_post_workout),
+                )
+                .route(
+                    "/api/admin/users/{user_id}/prompt-preview/calendar-coach",
+                    get(admin_prompt_preview::preview_calendar_coach),
+                )
                 .route(
                     "/api/admin/task-scheduler/tasks",
                     get(admin_task_scheduler::list_tasks),

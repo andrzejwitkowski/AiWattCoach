@@ -2,6 +2,7 @@ mod coach;
 mod coach_output;
 mod model;
 mod ports;
+mod prompt;
 mod save_completion_port;
 mod service;
 mod test_support;
@@ -18,6 +19,11 @@ pub use model::{
     WorkoutSummaryError,
 };
 pub use ports::{BoxFuture, CoachReplyOperationRepository, WorkoutSummaryRepository};
+pub use prompt::{
+    assemble_workout_summary_coach_request, build_conversation, build_stable_context,
+    build_volatile_context, workout_coach_system_prompt, WorkoutSummaryCoachPromptInput,
+    ADMIN_PREVIEW_USER_MESSAGE,
+};
 pub use save_completion_port::{NoopSaveWorkflowCompletionPort, SaveWorkflowCompletionPort};
 pub use service::{
     workout_summary_coach_reply_task_handler, CompletedWorkoutAliasScope,

@@ -5,6 +5,8 @@ mod power_curve;
 mod power_curve_repo;
 mod selection;
 mod service;
+
+pub use selection::select_visible_workouts_by_day;
 #[cfg(test)]
 mod tests;
 

@@ -16,7 +16,8 @@
     "aiCoach": "AI Coach",
     "workspace": "Workspace",
     "systemInfo": "System Info",
-    "taskScheduler": "Task Scheduler"
+    "taskScheduler": "Task Scheduler",
+    "promptPreview": "Prompt Preview"
   },
   "appShell": {
     "brand": {
@@ -32,8 +33,23 @@
       "aiCoach": "AI Coach",
       "workspace": "Workspace",
       "systemInfo": "System Info",
-      "taskScheduler": "Task Scheduler"
+      "taskScheduler": "Task Scheduler",
+      "promptPreview": "Prompt Preview"
     }
+  },
+  "adminPromptPreview": {
+    "title": "LLM prompt preview",
+    "subtitle": "Inspect the assembled LLM request for a user and date without calling a provider.",
+    "userIdLabel": "User ID",
+    "userIdPlaceholder": "user-uuid",
+    "dateLabel": "Date",
+    "postWorkoutButton": "Preview post-workout request",
+    "calendarCoachButton": "Preview calendar view coach",
+    "loading": "Loading preview...",
+    "empty": "Choose a user, date, and preview action to render the request JSON here.",
+    "validation": "Enter a user ID and date.",
+    "futureDate": "Date cannot be in the future.",
+    "loadError": "Could not load prompt preview."
   },
   "adminTaskScheduler": {
     "kicker": "Admin operations",

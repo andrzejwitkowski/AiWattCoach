@@ -7,6 +7,7 @@ import {
   Flag,
   LayoutDashboard,
   ListChecks,
+  ScrollText,
   Settings,
   ShieldCheck,
 } from 'lucide-react';
@@ -29,6 +30,7 @@ const PAGE_TITLE_KEYS: Record<string, string> = {
   '/races': 'appShell.pageTitles.races',
   '/ai-coach': 'appShell.pageTitles.aiCoach',
   '/admin/task-scheduler': 'appShell.pageTitles.taskScheduler',
+  '/admin/prompt-preview': 'appShell.pageTitles.promptPreview',
   '/admin/system-info': 'appShell.pageTitles.systemInfo',
 };
 
@@ -68,6 +70,7 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
           {currentUser && currentUser.roles.includes('admin') && (
             <>
               <NavItem to="/admin/task-scheduler" icon={ListChecks} label={t('nav.taskScheduler')} />
+              <NavItem to="/admin/prompt-preview" icon={ScrollText} label={t('nav.promptPreview')} />
               <NavItem to="/admin/system-info" icon={ShieldCheck} label={t('nav.systemInfo')} />
             </>
           )}

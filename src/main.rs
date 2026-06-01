@@ -79,6 +79,7 @@ use aiwattcoach::{
         workout_summary_task_worker_config, ProviderPollingService, Settings,
         TaskSchedulerMaintenanceConfig, TaskSchedulerWorkerConfig,
     },
+    domain::admin_prompt_preview::{AdminPromptPreviewService, AdminPromptPreviewUseCases},
     domain::athlete_summary::{
         athlete_summary_generate_task_handler, AthleteSummaryService,
         SchedulerBackedAthleteSummaryService,
@@ -236,6 +237,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let athlete_summary_repository =
         MongoAthleteSummaryRepository::new(mongo_client.clone(), &mongo_database);
     athlete_summary_repository.ensure_indexes().await?;
+    let athlete_summary_repository_for_admin = athlete_summary_repository.clone();
     let athlete_summary_generation_operation_repository =
         MongoAthleteSummaryGenerationOperationRepository::new(
             mongo_client.clone(),
@@ -619,7 +621,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_settings_service(settings_service.clone())
         .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone()))
         .with_data_port(get_selected_workout_data_port.clone())
-        .with_planned_workout_update_port(planned_workout_update_port),
+        .with_planned_workout_update_port(planned_workout_update_port.clone()),
     );
     let training_plan_direct_service = Arc::new(
         TrainingPlanGenerationService::new(
@@ -729,6 +731,23 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         shared_task_scheduler.clone(),
         UuidIdGenerator,
     ));
+    let admin_prompt_preview_service: Arc<dyn AdminPromptPreviewUseCases> =
+        Arc::new(AdminPromptPreviewService::new(
+            training_context_builder.clone(),
+            llm_config_provider.clone(),
+            completed_workout_service.clone(),
+            Some(planned_workout_repository.clone()),
+            Some(special_day_repository.clone()),
+            Arc::new(CompletedWorkoutTargetAdapter::new(
+                authoritative_completed_workout_repository.clone(),
+            )),
+            Arc::new(workout_summary_repository.clone()),
+            Some(Arc::new(athlete_summary_repository_for_admin)),
+            settings_service.clone(),
+            Some(get_selected_workout_data_port.clone()),
+            Some(planned_workout_update_port.clone()),
+            SystemClock,
+        ));
 
     let intervals_connection_tester = if dev_intervals_enabled {
         IntervalsApiAdapter::Dev(DevIntervalsClient)
@@ -748,6 +767,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )
         .with_settings_service(settings_service)
         .with_admin_task_scheduler_service(Arc::new(shared_task_scheduler.clone()))
+        .with_admin_prompt_preview_service(admin_prompt_preview_service)
         .with_training_load_dashboard_service(training_load_dashboard_service)
         .with_calendar_service(calendar_service)
         .with_calendar_coach_service(calendar_coach_service)

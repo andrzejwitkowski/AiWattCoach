@@ -484,6 +484,15 @@ impl TrainingContextBuilder for RecordingTrainingContextBuilder {
         })
     }
 
+    fn build_as_of(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        _focus_date: chrono::NaiveDate,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        self.build(user_id, workout_id)
+    }
+
     fn build_calendar_overview_context(
         &self,
         user_id: &str,
@@ -494,6 +503,14 @@ impl TrainingContextBuilder for RecordingTrainingContextBuilder {
             calls.lock().unwrap().push(user_id);
             Ok(Self::result_for(None, "summary"))
         })
+    }
+
+    fn build_calendar_overview_context_as_of(
+        &self,
+        user_id: &str,
+        _focus_date: chrono::NaiveDate,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        self.build_calendar_overview_context(user_id)
     }
 
     fn build_athlete_summary_context(
