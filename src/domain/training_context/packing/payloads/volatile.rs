@@ -4,7 +4,8 @@ use super::super::is_empty_slice;
 use super::stable::CompactPlannedWorkoutBlock;
 use crate::domain::training_context::model::{
     PlannedWorkoutContext, PlannedWorkoutReference, ProjectedDayContext, ProjectedWorkoutContext,
-    RecentDayContext, RecentWorkoutContext, SpecialDayContext, TrainingContext, UpcomingDayContext,
+    RecentDayContext, RecentWorkoutContext, RecentWorkoutRecapContext, SpecialDayContext,
+    TrainingContext, UpcomingDayContext,
 };
 
 #[derive(Serialize)]
@@ -14,6 +15,8 @@ pub(crate) struct VolatilePayload<'a> {
     fx: CompactFocus<'a>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     rd: Vec<CompactRecentDay<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    wr: Vec<CompactWorkoutRecap<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     ud: Vec<CompactUpcomingDay<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -34,6 +37,11 @@ impl<'a> VolatilePayload<'a> {
                 .iter()
                 .map(CompactRecentDay::from_recent_day)
                 .collect(),
+            wr: context
+                .recent_workout_recaps
+                .iter()
+                .map(CompactWorkoutRecap::from_recap)
+                .collect(),
             ud: context
                 .upcoming_days
                 .iter()
@@ -53,6 +61,26 @@ struct CompactFocus<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<&'a str>,
     k: &'a str,
+}
+
+#[derive(Serialize)]
+struct CompactWorkoutRecap<'a> {
+    d: &'a str,
+    id: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rpe: Option<u8>,
+    recap: &'a str,
+}
+
+impl<'a> CompactWorkoutRecap<'a> {
+    fn from_recap(recap: &'a RecentWorkoutRecapContext) -> Self {
+        Self {
+            d: &recap.date,
+            id: &recap.workout_id,
+            rpe: recap.rpe,
+            recap: &recap.recap,
+        }
+    }
 }
 
 #[derive(Serialize)]

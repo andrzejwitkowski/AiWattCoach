@@ -4,8 +4,8 @@ use crate::domain::training_context::model::{
     AthleteProfileContext, FuturePlannedEventContext, HistoricalLoadTrendPoint,
     HistoricalTrainingContext, HistoricalWorkoutContext, IntervalsStatusContext,
     PlannedWorkoutBlockContext, PlannedWorkoutReference, ProjectedDayContext,
-    ProjectedWorkoutContext, RaceContext, RecentDayContext, RecentWorkoutContext, TrainingContext,
-    WeeklyAvailabilityContext,
+    ProjectedWorkoutContext, RaceContext, RecentDayContext, RecentWorkoutContext,
+    RecentWorkoutRecapContext, TrainingContext, WeeklyAvailabilityContext,
 };
 
 #[test]
@@ -102,6 +102,12 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
             }],
             ..RecentDayContext::default()
         }],
+        recent_workout_recaps: vec![RecentWorkoutRecapContext {
+            date: "2026-04-01".to_string(),
+            workout_id: "ride-1".to_string(),
+            rpe: Some(7),
+            recap: "Held power well and finished controlled".to_string(),
+        }],
         upcoming_days: Vec::new(),
         projected_days: vec![ProjectedDayContext {
             date: "2026-04-02".to_string(),
@@ -154,6 +160,9 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
     assert!(rendered
         .volatile_context
         .contains("\"recap\":\"Held power well and finished controlled\""));
+    assert!(rendered.volatile_context.contains(
+        "\"wr\":[{\"d\":\"2026-04-01\",\"id\":\"ride-1\",\"rpe\":7,\"recap\":\"Held power well and finished controlled\"}]"
+    ));
     assert!(rendered.volatile_context.contains("\"pd\":[{"));
     assert!(rendered.volatile_context.contains("\"swid\":\"workout-1\""));
     assert!(!rendered.volatile_context.contains("\"p5\":"));
@@ -181,6 +190,7 @@ fn compact_render_omits_nulls_and_empty_lists() {
         future_events: Vec::new(),
         history: HistoricalTrainingContext::default(),
         recent_days: Vec::new(),
+        recent_workout_recaps: Vec::new(),
         upcoming_days: Vec::new(),
         projected_days: Vec::new(),
     });
@@ -211,6 +221,7 @@ fn compact_render_omits_weekly_availability_when_not_configured() {
         future_events: Vec::new(),
         history: HistoricalTrainingContext::default(),
         recent_days: Vec::new(),
+        recent_workout_recaps: Vec::new(),
         upcoming_days: Vec::new(),
         projected_days: Vec::new(),
     });

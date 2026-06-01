@@ -8,9 +8,9 @@ use crate::domain::{
 use super::{
     super::super::DefaultTrainingContextBuilder,
     super::support::{
-        sample_completed_workout_on_date_with_ftp, FixedClock, TestCompletedWorkoutRepository,
-        TestPlannedWorkoutRepository, TestRaceRepository, TestSettingsService,
-        TestSpecialDayRepository, TestTrainingPlanProjectionRepository,
+        sample_completed_workout_on_date_with_ftp, DirectCompletedWorkoutTargetService, FixedClock,
+        TestCompletedWorkoutRepository, TestPlannedWorkoutRepository, TestRaceRepository,
+        TestSettingsService, TestSpecialDayRepository, TestTrainingPlanProjectionRepository,
         TestWorkoutSummaryRepository,
     },
     wahoo_sync_state, TestSyncStates,
@@ -21,6 +21,7 @@ async fn builder_renders_recent_and_historical_context() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
@@ -145,6 +146,11 @@ async fn builder_renders_recent_and_historical_context() {
         recent_day.workouts[0].workout_recap.as_deref(),
         Some("Strong sweet spot execution with steady control")
     );
+    assert_eq!(result.context.recent_workout_recaps.len(), 1);
+    assert_eq!(
+        result.context.recent_workout_recaps[0].recap,
+        "Strong sweet spot execution with steady control"
+    );
     assert_eq!(
         recent_day.workouts[0].compressed_power_levels,
         vec![
@@ -251,6 +257,7 @@ async fn builder_dedups_matched_recent_planned_workout_from_day_plans() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
@@ -293,6 +300,7 @@ async fn builder_prompt_dedupe_keeps_later_duplicate_when_authority_is_already_e
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::with_workouts(vec![
@@ -350,6 +358,7 @@ async fn builder_keeps_intervals_completed_workout_when_wahoo_lacks_power_detail
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(authoritative)
@@ -376,6 +385,7 @@ async fn build_athlete_summary_context_uses_explicit_summary_focus() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
@@ -404,6 +414,7 @@ async fn build_calendar_overview_context_uses_calendar_overview_focus() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())

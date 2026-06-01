@@ -14,9 +14,9 @@ use crate::domain::{
 use super::{
     super::super::DefaultTrainingContextBuilder,
     super::support::{
-        sample_completed_workout_on_date_with_ftp, FixedClock, TestCompletedWorkoutRepository,
-        TestPlannedWorkoutRepository, TestSettingsService, TestSpecialDayRepository,
-        TestWorkoutSummaryRepository,
+        sample_completed_workout_on_date_with_ftp, DirectCompletedWorkoutTargetService, FixedClock,
+        TestCompletedWorkoutRepository, TestPlannedWorkoutRepository, TestSettingsService,
+        TestSpecialDayRepository, TestWorkoutSummaryRepository,
     },
 };
 
@@ -28,6 +28,7 @@ async fn builder_uses_training_load_snapshots_for_historical_aggregates_and_tren
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
@@ -92,6 +93,7 @@ async fn builder_uses_ftp_history_for_chronological_ftp_change() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::with_workouts(vec![
@@ -152,6 +154,7 @@ async fn builder_ignores_ftp_history_entries_after_focus_date() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::with_workouts(vec![
@@ -197,6 +200,7 @@ async fn builder_ignores_partial_snapshot_windows_for_historical_aggregates() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
@@ -237,6 +241,7 @@ async fn builder_ignores_snapshot_windows_with_missing_days_inside_range() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
@@ -277,6 +282,7 @@ async fn builder_ignores_snapshot_ftp_when_snapshot_window_is_incomplete() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
@@ -323,6 +329,7 @@ async fn builder_falls_back_to_activity_ftp_after_history_clear() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::with_workouts(vec![

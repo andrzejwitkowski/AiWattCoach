@@ -159,6 +159,9 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
                         DefaultTrainingContextBuilder::new(
                             settings_service.clone(),
                             Arc::new(summary_repository.clone()),
+                            Arc::new(CompletedWorkoutTargetAdapter::new(
+                                completed_workout_repository.clone(),
+                            )),
                             SystemClock,
                         )
                         .with_completed_workout_repository(completed_workout_repository.clone())

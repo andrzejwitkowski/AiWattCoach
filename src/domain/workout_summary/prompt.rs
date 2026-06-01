@@ -22,6 +22,8 @@ const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach help
 
 const WORKOUT_COACH_SELECTED_WORKOUT_PROMPT: &str = "Use the provided selected workout date as the active workout context for this conversation. When inspecting the current workout, prefer that exact selected workout date or id instead of inferring from nearby history.";
 
+const WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT: &str = "Saved workout summaries for recent sessions appear in packed context as wr (preferred) and optionally as recap on matching entries in rd. Treat each saved recap as already-known context for that workout. Do not ask the athlete again for information clearly stated in wr, recap, RPE, or earlier messages in the current workout thread. Ask follow-up questions only when a decision still depends on missing or ambiguous information.";
+
 pub struct WorkoutSummaryCoachPromptInput {
     pub user_id: String,
     pub config: LlmProviderConfig,
@@ -107,7 +109,7 @@ fn apply_tool_scope(
 
 pub fn workout_coach_system_prompt() -> String {
     format!(
-        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\nworkout_summary_coach_reply_schema={}\n{PACKED_TRAINING_CONTEXT_LEGEND}",
+        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\n{WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT}\nworkout_summary_coach_reply_schema={}\n{PACKED_TRAINING_CONTEXT_LEGEND}",
         workout_summary_coach_reply_json_schema()
     )
 }
@@ -132,6 +134,14 @@ pub fn build_stable_context(
 
     if let Some(summary_text) = athlete_summary_text.filter(|value| !value.trim().is_empty()) {
         context.push_str(&format!("\nathlete_summary_text={summary_text}"));
+    }
+
+    if let Some(recap) = summary
+        .workout_recap_text
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        context.push_str(&format!("\ncurrent_workout_recap={recap}"));
     }
 
     context.push_str(&format!(

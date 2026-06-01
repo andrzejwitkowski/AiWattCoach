@@ -12,9 +12,11 @@ use super::{
     super::super::DefaultTrainingContextBuilder,
     super::support::{
         sample_completed_workout_on_date_with_ftp, AliasSummaryRepository,
-        EventIdOnlySummaryRepository, FixedClock, TestCompletedWorkoutRepository,
-        TestPlannedWorkoutRepository, TestSettingsService, TestSpecialDayRepository,
-        TestTrainingPlanProjectionRepository, TestWorkoutSummaryRepository,
+        DirectCompletedWorkoutTargetService, EventIdOnlySummaryRepository, FixedClock,
+        StaticCompletedWorkoutTargetService, StorageBackedSummaryRepository,
+        TestCompletedWorkoutRepository, TestPlannedWorkoutRepository, TestSettingsService,
+        TestSpecialDayRepository, TestTrainingPlanProjectionRepository,
+        TestWorkoutSummaryRepository,
     },
 };
 
@@ -23,6 +25,7 @@ async fn builder_requests_longer_history_warmup_for_load_seed() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
@@ -48,6 +51,7 @@ async fn builder_ignores_projected_days_on_or_before_today() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
@@ -141,6 +145,7 @@ async fn builder_anchors_windows_to_focus_activity_date() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::with_workouts(vec![
@@ -180,6 +185,7 @@ async fn builder_uses_chronological_ftp_change_and_expands_projected_repeats() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::with_workouts(vec![
@@ -249,6 +255,7 @@ async fn builder_falls_back_to_event_id_summary_when_activity_id_summary_is_miss
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(EventIdOnlySummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
@@ -275,6 +282,7 @@ async fn builder_uses_alias_backed_summary_for_recent_activity_context() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(AliasSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
@@ -297,10 +305,44 @@ async fn builder_uses_alias_backed_summary_for_recent_activity_context() {
 }
 
 #[tokio::test]
+async fn builder_uses_target_service_to_link_storage_backed_recaps() {
+    let builder = DefaultTrainingContextBuilder::new(
+        Arc::new(TestSettingsService),
+        Arc::new(StorageBackedSummaryRepository),
+        Arc::new(StaticCompletedWorkoutTargetService),
+        FixedClock,
+    )
+    .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
+    .with_planned_workout_repository(TestPlannedWorkoutRepository::default())
+    .with_special_day_repository(TestSpecialDayRepository::default());
+
+    let result = builder.build("user-1", "ride-1").await.unwrap();
+    let recent_day = result
+        .context
+        .recent_days
+        .iter()
+        .find(|day| day.date == "2026-04-03")
+        .expect("recent day should exist");
+
+    assert_eq!(recent_day.workouts[0].rpe, Some(6));
+    assert_eq!(
+        recent_day.workouts[0].workout_recap.as_deref(),
+        Some("Alias storage recap")
+    );
+    assert_eq!(result.context.recent_workout_recaps.len(), 1);
+    assert_eq!(result.context.recent_workout_recaps[0].workout_id, "ride-1");
+    assert_eq!(
+        result.context.recent_workout_recaps[0].recap,
+        "Alias storage recap"
+    );
+}
+
+#[tokio::test]
 async fn builder_uses_configured_ftp_when_activity_ftp_is_missing() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::with_workouts(vec![
@@ -355,6 +397,7 @@ async fn builder_marks_event_status_when_stable_future_fetch_fails() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
         FixedClock,
     )
     .with_completed_workout_repository(TestCompletedWorkoutRepository::default())

@@ -103,6 +103,30 @@ async fn llm_workout_coach_includes_athlete_summary_in_stable_context() {
 }
 
 #[tokio::test]
+async fn llm_workout_coach_includes_current_workout_recap_in_stable_context() {
+    let chat_port = Arc::new(CapturingChatPort::default());
+    let coach = LlmWorkoutCoach::new(
+        chat_port.clone(),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+    let mut summary = sample_summary();
+    summary.workout_recap_text = Some("Finished 12th in the masters field.".to_string());
+
+    coach
+        .reply("user-1", &summary, "How did I do?", None)
+        .await
+        .unwrap();
+
+    let requests = chat_port.requests();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0]
+        .stable_context
+        .contains("current_workout_recap=Finished 12th in the masters field."));
+}
+
+#[tokio::test]
 async fn llm_workout_coach_describes_power_compression_in_system_prompt() {
     let chat_port = Arc::new(CapturingChatPort::default());
     let coach = LlmWorkoutCoach::new(
@@ -140,6 +164,12 @@ async fn llm_workout_coach_describes_power_compression_in_system_prompt() {
     assert!(requests[0].system_prompt.contains("v=schema version"));
     assert!(requests[0].system_prompt.contains("fx=focus"));
     assert!(requests[0].system_prompt.contains("rd=recent days"));
+    assert!(requests[0]
+        .system_prompt
+        .contains("wr=saved workout recaps"));
+    assert!(requests[0]
+        .system_prompt
+        .contains("Do not ask the athlete again for information clearly stated in wr"));
     assert!(requests[0].system_prompt.contains("ud=upcoming days"));
     assert!(requests[0].system_prompt.contains("sd=start_date_local"));
     assert!(requests[0].system_prompt.contains("ifv=intensity_factor"));

@@ -40,10 +40,13 @@ function buildSections(data: Record<string, unknown>): React.ReactNode[] {
   if (data.rd && Array.isArray(data.rd)) {
     sections.push(buildRecentDays(data.rd));
   }
+  if (data.wr && Array.isArray(data.wr)) {
+    sections.push(buildWorkoutRecaps(data.wr));
+  }
 
   const rest: Record<string, unknown> = {};
   for (const key of Object.keys(data)) {
-    if (!['p', 'rc', 'h', 'rd', 'ud', 'pd', 'fe', 'v', 'g', 'fx', 'i'].includes(key)) {
+    if (!['p', 'rc', 'h', 'rd', 'wr', 'ud', 'pd', 'fe', 'v', 'g', 'fx', 'i'].includes(key)) {
       rest[key] = data[key];
     }
   }
@@ -186,6 +189,37 @@ function buildHistorySummary(h: Record<string, unknown>) {
           </div>
         </details>
       )}
+    </div>
+  );
+}
+
+function buildWorkoutRecaps(wr: unknown[]) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        Workout Recaps
+      </div>
+      <div className="space-y-2">
+        {(wr as unknown[]).map((item, i) => {
+          const recap = item as Record<string, unknown>;
+          return (
+            <details key={i} className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+              <summary className="cursor-pointer text-sm text-slate-300">
+                <span>{String(recap.d ?? '')}</span>
+                {recap.rpe != null ? (
+                  <span className="ml-2 text-xs text-slate-500">RPE {String(recap.rpe)}</span>
+                ) : null}
+              </summary>
+              {typeof recap.recap === 'string' && recap.recap.length > 0 ? (
+                <div className="prompt-preview-text mt-2 text-xs leading-5 text-slate-400">
+                  {(recap.recap as string).slice(0, 400)}
+                  {(recap.recap as string).length > 400 ? '…' : ''}
+                </div>
+              ) : null}
+            </details>
+          );
+        })}
+      </div>
     </div>
   );
 }
