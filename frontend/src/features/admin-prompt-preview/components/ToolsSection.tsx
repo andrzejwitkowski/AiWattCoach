@@ -24,7 +24,7 @@ export function ToolsSection({ tools, toolChoice }: ToolsSectionProps) {
             <div key={i} className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
               <div className="mb-1 font-mono text-sm font-semibold text-cyan-300">{tool.name}</div>
               {tool.description && (
-                <div className="whitespace-pre-wrap break-words text-xs leading-5 text-slate-400">{tool.description}</div>
+                <div className="prompt-preview-text text-xs leading-5 text-slate-400">{tool.description}</div>
               )}
             </div>
           ))}

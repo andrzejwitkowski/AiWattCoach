@@ -77,7 +77,7 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
         </nav>
       </aside>
 
-      <div className="flex min-h-dvh flex-1 flex-col md:ml-56">
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col md:ml-56">
         <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0a0f1a]/80 backdrop-blur">
           <div className="flex items-center justify-between gap-4 px-4 py-4 md:px-6">
             <div className="min-w-0">
@@ -109,7 +109,7 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
           ) : null}
         </header>
 
-        <main className="safe-bottom-nav-padding px-4 py-4 md:p-6 md:pb-6">
+        <main className="safe-bottom-nav-padding min-w-0 max-w-full px-4 py-4 md:p-6 md:pb-6">
           <Outlet />
         </main>
 

@@ -49,7 +49,7 @@ export function StableContextSection({ rawText }: StableContextSectionProps) {
           )}
 
           {parsed.workoutContext && (
-            <div className="whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-slate-300">
+            <div className="prompt-preview-text rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-slate-300">
               {parsed.workoutContext}
             </div>
           )}
@@ -59,7 +59,7 @@ export function StableContextSection({ rawText }: StableContextSectionProps) {
               <summary className="cursor-pointer px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
                 Athlete Summary
               </summary>
-              <div className="whitespace-pre-wrap break-words border-t border-white/5 px-4 py-3 text-sm">
+              <div className="prompt-preview-text border-t border-white/5 px-4 py-3 text-sm">
                 <MarkdownContent>{parsed.athleteSummary}</MarkdownContent>
               </div>
             </details>
@@ -75,7 +75,7 @@ export function StableContextSection({ rawText }: StableContextSectionProps) {
                 {showRaw ? 'Decoded view' : 'Show raw JSON'}
               </button>
               {showRaw ? (
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-[#070b12] p-4 font-mono text-xs leading-5 text-slate-400">
+                <pre className="prompt-preview-text max-h-80 overflow-auto rounded-xl border border-white/10 bg-[#070b12] p-4 font-mono text-xs leading-5 text-slate-400">
                   {JSON.stringify(parsed.packedJson, null, 2)}
                 </pre>
               ) : (

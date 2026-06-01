@@ -228,7 +228,7 @@ function buildRecentDays(rd: unknown[]) {
                         {typeof workout.recap === 'string' && workout.recap.length > 80 && (
                           <details className="mt-1">
                             <summary className="cursor-pointer text-xs text-slate-500">Recap snippet</summary>
-                            <div className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-400">
+                            <div className="prompt-preview-text mt-1 text-xs leading-5 text-slate-400">
                               {(workout.recap as string).slice(0, 300)}
                               {(workout.recap as string).length > 300 ? '…' : ''}
                             </div>

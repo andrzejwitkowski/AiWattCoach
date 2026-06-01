@@ -6,7 +6,7 @@ type MetaBarProps = {
 
 export function MetaBar({ meta }: MetaBarProps) {
   return (
-    <div className="sticky top-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border border-white/10 bg-[#0f1620]/95 px-5 py-3 text-xs uppercase tracking-wider text-slate-400 backdrop-blur">
+    <div className="sticky top-0 z-10 flex min-w-0 max-w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border border-white/10 bg-[#0f1620]/95 px-5 py-3 text-xs uppercase tracking-wider text-slate-400 backdrop-blur">
       <span className="font-semibold text-[#f2c98e]">{meta.surface}</span>
       {meta.selectedWorkoutId ? <span>· {meta.selectedWorkoutId}</span> : null}
       <span className="text-slate-500">·</span>

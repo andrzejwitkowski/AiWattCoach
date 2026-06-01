@@ -18,7 +18,7 @@ export function SectionCard({ title, expanded, onToggle, children }: SectionCard
         <span>{title}</span>
         <span className="text-slate-500">{expanded ? '▾' : '▸'}</span>
       </button>
-      {expanded && <div className="border-t border-white/5 px-5 py-4">{children}</div>}
+      {expanded && <div className="min-w-0 border-t border-white/5 px-5 py-4">{children}</div>}
     </div>
   );
 }
