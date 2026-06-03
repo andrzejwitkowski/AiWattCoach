@@ -413,12 +413,12 @@ fn invalid_provider_transcript_recovery_error(
     };
 
     match crate::domain::workout_summary::parse_coach_reply(&content) {
-        Ok(_) => crate::domain::llm::LlmError::InvalidResponse(
-            "assistant reply missing final text message".to_string(),
-        ),
         Err(message) => crate::domain::llm::LlmError::InvalidResponse(format!(
             "assistant reply did not match workout summary coach schema: {message}"
         )),
+        Ok(_) => unreachable!(
+            "recovery only fails parsing after recoverable_assistant_reply returned None"
+        ),
     }
 }
 
@@ -500,6 +500,34 @@ mod tests {
         });
 
         assert!(super::recoverable_assistant_reply(&prose_json).is_some());
+
+        let schema_mismatch = CoachReplyOperation::pending(
+            "user-1".into(),
+            "workout-1".into(),
+            "message-2".into(),
+            None,
+            "coach-2".into(),
+            1,
+        )
+        .record_provider_response(PendingLlmReplyCheckpoint {
+            provider: LlmProvider::OpenAi,
+            model: "gpt-4o-mini".into(),
+            provider_request_id: None,
+            provider_cache_id: None,
+            token_usage: LlmTokenUsage::default(),
+            cache_usage: LlmCacheUsage::default(),
+            provider_transcript: vec![LlmChatMessage::assistant(
+                "Coach intro.\n\n```json\n{\"summary\":\"Broken",
+            )],
+            finish_reason: None,
+            updated_at_epoch_seconds: 2,
+        });
+
+        assert!(matches!(
+            super::invalid_provider_transcript_recovery_error(&schema_mismatch),
+            LlmError::InvalidResponse(message)
+                if message.contains("assistant reply did not match workout summary coach schema")
+        ));
     }
 
     #[tokio::test]

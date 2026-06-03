@@ -88,19 +88,22 @@ fn extract_fenced_json(raw: &str) -> Option<&str> {
     let mut last = None;
     while let Some(rel) = raw[cursor..].find("```") {
         let open = cursor + rel + 3;
-        let inner = raw[open..]
+        let suffix = &raw[open..];
+        let body = suffix
             .strip_prefix("json")
-            .or_else(|| raw[open..].strip_prefix("JSON"))
-            .unwrap_or(&raw[open..])
-            .trim_start();
+            .or_else(|| suffix.strip_prefix("JSON"))
+            .unwrap_or(suffix);
+        let body_start = open + suffix.len().saturating_sub(body.len());
+        let inner = body.trim_start();
+        let inner_start = body_start + body.len().saturating_sub(inner.len());
         let Some(close) = inner.find("```") else {
-            cursor = open;
+            cursor = open + 1;
             continue;
         };
         if let Some(payload) = json_block_payload(inner[..close].trim()) {
             last = Some(payload);
         }
-        cursor = open + close + 3;
+        cursor = inner_start + close + 3;
     }
     last
 }
@@ -252,6 +255,16 @@ mod tests {
         .expect("prose before fenced JSON should parse");
 
         assert_eq!(parsed.content, "Solid ride.");
+    }
+
+    #[test]
+    fn parse_coach_reply_uses_last_valid_json_fence() {
+        let parsed = parse_coach_reply(
+            "Draft\n```json\n{\"summary\":\"First\",\"questions\":[]}\n```\nFinal\n```json\n{\"summary\":\"Second\",\"questions\":[]}\n```",
+        )
+        .expect("last fenced JSON should win");
+
+        assert_eq!(parsed.content, "Second");
     }
 
     #[test]
