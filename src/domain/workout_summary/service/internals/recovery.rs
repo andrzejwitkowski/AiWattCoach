@@ -449,8 +449,8 @@ mod tests {
     };
 
     #[test]
-    fn invalid_provider_transcript_recovery_error_distinguishes_missing_text_from_schema_mismatch(
-    ) {
+    fn invalid_provider_transcript_recovery_error_distinguishes_missing_text_from_schema_mismatch()
+    {
         use crate::domain::llm::LlmError;
 
         let tool_only = CoachReplyOperation::pending(
