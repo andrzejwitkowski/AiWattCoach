@@ -80,23 +80,42 @@ fn looks_like_malformed_coach_reply_json(payload: &str) -> bool {
 }
 
 fn extract_json_payload(raw: &str) -> &str {
-    let trimmed = raw.trim();
+    extract_fenced_json(raw.trim()).unwrap_or_else(|| raw.trim())
+}
 
-    if let Some(stripped) = trimmed.strip_prefix("```") {
-        let inner = stripped.trim().trim_end_matches("```").trim();
-
-        if inner.starts_with('{') || inner.starts_with('[') {
-            return inner;
+fn extract_fenced_json(raw: &str) -> Option<&str> {
+    let mut cursor = 0;
+    let mut last = None;
+    while let Some(rel) = raw[cursor..].find("```") {
+        let open = cursor + rel + 3;
+        let suffix = &raw[open..];
+        let body = suffix
+            .strip_prefix("json")
+            .or_else(|| suffix.strip_prefix("JSON"))
+            .unwrap_or(suffix);
+        let body_start = open + suffix.len().saturating_sub(body.len());
+        let inner = body.trim_start();
+        let inner_start = body_start + body.len().saturating_sub(inner.len());
+        let Some(close) = inner.find("```") else {
+            cursor = open + 1;
+            continue;
+        };
+        if let Some(payload) = json_block_payload(inner[..close].trim()) {
+            last = Some(payload);
         }
-
-        if let Some((_, rest)) = inner.split_once('\n') {
-            return rest.trim();
-        }
-
-        return inner;
+        cursor = inner_start + close + 3;
     }
+    last
+}
 
-    trimmed
+fn json_block_payload(block: &str) -> Option<&str> {
+    if block.starts_with('{') || block.starts_with('[') {
+        return Some(block);
+    }
+    block
+        .split_once('\n')
+        .map(|(_, rest)| rest.trim())
+        .filter(|rest| rest.starts_with('{') || rest.starts_with('['))
 }
 
 fn normalize_questions(
@@ -226,6 +245,26 @@ mod tests {
         .expect("code fenced JSON should parse");
 
         assert_eq!(parsed.content, "Good session.");
+    }
+
+    #[test]
+    fn parse_coach_reply_accepts_json_code_fence_after_prose() {
+        let parsed = parse_coach_reply(
+            "Teraz mam pełny obraz sesji.\n\n```json\n{\n  \"summary\": \"Solid ride.\",\n  \"questions\": []\n}\n```",
+        )
+        .expect("prose before fenced JSON should parse");
+
+        assert_eq!(parsed.content, "Solid ride.");
+    }
+
+    #[test]
+    fn parse_coach_reply_uses_last_valid_json_fence() {
+        let parsed = parse_coach_reply(
+            "Draft\n```json\n{\"summary\":\"First\",\"questions\":[]}\n```\nFinal\n```json\n{\"summary\":\"Second\",\"questions\":[]}\n```",
+        )
+        .expect("last fenced JSON should win");
+
+        assert_eq!(parsed.content, "Second");
     }
 
     #[test]
