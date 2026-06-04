@@ -2,10 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { listActivities, listEvents } from '../../intervals/api/intervals';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
-import { addDays, addWeeks, extractDateKey, formatDateRange, getMondayOfWeek, toDateKey } from '../../calendar/utils/dateUtils';
+import { addDays, addWeeks, formatDateRange, getMondayOfWeek } from '../../calendar/utils/dateUtils';
 import { listWorkoutSummaries, type WorkoutSummaryDateRange } from '../api/workoutSummary';
+import { useCoachSessionCache } from '../context/CoachSessionCache';
 import type { CoachWorkoutListItem, WorkoutSummary } from '../types';
-import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
+import {
+  buildVisibleItems,
+  buildWorkoutItems,
+  chunkWorkoutIds,
+  defaultVisibleWeekStart,
+  formatRangeLabel,
+  isSameDay,
+  weekDateRange,
+} from './coachWorkoutListItems';
 
 export type WorkoutListState = 'loading' | 'ready' | 'error' | 'credentials-required';
 export type WorkoutSummariesState = 'idle' | 'loading' | 'ready' | 'error';
@@ -32,287 +41,11 @@ type UseWorkoutListResult = {
   replaceSummary: (summary: WorkoutSummary) => void;
 };
 
-function formatRangeLabel(startDate: Date, endDate: Date): string {
-  const formatter = new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
-  return `${formatter.format(startDate)} - ${formatter.format(endDate)}`;
-}
-
-function normalizeName(value: string | null | undefined): string {
-  return value?.trim().toLowerCase().replace(/\s+/g, ' ') ?? '';
-}
-
-function namesLookRelated(event: IntervalEvent, activity: IntervalActivity): boolean {
-  const eventName = normalizeName(event.name);
-  const activityName = normalizeName(activity.name) || normalizeName(activity.activityType);
-
-  if (!eventName || !activityName) {
-    return false;
-  }
-
-  return eventName === activityName || eventName.includes(activityName) || activityName.includes(eventName);
-}
-
-function chooseMatchedActivity(
-  event: IntervalEvent,
-  candidates: IntervalActivity[],
-  dayEventCount: number,
-  dayActivityCount: number,
-): IntervalActivity | null {
-  const namedCandidates = candidates.filter((activity) => namesLookRelated(event, activity));
-
-  if (namedCandidates.length === 1) {
-    return namedCandidates[0] ?? null;
-  }
-
-  if (candidates.length === 1 && dayEventCount === 1 && dayActivityCount === 1) {
-    return candidates[0] ?? null;
-  }
-
-  return null;
-}
-
-function inferEventIdHint(activity: IntervalActivity): string | null {
-  const values = [activity.externalId, activity.description, activity.name];
-
-  for (const value of values) {
-    const match = value?.match(/paired_event_id=(\d+)/i);
-    if (match?.[1]) {
-      return match[1];
-    }
-  }
-
-  return null;
-}
-
-function buildWorkoutItems(
-  events: IntervalEvent[],
-  activities: IntervalActivity[],
-): CoachWorkoutListItem[] {
-  const eventsSorted = [...events].sort((left, right) => right.startDateLocal.localeCompare(left.startDateLocal));
-  const activitiesSorted = [...activities].sort((left, right) => right.startDateLocal.localeCompare(left.startDateLocal));
-  const activitiesByDate = new Map<string, IntervalActivity[]>();
-  const eventsByDate = new Map<string, IntervalEvent[]>();
-  const eventsByActualWorkoutActivityId = new Map<string, IntervalEvent[]>();
-
-  for (const activity of activitiesSorted) {
-    const dateKey = extractDateKey(activity.startDateLocal);
-    const existing = activitiesByDate.get(dateKey) ?? [];
-    existing.push(activity);
-    activitiesByDate.set(dateKey, existing);
-  }
-
-  for (const event of eventsSorted) {
-    const dateKey = extractDateKey(event.startDateLocal);
-    const existing = eventsByDate.get(dateKey) ?? [];
-    existing.push(event);
-    eventsByDate.set(dateKey, existing);
-
-    const actualWorkoutActivityId = event.actualWorkout?.activityId;
-    if (actualWorkoutActivityId) {
-      const activityMatches = eventsByActualWorkoutActivityId.get(actualWorkoutActivityId) ?? [];
-      activityMatches.push(event);
-      eventsByActualWorkoutActivityId.set(actualWorkoutActivityId, activityMatches);
-    }
-  }
-
-  const matchedActivityIds = new Set<string>();
-  const matchedEventIds = new Set<number>();
-  const activityEventMatches = new Map<string, IntervalEvent>();
-
-  for (const activity of activitiesSorted) {
-    const linkedEvent = (eventsByActualWorkoutActivityId.get(activity.id) ?? []).find(
-      (event) => !matchedEventIds.has(event.id),
-    );
-    if (!linkedEvent || matchedActivityIds.has(activity.id)) {
-      continue;
-    }
-
-    matchedActivityIds.add(activity.id);
-    matchedEventIds.add(linkedEvent.id);
-    activityEventMatches.set(activity.id, linkedEvent);
-  }
-
-  for (const activity of activitiesSorted) {
-    const hintedEventId = inferEventIdHint(activity);
-    if (!hintedEventId) {
-      continue;
-    }
-
-    const hintedEvent = eventsSorted.find((event) => String(event.id) === hintedEventId);
-    if (!hintedEvent || matchedActivityIds.has(activity.id) || matchedEventIds.has(hintedEvent.id)) {
-      continue;
-    }
-
-    matchedActivityIds.add(activity.id);
-    matchedEventIds.add(hintedEvent.id);
-    activityEventMatches.set(activity.id, hintedEvent);
-  }
-
-  for (const event of eventsSorted) {
-    if (matchedEventIds.has(event.id)) {
-      continue;
-    }
-
-    const dateKey = extractDateKey(event.startDateLocal);
-    const candidates = (activitiesByDate.get(dateKey) ?? []).filter((activity) => !matchedActivityIds.has(activity.id));
-    const matchedActivity = chooseMatchedActivity(
-      event,
-      candidates,
-      (eventsByDate.get(dateKey) ?? []).length,
-      (activitiesByDate.get(dateKey) ?? []).length,
-    );
-
-    if (!matchedActivity) {
-      continue;
-    }
-
-    matchedActivityIds.add(matchedActivity.id);
-    matchedEventIds.add(event.id);
-    activityEventMatches.set(matchedActivity.id, event);
-  }
-
-  const items: CoachWorkoutListItem[] = activitiesSorted.map((activity) => {
-    const matchedEvent = activityEventMatches.get(activity.id) ?? null;
-    const id = activity.id;
-
-    return {
-      id,
-      source: 'activity',
-      startDateLocal: activity.startDateLocal,
-      event: matchedEvent,
-      activity,
-      summary: null,
-      hasSummary: false,
-      hasConversation: false,
-    };
-  });
-
-  for (const event of eventsSorted) {
-    if (matchedEventIds.has(event.id)) {
-      continue;
-    }
-
-    items.push({
-      id: String(event.id),
-      source: 'event',
-      startDateLocal: event.startDateLocal,
-      event,
-      activity: null,
-      summary: null,
-      hasSummary: false,
-      hasConversation: false,
-    });
-  }
-
-  return items.sort((left, right) => right.startDateLocal.localeCompare(left.startDateLocal));
-}
-
-function isSameDay(left: Date, right: Date): boolean {
-  return left.getTime() === right.getTime();
-}
-
-function isWithinWeek(value: string, weekStart: Date): boolean {
-  const weekStartKey = toDateKey(weekStart);
-  const weekEndKey = toDateKey(addDays(weekStart, 6));
-  const dateKey = extractDateKey(value);
-
-  return dateKey >= weekStartKey && dateKey <= weekEndKey;
-}
-
-function withSummaryState(item: CoachWorkoutListItem, summary: WorkoutSummary | null): CoachWorkoutListItem {
-  return {
-    ...item,
-    summary,
-    hasSummary: summary !== null,
-    hasConversation:
-      summary?.hasCoachMessage
-      ?? summary?.messages.some((message) => message.role === 'coach')
-      ?? false,
-  };
-}
-
-function weekDateRange(weekStart: Date): WorkoutSummaryDateRange {
-  return {
-    oldest: toDateKey(weekStart),
-    newest: toDateKey(addDays(weekStart, 6)),
-  };
-}
-
-function buildVisibleItems(
-  allItems: CoachWorkoutListItem[],
-  visibleWeekStart: Date,
-  summaryCache: Map<string, WorkoutSummary>,
-): CoachWorkoutListItem[] {
-  const todayDateKey = toDateKey(new Date());
-
-  return allItems
-    .filter(
-      (item) =>
-        item.source === 'activity'
-        && extractDateKey(item.startDateLocal) <= todayDateKey
-        && isWithinWeek(item.startDateLocal, visibleWeekStart),
-    )
-    .map((item) => withSummaryState(item, summaryCache.get(item.id) ?? null));
-}
-
-function mergeSummaryCache(
-  current: Map<string, WorkoutSummary>,
-  summaries: WorkoutSummary[],
-): Map<string, WorkoutSummary> {
-  const next = new Map(current);
-
-  for (const summary of summaries) {
-    next.set(summary.workoutId, summary);
-  }
-
-  return next;
-}
-
-function replaceRequestedSummaries(
-  current: Map<string, WorkoutSummary>,
-  requestedWorkoutIds: string[],
-  summaries: WorkoutSummary[],
-): Map<string, WorkoutSummary> {
-  const next = new Map(current);
-
-  for (const workoutId of requestedWorkoutIds) {
-    next.delete(workoutId);
-  }
-
-  for (const summary of summaries) {
-    next.set(summary.workoutId, summary);
-  }
-
-  return next;
-}
-
-function chunkWorkoutIds(workoutIds: string[]): string[][] {
-  const chunks: string[][] = [];
-
-  for (let index = 0; index < workoutIds.length; index += MAX_SUMMARY_BATCH_SIZE) {
-    chunks.push(workoutIds.slice(index, index + MAX_SUMMARY_BATCH_SIZE));
-  }
-
-  return chunks;
-}
-
-function defaultVisibleWeekStart(items: CoachWorkoutListItem[], currentWeekStart: Date): Date {
-  if (items.some((item) => isWithinWeek(item.startDateLocal, currentWeekStart))) {
-    return currentWeekStart;
-  }
-
-  const newestItem = items[0];
-  return newestItem ? getMondayOfWeek(new Date(newestItem.startDateLocal)) : currentWeekStart;
-}
-
 export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkoutListResult {
+  const { clearSummaries, getSummary, hydrateMetadataSummaries, revision, upsertFullSummary } = useCoachSessionCache();
   const [currentWeekStart, setCurrentWeekStart] = useState(() => getMondayOfWeek(new Date()));
   const [visibleWeekStart, setVisibleWeekStart] = useState(() => getMondayOfWeek(new Date()));
   const [allItems, setAllItems] = useState<CoachWorkoutListItem[]>([]);
-  const [summaryCache, setSummaryCache] = useState<Map<string, WorkoutSummary>>(() => new Map());
   const [loadedSummaryIds, setLoadedSummaryIds] = useState<Set<string>>(() => new Set());
   const [hasLoadedWorkouts, setHasLoadedWorkouts] = useState(false);
   const [state, setState] = useState<WorkoutListState>('loading');
@@ -324,10 +57,11 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
 
   const visibleWeekRange = useMemo(() => weekDateRange(visibleWeekStart), [visibleWeekStart]);
 
-  const items = useMemo(() => buildVisibleItems(allItems, visibleWeekStart, summaryCache), [
+  const items = useMemo(() => buildVisibleItems(allItems, visibleWeekStart, getSummary), [
     allItems,
+    getSummary,
+    revision,
     visibleWeekStart,
-    summaryCache,
   ]);
 
   const loadRecentWorkouts = useCallback(async () => {
@@ -420,12 +154,15 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
     const requestId = summaryRequestIdRef.current + 1;
     summaryRequestIdRef.current = requestId;
     setSummariesState('loading');
+    const summariesAtRequestStart = new Map(
+      missingSummaryIds.map((workoutId) => [workoutId, getSummary(workoutId)]),
+    );
 
     void (async () => {
       try {
         const summaries = (
           await Promise.all(
-            chunkWorkoutIds(missingSummaryIds).map((workoutIds) =>
+            chunkWorkoutIds(missingSummaryIds, MAX_SUMMARY_BATCH_SIZE).map((workoutIds) =>
               listWorkoutSummaries(apiBaseUrl, workoutIds, {
                 range: visibleWeekRange,
                 view: 'metadata',
@@ -438,7 +175,16 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
           return;
         }
 
-        setSummaryCache((current) => replaceRequestedSummaries(current, missingSummaryIds, summaries));
+        const returnedSummaryIds = new Set(summaries.map((summary) => summary.workoutId));
+        const omittedSummaryIds = missingSummaryIds.filter(
+          (workoutId) => !returnedSummaryIds.has(workoutId)
+            && getSummary(workoutId) === summariesAtRequestStart.get(workoutId),
+        );
+
+        hydrateMetadataSummaries(missingSummaryIds, summaries);
+        if (omittedSummaryIds.length > 0) {
+          clearSummaries(omittedSummaryIds);
+        }
         setLoadedSummaryIds((current) => {
           const next = new Set(current);
 
@@ -468,7 +214,7 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
         setError(loadError instanceof Error ? loadError.message : 'Unknown error');
       }
     })();
-  }, [apiBaseUrl, hasLoadedWorkouts, items, loadedSummaryIds, visibleWeekRange]);
+  }, [apiBaseUrl, clearSummaries, getSummary, hasLoadedWorkouts, hydrateMetadataSummaries, items, loadedSummaryIds, visibleWeekRange]);
 
   const weekLabel = useMemo(() => {
     return formatRangeLabel(visibleWeekStart, addDays(visibleWeekStart, 6));
@@ -476,13 +222,13 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
   const canGoToNewerWeek = visibleWeekStart < currentWeekStart;
 
   const replaceSummary = useCallback((summary: WorkoutSummary) => {
-    setSummaryCache((current) => mergeSummaryCache(current, [summary]));
+    upsertFullSummary(summary);
     setLoadedSummaryIds((current) => {
       const next = new Set(current);
       next.add(summary.workoutId);
       return next;
     });
-  }, []);
+  }, [upsertFullSummary]);
 
   return {
     items,

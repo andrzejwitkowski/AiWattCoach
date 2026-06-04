@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthenticationError } from '../../../lib/httpClient';
@@ -15,6 +15,7 @@ import {
   resetCoachChatTestEnvironment,
   summaryFixture,
 } from './useCoachChat.testUtils';
+import { renderCoachHook } from './testRender';
 
 vi.mock('../api/workoutSummary', () => ({
   createWorkoutSummary: vi.fn(),
@@ -37,7 +38,7 @@ describe('useCoachChat connection', () => {
     installFakeWebSocket();
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
 
-    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    const { result } = renderCoachHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
 
     await waitFor(() => {
       expect(result.current.summary?.workoutId).toBe('101');
@@ -51,7 +52,7 @@ describe('useCoachChat connection', () => {
     installFakeWebSocket();
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
 
-    const { rerender, result } = renderHook(
+    const { rerender, result } = renderCoachHook(
       ({ aliasRange }) => useCoachChat({ apiBaseUrl: '', workoutId: '101', aliasRange }),
       { initialProps: { aliasRange: { oldest: '2026-05-25', newest: '2026-05-31' } } },
     );
@@ -61,56 +62,6 @@ describe('useCoachChat connection', () => {
     });
 
     rerender({ aliasRange: { oldest: '2026-05-25', newest: '2026-05-31' } });
-
-    expect(FakeWebSocket.instances).toHaveLength(1);
-    expect(getWorkoutSummary).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not reconnect when parent cache updates with an empty summary', async () => {
-    installFakeWebSocket();
-    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
-
-    const { rerender, result } = renderHook(
-      ({ cachedSummary }) => useCoachChat({ apiBaseUrl: '', workoutId: '101', cachedSummary }),
-      { initialProps: { cachedSummary: null as typeof summaryFixture | null } },
-    );
-
-    await waitFor(() => {
-      expect(result.current.isConnected).toBe(true);
-    });
-
-    rerender({ cachedSummary: { ...summaryFixture } });
-
-    expect(FakeWebSocket.instances).toHaveLength(1);
-    expect(getWorkoutSummary).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not reconnect when parent cache hydrates with messages for the same workout', async () => {
-    installFakeWebSocket();
-    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
-
-    const hydratedSummary = {
-      ...summaryFixture,
-      messages: [
-        {
-          id: 'message-1',
-          role: 'coach' as const,
-          content: 'Keep it easy today.',
-          createdAtEpochSeconds: 3,
-        },
-      ],
-    };
-
-    const { rerender, result } = renderHook(
-      ({ cachedSummary }) => useCoachChat({ apiBaseUrl: '', workoutId: '101', cachedSummary }),
-      { initialProps: { cachedSummary: null as typeof hydratedSummary | null } },
-    );
-
-    await waitFor(() => {
-      expect(result.current.isConnected).toBe(true);
-    });
-
-    rerender({ cachedSummary: hydratedSummary });
 
     expect(FakeWebSocket.instances).toHaveLength(1);
     expect(getWorkoutSummary).toHaveBeenCalledTimes(1);
@@ -158,10 +109,7 @@ describe('useCoachChat connection', () => {
       ],
     };
 
-    const { rerender, result } = renderHook(
-      ({ cachedSummary }) => useCoachChat({ apiBaseUrl: '', workoutId: '101', cachedSummary }),
-      { initialProps: { cachedSummary: null as typeof toolOnlySummary | null } },
-    );
+    const { result } = renderCoachHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
 
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
@@ -184,8 +132,6 @@ describe('useCoachChat connection', () => {
       expect(result.current.messages.map((message) => message.content)).toContain('Coach reply after tools');
     });
 
-    rerender({ cachedSummary: toolOnlySummary });
-
     expect(result.current.messages.map((message) => message.content)).toContain('Coach reply after tools');
   });
 
@@ -203,7 +149,7 @@ describe('useCoachChat connection', () => {
       value: { ...window.location, href: '/ai-coach' },
     });
 
-    renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+    renderCoachHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
 
     await waitFor(() => {
       expect(window.location.href).toBe('/');

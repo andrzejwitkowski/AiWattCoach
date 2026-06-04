@@ -6,7 +6,6 @@ import { useCompletedWorkouts } from '../../intervals/context';
 import { useSettings } from '../../settings/context/SettingsContext';
 import { useMediaQuery } from '../../../lib/useMediaQuery';
 import { isAvailabilityConfigured } from '../../settings/types';
-import { useCoachSessionCache } from '../context/CoachSessionCache';
 import { useWorkoutList } from '../hooks/useWorkoutList';
 import { isAvailabilityRequiredChatError, useCoachChat } from '../hooks/useCoachChat';
 import { ChatWindow } from './ChatWindow';
@@ -25,7 +24,6 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
   const { t } = useTranslation();
   const isMobile = useMediaQuery('(max-width: 767px)');
   const settingsContext = useSettings();
-  const sessionCache = useCoachSessionCache();
   const workoutList = useWorkoutList({ apiBaseUrl });
   const completedWorkouts = useCompletedWorkouts();
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
@@ -42,14 +40,11 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
     () => isAvailabilityConfigured(settingsContext.settings?.availability),
     [settingsContext.settings?.availability],
   );
-  const cachedSummary = selectedItem ? sessionCache.getSummary(selectedItem.id) : null;
 
   const chat = useCoachChat({
     apiBaseUrl,
     workoutId: selectedItem?.id ?? null,
     aliasRange: workoutList.visibleWeekRange,
-    cachedSummary,
-    onSummaryLoaded: sessionCache.setSummary,
   });
   const hasSettingsLoadError = Boolean(settingsContext.error);
   const chatError = isAvailabilityRequiredChatError(chat.error) ? null : chat.error;
@@ -76,13 +71,6 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
     setShowConfirmWithoutChat(false);
     setIsEditing(!(selectedItem?.summary?.savedAtEpochSeconds ?? null));
   }, [selectedItem?.summary?.savedAtEpochSeconds, selectedWorkoutId]);
-
-  useEffect(() => {
-    if (chat.summary) {
-      sessionCache.setSummary(chat.summary);
-      workoutList.replaceSummary(chat.summary);
-    }
-  }, [chat.summary, sessionCache.setSummary, workoutList.replaceSummary]);
 
   const isCurrentSelection = useCallback((workoutId: string) => {
     return selectedWorkoutIdRef.current === workoutId;

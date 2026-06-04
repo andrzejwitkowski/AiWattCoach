@@ -1,36 +1,85 @@
-import { createContext, useCallback, useContext, useMemo, useRef } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 
 import type { WorkoutSummary } from '../types';
 
+function mergeMetadataIntoSummary(
+  existing: WorkoutSummary | undefined,
+  incoming: WorkoutSummary,
+): WorkoutSummary {
+  if (!existing) {
+    return incoming;
+  }
+
+  if (incoming.updatedAtEpochSeconds < existing.updatedAtEpochSeconds) {
+    return existing;
+  }
+
+  if (incoming.messages.length === 0 && existing.messages.length > 0) {
+    return {
+      ...incoming,
+      messages: existing.messages,
+      hasCoachMessage: incoming.hasCoachMessage ?? existing.hasCoachMessage,
+    };
+  }
+
+  return incoming;
+}
+
 type CoachSessionCacheValue = {
+  revision: number;
   getSummary: (workoutId: string) => WorkoutSummary | undefined;
-  hasSummary: (workoutId: string) => boolean;
-  setSummary: (summary: WorkoutSummary) => void;
+  upsertFullSummary: (summary: WorkoutSummary) => void;
+  hydrateMetadataSummaries: (requestedWorkoutIds: string[], summaries: WorkoutSummary[]) => void;
+  clearSummaries: (workoutIds: string[]) => void;
 };
 
 const CoachSessionCacheContext = createContext<CoachSessionCacheValue | null>(null);
 
 export function CoachSessionCacheProvider({ children }: { children: React.ReactNode }) {
   const summariesRef = useRef<Map<string, WorkoutSummary>>(new Map());
+  const [revision, setRevision] = useState(0);
 
   const getSummary = useCallback((workoutId: string) => summariesRef.current.get(workoutId), []);
 
-  const hasSummary = useCallback(
-    (workoutId: string) => summariesRef.current.has(workoutId),
-    [],
-  );
-
-  const setSummary = useCallback((summary: WorkoutSummary) => {
+  const upsertFullSummary = useCallback((summary: WorkoutSummary) => {
     summariesRef.current.set(summary.workoutId, summary);
+    setRevision((current) => current + 1);
+  }, []);
+
+  const hydrateMetadataSummaries = useCallback((_requestedWorkoutIds: string[], summariesForRequest: WorkoutSummary[]) => {
+    const next = new Map(summariesRef.current);
+
+    for (const summary of summariesForRequest) {
+      next.set(
+        summary.workoutId,
+        mergeMetadataIntoSummary(summariesRef.current.get(summary.workoutId), summary),
+      );
+    }
+
+    summariesRef.current = next;
+    setRevision((current) => current + 1);
+  }, []);
+
+  const clearSummaries = useCallback((workoutIds: string[]) => {
+    const next = new Map(summariesRef.current);
+
+    for (const workoutId of workoutIds) {
+      next.delete(workoutId);
+    }
+
+    summariesRef.current = next;
+    setRevision((current) => current + 1);
   }, []);
 
   const value = useMemo(
     () => ({
+      revision,
       getSummary,
-      hasSummary,
-      setSummary,
+      upsertFullSummary,
+      hydrateMetadataSummaries,
+      clearSummaries,
     }),
-    [getSummary, hasSummary, setSummary],
+    [clearSummaries, getSummary, hydrateMetadataSummaries, revision, upsertFullSummary],
   );
 
   return (
