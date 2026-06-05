@@ -51,6 +51,10 @@ struct AiAgentsDocument {
     deepseek_api_key: Option<String>,
     selected_provider: Option<String>,
     selected_model: Option<String>,
+    #[serde(default)]
+    meso_cycle_provider: Option<String>,
+    #[serde(default)]
+    meso_cycle_model: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -684,6 +688,12 @@ fn map_document_to_domain(doc: SettingsDocument) -> Result<UserSettings, Setting
                 .as_deref()
                 .and_then(LlmProvider::parse),
             selected_model: doc.ai_agents.selected_model,
+            meso_cycle_provider: doc
+                .ai_agents
+                .meso_cycle_provider
+                .as_deref()
+                .and_then(LlmProvider::parse),
+            meso_cycle_model: doc.ai_agents.meso_cycle_model,
         },
         intervals: IntervalsConfig {
             api_key: doc.intervals.api_key,
@@ -739,6 +749,12 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
                 .as_ref()
                 .map(|provider| provider.as_str().to_string()),
             selected_model: settings.ai_agents.selected_model.clone(),
+            meso_cycle_provider: settings
+                .ai_agents
+                .meso_cycle_provider
+                .as_ref()
+                .map(|provider| provider.as_str().to_string()),
+            meso_cycle_model: settings.ai_agents.meso_cycle_model.clone(),
         },
         intervals: IntervalsDocument {
             api_key: settings.intervals.api_key.clone(),

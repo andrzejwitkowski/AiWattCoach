@@ -62,6 +62,11 @@ pub trait TrainingPlanGenerationOperationRepository: Send + Sync + 'static {
         &self,
         operation: TrainingPlanGenerationOperation,
     ) -> BoxFuture<Result<TrainingPlanGenerationOperation, TrainingPlanError>>;
+
+    fn find_latest_completed_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<TrainingPlanGenerationOperation>, TrainingPlanError>>;
 }
 
 pub trait TrainingPlanGenerator: Send + Sync + 'static {

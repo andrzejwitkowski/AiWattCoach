@@ -1219,6 +1219,8 @@ async fn test_ai_agents_connection_returns_bad_request_when_provider_changes_wit
         deepseek_api_key: None,
         selected_provider: Some(aiwattcoach::domain::llm::LlmProvider::OpenAi),
         selected_model: Some("gpt-4o-mini".to_string()),
+        meso_cycle_provider: None,
+        meso_cycle_model: None,
     };
     let app = settings_test_app_with_services(
         TestIdentityServiceWithSession::default(),

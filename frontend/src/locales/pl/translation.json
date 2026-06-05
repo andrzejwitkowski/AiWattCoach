@@ -34,8 +34,26 @@
       "workspace": "Obszar roboczy",
       "systemInfo": "Info systemowe",
       "taskScheduler": "Harmonogram zadań",
-      "promptPreview": "Podgląd promptu"
+      "promptPreview": "Podgląd promptu",
+      "mesoCycle": "Meso Cycle Coach"
     }
+  },
+  "mesoCycle": {
+    "openMesoCalendar": "Otwórz 30-dniowy meso cycle coach",
+    "backToCalendar": "Wróć do głównego kalendarza",
+    "kicker": "Planowanie strategiczne",
+    "title": "Meso Cycle Coach",
+    "description": "Przeglądaj 30-dniowy plan wstępny oddzielnie od 14-dniowego okna AI coacha. Dni nachodzące na aktywny plan AI coacha są oznaczone jako nieaktualne.",
+    "refresh": "Odśwież",
+    "generate": "Generuj plan meso",
+    "generating": "Generowanie...",
+    "windowLabel": "Okno: {{from}} – {{to}}",
+    "noWindow": "Brak okna meso. Wygeneruj plan, aby utworzyć kolejne 30 dni.",
+    "loading": "Ładowanie kalendarza meso...",
+    "outdated": "Nieaktualne",
+    "restDay": "Dzień odpoczynku",
+    "noPlanYet": "Brak projekcji meso",
+    "configureAiFirst": "Skonfiguruj providera AI i klucz API w Ustawieniach, zanim wygenerujesz plan meso."
   },
   "adminPromptPreview": {
     "title": "Podgląd promptu LLM",

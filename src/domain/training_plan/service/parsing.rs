@@ -24,7 +24,9 @@ fn is_exact_date(value: &str) -> bool {
         && bytes[8..10].iter().all(u8::is_ascii_digit)
 }
 
-fn split_into_day_blocks(input: &str) -> Result<Vec<(String, String)>, TrainingPlanError> {
+pub(crate) fn split_into_day_blocks(
+    input: &str,
+) -> Result<Vec<(String, String)>, TrainingPlanError> {
     let mut blocks = Vec::new();
     let mut current_date: Option<String> = None;
     let mut current_lines = Vec::new();

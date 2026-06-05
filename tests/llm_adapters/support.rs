@@ -16,7 +16,7 @@ use aiwattcoach::{
         training_context::{
             IntervalsStatusContext, RenderedTrainingContext, TrainingContext,
             TrainingContextBuildResult, TrainingContextBuilder, ATHLETE_SUMMARY_FOCUS_ID,
-            CALENDAR_OVERVIEW_FOCUS_ID,
+            CALENDAR_OVERVIEW_FOCUS_ID, MESO_CYCLE_FOCUS_ID,
         },
         training_plan::training_plan_llm_envelope_json_schema,
         workout_summary::WorkoutSummary,
@@ -231,6 +231,14 @@ impl TrainingContextBuilder for StubTrainingContextBuilder {
         user_id: &str,
     ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
         self.build(user_id, ATHLETE_SUMMARY_FOCUS_ID)
+    }
+
+    fn build_meso_cycle_context(
+        &self,
+        user_id: &str,
+        _meso_end: chrono::NaiveDate,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        self.build(user_id, MESO_CYCLE_FOCUS_ID)
     }
 }
 

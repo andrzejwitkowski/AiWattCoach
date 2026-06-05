@@ -27,6 +27,7 @@ const PAGE_TITLE_KEYS: Record<string, string> = {
   '/app': 'appShell.pageTitles.dashboard',
   '/settings': 'appShell.pageTitles.settings',
   '/calendar': 'appShell.pageTitles.calendar',
+  '/calendar/meso': 'appShell.pageTitles.mesoCycle',
   '/races': 'appShell.pageTitles.races',
   '/ai-coach': 'appShell.pageTitles.aiCoach',
   '/admin/task-scheduler': 'appShell.pageTitles.taskScheduler',

@@ -19,6 +19,8 @@ use aiwattcoach::{
             adapter::LlmAdapter, athlete_summary_generator::AthleteSummaryLlmGenerator,
             dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
             get_selected_workout_data::GetSelectedWorkoutDataAdapter,
+            meso_cycle_generator::MesoCycleLlmGenerator,
+            meso_cycle_llm_config::MesoCycleLlmConfigProvider,
             openai_compatible::client::OpenAiCompatibleClient,
             openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
             training_plan_generator::TrainingPlanLlmGenerator,
@@ -43,6 +45,8 @@ use aiwattcoach::{
             llm_context_cache::MongoLlmContextCacheRepository,
             llm_reply_operations::MongoLlmReplyOperationRepository,
             login_state::MongoLoginStateRepository,
+            meso_cycle_generation_operations::MongoMesoCycleGenerationOperationRepository,
+            meso_cycle_projections::MongoMesoCycleProjectionRepository,
             planned_completed_links::MongoPlannedCompletedWorkoutLinkRepository,
             planned_workout_tokens::MongoPlannedWorkoutTokenRepository,
             planned_workouts::MongoPlannedWorkoutRepository,
@@ -102,6 +106,10 @@ use aiwattcoach::{
         IdentityServiceDependencies,
     },
     domain::intervals::IntervalsService,
+    domain::meso_cycle::{
+        meso_cycle_generate_task_handler, MesoCycleService, SchedulerBackedMesoCycleService,
+        TrainingPlanBackedMesoWindowPort,
+    },
     domain::planned_workouts::AuthoritativePlannedWorkoutRepository,
     domain::races::{AuthoritativeRaceRepository, RaceService},
     domain::settings::UserSettingsService,
@@ -276,6 +284,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     training_plan_generation_operation_repository
         .ensure_indexes()
         .await?;
+    let meso_cycle_generation_operation_repository =
+        MongoMesoCycleGenerationOperationRepository::new(mongo_client.clone(), &mongo_database);
+    meso_cycle_generation_operation_repository
+        .ensure_indexes()
+        .await?;
+    let meso_cycle_projection_repository =
+        MongoMesoCycleProjectionRepository::new(mongo_client.clone(), &mongo_database);
+    meso_cycle_projection_repository.ensure_indexes().await?;
+    let training_plan_window_port_ops = training_plan_generation_operation_repository.clone();
+    let training_plan_window_port_projections = training_plan_projection_repository.clone();
     // These repositories are bootstrapped at startup so their durable collections
     // have indexes in place before background sync workflows start using them.
     let external_observation_repository =
@@ -707,6 +725,29 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         shared_task_scheduler.clone(),
         UuidIdGenerator,
     ));
+    let meso_cycle_llm_config_provider =
+        Arc::new(MesoCycleLlmConfigProvider::new(settings_service.clone()));
+    let meso_cycle_direct_service = Arc::new(MesoCycleService::new(
+        meso_cycle_generation_operation_repository,
+        meso_cycle_projection_repository,
+        MesoCycleLlmGenerator::new(
+            llm_adapter.clone(),
+            meso_cycle_llm_config_provider,
+            training_context_builder.clone(),
+            get_selected_workout_data_port.clone(),
+            SystemClock,
+        ),
+        TrainingPlanBackedMesoWindowPort::new(
+            training_plan_window_port_ops,
+            training_plan_window_port_projections,
+        ),
+        SystemClock,
+    ));
+    let meso_cycle_service = Arc::new(SchedulerBackedMesoCycleService::new(
+        meso_cycle_direct_service.clone(),
+        shared_task_scheduler.clone(),
+        UuidIdGenerator,
+    ));
     let calendar_coach_service = Arc::new(SharedCalendarCoachService::new(Arc::new(
         SchedulerBackedCoachConversationService::new(
             coach_conversation_direct_service.clone(),
@@ -719,6 +760,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         coach_conversation_reply_task_handler(coach_conversation_direct_service),
         athlete_summary_generate_task_handler(athlete_summary_direct_service.clone()),
         training_plan_generate_task_handler(training_plan_direct_service),
+        meso_cycle_generate_task_handler(meso_cycle_direct_service.clone()),
     ];
     if let Some(service) = wahoo_fit_enrichment_service.clone() {
         task_handlers.push(wahoo_fit_enrichment_task_handler(service));
@@ -779,6 +821,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_completed_workout_service(completed_workout_service)
         .with_completed_workout_admin_service(completed_workout_admin_service)
         .with_athlete_summary_service(athlete_summary_service)
+        .with_meso_cycle_service(meso_cycle_service)
         .with_llm_services(llm_adapter, llm_config_provider)
         .with_workout_summary_service(workout_summary_service)
         .with_workout_summary_save_notifier((*save_notifier).clone())

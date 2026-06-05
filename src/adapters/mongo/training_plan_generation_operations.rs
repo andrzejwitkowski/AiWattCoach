@@ -195,6 +195,25 @@ impl TrainingPlanGenerationOperationRepository for MongoTrainingPlanGenerationOp
             Ok(operation)
         })
     }
+
+    fn find_latest_completed_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<TrainingPlanGenerationOperation>, TrainingPlanError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let document = collection
+                .find_one(doc! {
+                    "user_id": &user_id,
+                    "status": "completed",
+                })
+                .sort(doc! { "updated_at_epoch_seconds": -1 })
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+            document.map(map_document_to_operation).transpose()
+        })
+    }
 }
 
 fn map_operation_to_document(

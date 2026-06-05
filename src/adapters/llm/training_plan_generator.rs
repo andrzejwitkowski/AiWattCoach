@@ -569,7 +569,7 @@ fn training_plan_correction_system_prompt(availability_configured: bool) -> Stri
     )
 }
 
-fn training_plan_planning_guidelines(availability_configured: bool) -> String {
+pub(crate) fn training_plan_planning_guidelines(availability_configured: bool) -> String {
     let availability_guidance = if availability_configured {
         TRAINING_PLAN_AVAILABILITY_CONFIGURED_GUIDANCE
     } else {
@@ -584,6 +584,10 @@ fn training_plan_planning_guidelines(availability_configured: bool) -> String {
 /// Uses the current planning window end as the synthetic "today" anchor for
 /// both initial generation and correction. Callers should rebuild the training
 /// context before correction if they want that planning anchor refreshed.
+pub(crate) fn training_plan_output_grammar() -> &'static str {
+    TRAINING_PLAN_OUTPUT_GRAMMAR
+}
+
 fn training_plan_tool_context_today(training_context: &TrainingContext) -> String {
     training_context.history.window_end.clone()
 }

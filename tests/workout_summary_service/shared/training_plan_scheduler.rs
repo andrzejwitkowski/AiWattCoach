@@ -264,6 +264,18 @@ impl TrainingPlanGenerationOperationRepository for SaveFlowOperationRepository {
             Ok(operation)
         })
     }
+
+    fn find_latest_completed_by_user_id(
+        &self,
+        _user_id: &str,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<
+            Option<TrainingPlanGenerationOperation>,
+            aiwattcoach::domain::training_plan::TrainingPlanError,
+        >,
+    > {
+        Box::pin(async move { Ok(None) })
+    }
 }
 
 #[derive(Clone)]

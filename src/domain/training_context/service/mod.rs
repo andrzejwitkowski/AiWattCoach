@@ -90,6 +90,12 @@ pub trait TrainingContextBuilder: Send + Sync {
         &self,
         user_id: &str,
     ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
+
+    fn build_meso_cycle_context(
+        &self,
+        user_id: &str,
+        meso_end: chrono::NaiveDate,
+    ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
 }
 
 const STREAM_BUCKET_SIZE: usize = 5;
@@ -97,6 +103,8 @@ const MAX_CHUNKS_PER_WORKOUT: usize = 48;
 const STABLE_FUTURE_EVENT_DAYS: i64 = 120;
 pub const CALENDAR_OVERVIEW_FOCUS_ID: &str = "calendar-overview";
 pub const ATHLETE_SUMMARY_FOCUS_ID: &str = "athlete-summary";
+pub const MESO_CYCLE_FOCUS_ID: &str = "meso-cycle";
+const MESO_CYCLE_RECENT_DAYS: i64 = 30;
 
 trait CompletedWorkoutReadPort: Send + Sync {
     fn list_by_user_id(
@@ -355,7 +363,7 @@ where
         let builder = self.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
-        Box::pin(async move { builder.build_impl(&user_id, &workout_id, None).await })
+        Box::pin(async move { builder.build_impl(&user_id, &workout_id, None, None).await })
     }
 
     fn build_as_of(
@@ -369,7 +377,7 @@ where
         let workout_id = workout_id.to_string();
         Box::pin(async move {
             builder
-                .build_impl(&user_id, &workout_id, Some(focus_date))
+                .build_impl(&user_id, &workout_id, Some(focus_date), None)
                 .await
         })
     }
@@ -382,7 +390,7 @@ where
         let user_id = user_id.to_string();
         Box::pin(async move {
             builder
-                .build_impl(&user_id, CALENDAR_OVERVIEW_FOCUS_ID, None)
+                .build_impl(&user_id, CALENDAR_OVERVIEW_FOCUS_ID, None, None)
                 .await
         })
     }
@@ -396,7 +404,7 @@ where
         let user_id = user_id.to_string();
         Box::pin(async move {
             builder
-                .build_impl(&user_id, CALENDAR_OVERVIEW_FOCUS_ID, Some(focus_date))
+                .build_impl(&user_id, CALENDAR_OVERVIEW_FOCUS_ID, Some(focus_date), None)
                 .await
         })
     }
@@ -409,7 +417,21 @@ where
         let user_id = user_id.to_string();
         Box::pin(async move {
             builder
-                .build_impl(&user_id, ATHLETE_SUMMARY_FOCUS_ID, None)
+                .build_impl(&user_id, ATHLETE_SUMMARY_FOCUS_ID, None, None)
+                .await
+        })
+    }
+
+    fn build_meso_cycle_context(
+        &self,
+        user_id: &str,
+        meso_end: chrono::NaiveDate,
+    ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        let builder = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            builder
+                .build_impl(&user_id, MESO_CYCLE_FOCUS_ID, None, Some(meso_end))
                 .await
         })
     }
@@ -424,6 +446,7 @@ where
         user_id: &str,
         workout_id: &str,
         as_of_focus_day: Option<chrono::NaiveDate>,
+        meso_upcoming_end: Option<chrono::NaiveDate>,
     ) -> Result<TrainingContextBuildResult, LlmError> {
         let settings = self
             .settings_service
@@ -440,8 +463,12 @@ where
         let history_warmup_days = 120;
         let history_start =
             focus_date - Duration::days((history_trend_days + history_warmup_days - 1) as i64);
-        let recent_start = focus_date - Duration::days(13);
-        let upcoming_end = focus_date + Duration::days(14);
+        let recent_start = if meso_upcoming_end.is_some() {
+            focus_date - Duration::days(MESO_CYCLE_RECENT_DAYS - 1)
+        } else {
+            focus_date - Duration::days(13)
+        };
+        let upcoming_end = meso_upcoming_end.unwrap_or_else(|| focus_date + Duration::days(14));
         let stable_future_events_start = focus_date + Duration::days(1);
         let stable_future_events_end = focus_date + Duration::days(STABLE_FUTURE_EVENT_DAYS);
 
@@ -764,7 +791,7 @@ where
     async fn resolve_focus_date(&self, user_id: &str, workout_id: &str) -> Option<NaiveDate> {
         if matches!(
             workout_id,
-            ATHLETE_SUMMARY_FOCUS_ID | CALENDAR_OVERVIEW_FOCUS_ID
+            ATHLETE_SUMMARY_FOCUS_ID | CALENDAR_OVERVIEW_FOCUS_ID | MESO_CYCLE_FOCUS_ID
         ) {
             return None;
         }

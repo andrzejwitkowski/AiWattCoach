@@ -53,6 +53,10 @@ pub(super) struct AiAgentsDto {
     pub(super) selected_provider: Option<String>,
     #[serde(rename = "selectedModel")]
     pub(super) selected_model: Option<String>,
+    #[serde(rename = "mesoCycleProvider")]
+    pub(super) meso_cycle_provider: Option<String>,
+    #[serde(rename = "mesoCycleModel")]
+    pub(super) meso_cycle_model: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -138,6 +142,10 @@ pub(crate) struct UpdateAiAgentsRequest {
     pub(super) selected_provider: OptionalStringInput,
     #[serde(default, rename = "selectedModel")]
     pub(super) selected_model: OptionalStringInput,
+    #[serde(default, rename = "mesoCycleProvider")]
+    pub(super) meso_cycle_provider: OptionalStringInput,
+    #[serde(default, rename = "mesoCycleModel")]
+    pub(super) meso_cycle_model: OptionalStringInput,
 }
 
 #[derive(Deserialize)]

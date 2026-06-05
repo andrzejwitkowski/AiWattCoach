@@ -15,6 +15,7 @@ import { AdminSystemInfoPage } from './pages/AdminSystemInfoPage';
 import { AdminPromptPreviewPage } from './pages/AdminPromptPreviewPage';
 import { AdminTaskSchedulerPage } from './pages/AdminTaskSchedulerPage';
 import { CalendarPage } from './pages/CalendarPage';
+import { MesoCycleCalendarPage } from './pages/MesoCycleCalendarPage';
 import { AICoachPage } from './pages/AICoachPage';
 import { LandingPage } from './pages/LandingPage';
 import { RacesPage } from './pages/RacesPage';
@@ -124,6 +125,10 @@ export function App() {
               <Route element={<AppHomePage apiBaseUrl={API_BASE_URL} />} path="/app" />
               <Route element={<SettingsPage apiBaseUrl={API_BASE_URL} />} path="/settings" />
               <Route element={<CalendarPage apiBaseUrl={API_BASE_URL} />} path="/calendar" />
+              <Route
+                element={<MesoCycleCalendarPage apiBaseUrl={API_BASE_URL} />}
+                path="/calendar/meso"
+              />
               <Route element={<RacesPage apiBaseUrl={API_BASE_URL} />} path="/races" />
               <Route element={<AICoachPage apiBaseUrl={API_BASE_URL} />} path="/ai-coach" />
               <Route element={<RequireRole role="admin" />}>

@@ -16,6 +16,7 @@ export class HttpError extends Error {
 
 type ErrorResponseBody = {
   message?: string;
+  error?: string;
 };
 
 export class AuthenticationError extends Error {
@@ -101,15 +102,20 @@ async function parseResponseBody(response: Response): Promise<unknown> {
 }
 
 function getErrorMessage(method: string, path: string, status: number, body: unknown): string {
-  if (isErrorResponseBody(body) && typeof body.message === 'string' && body.message.trim()) {
-    return body.message;
+  if (isErrorResponseBody(body)) {
+    if (typeof body.message === 'string' && body.message.trim()) {
+      return body.message;
+    }
+    if (typeof body.error === 'string' && body.error.trim()) {
+      return body.error;
+    }
   }
 
   return `${method} ${path} failed: ${status}`;
 }
 
 function isErrorResponseBody(body: unknown): body is ErrorResponseBody {
-  return typeof body === 'object' && body !== null && 'message' in body;
+  return typeof body === 'object' && body !== null && ('message' in body || 'error' in body);
 }
 
 export function get<TRes>(apiBaseUrl: string, path: string, options?: RequestOptions): Promise<TRes> {

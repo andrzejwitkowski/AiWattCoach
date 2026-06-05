@@ -19,6 +19,7 @@ use crate::domain::completed_workouts::{
 use crate::domain::identity::IdentityUseCases;
 use crate::domain::intervals::{IntervalsConnectionTester, IntervalsUseCases};
 use crate::domain::llm::{LlmChatPort, UserLlmConfigProvider};
+use crate::domain::meso_cycle::MesoCycleUseCases;
 use crate::domain::races::RaceUseCases;
 use crate::domain::settings::UserSettingsUseCases;
 use crate::domain::task_scheduler::AdminTaskSchedulerUseCases;
@@ -49,6 +50,7 @@ pub struct AppState {
     pub admin_prompt_preview_service: Option<Arc<dyn AdminPromptPreviewUseCases>>,
     pub training_load_dashboard_service: Option<Arc<dyn TrainingLoadDashboardReadUseCases>>,
     pub athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
+    pub meso_cycle_service: Option<Arc<dyn MesoCycleUseCases>>,
     pub workout_summary_service: Option<Arc<dyn WorkoutSummaryUseCases>>,
     pub workout_summary_save_notifier: Option<WorkoutSummarySaveNotifier>,
     pub llm_chat_service: Option<Arc<dyn LlmChatPort>>,
@@ -132,6 +134,7 @@ impl AppState {
             admin_prompt_preview_service: None,
             training_load_dashboard_service: None,
             athlete_summary_service: None,
+            meso_cycle_service: None,
             workout_summary_service: None,
             workout_summary_save_notifier: None,
             llm_chat_service: None,
@@ -260,6 +263,14 @@ impl AppState {
         athlete_summary_service: Arc<dyn AthleteSummaryUseCases>,
     ) -> Self {
         self.athlete_summary_service = Some(athlete_summary_service);
+        self
+    }
+
+    pub fn with_meso_cycle_service(
+        mut self,
+        meso_cycle_service: Arc<dyn MesoCycleUseCases>,
+    ) -> Self {
+        self.meso_cycle_service = Some(meso_cycle_service);
         self
     }
 

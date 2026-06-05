@@ -525,6 +525,15 @@ impl TrainingContextBuilder for RecordingTrainingContextBuilder {
             Ok(Self::result_for(None, "summary"))
         })
     }
+
+    fn build_meso_cycle_context(
+        &self,
+        user_id: &str,
+        _meso_end: chrono::NaiveDate,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        let user_id = user_id.to_string();
+        Box::pin(async move { Ok(Self::result_for(None, &user_id)) })
+    }
 }
 
 #[derive(Clone)]
