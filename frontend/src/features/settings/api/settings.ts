@@ -42,6 +42,14 @@ function normalizeAiAgentsPayload(data: unknown) {
         : candidate.selectedProvider,
     selectedModel:
       typeof candidate.selectedModel === 'string' ? candidate.selectedModel.trim() : candidate.selectedModel,
+    mesoCycleProvider:
+      typeof candidate.mesoCycleProvider === 'string'
+        ? candidate.mesoCycleProvider.trim()
+        : candidate.mesoCycleProvider,
+    mesoCycleModel:
+      typeof candidate.mesoCycleModel === 'string'
+        ? candidate.mesoCycleModel.trim()
+        : candidate.mesoCycleModel,
   };
 }
 
@@ -111,6 +119,12 @@ export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
   const deepseekApiKey = getAiAgentsFieldValue(data, 'deepseekApiKey', validated.deepseekApiKey);
   const selectedProvider = getAiAgentsFieldValue(data, 'selectedProvider', validated.selectedProvider);
   const selectedModel = getAiAgentsFieldValue(data, 'selectedModel', validated.selectedModel);
+  const mesoCycleProvider = getOptionalStringFieldValue(
+    data,
+    'mesoCycleProvider',
+    validated.mesoCycleProvider,
+  );
+  const mesoCycleModel = getOptionalStringFieldValue(data, 'mesoCycleModel', validated.mesoCycleModel);
 
   if (openaiApiKey !== undefined) {
     body.openaiApiKey = openaiApiKey;
@@ -129,6 +143,12 @@ export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
   }
   if (selectedModel !== undefined) {
     body.selectedModel = selectedModel;
+  }
+  if (mesoCycleProvider !== undefined) {
+    body.mesoCycleProvider = mesoCycleProvider;
+  }
+  if (mesoCycleModel !== undefined) {
+    body.mesoCycleModel = mesoCycleModel;
   }
 
   return patch(apiBaseUrl, '/api/settings/ai-agents', body);

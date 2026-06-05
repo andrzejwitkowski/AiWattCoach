@@ -16,6 +16,8 @@ type DraftState = {
   deepseekApiKey: string;
   selectedProvider: string;
   selectedModel: string;
+  mesoCycleProvider: string;
+  mesoCycleModel: string;
 };
 
 type ProviderOption = {
@@ -112,8 +114,15 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
       deepseekApiKey: '',
       selectedProvider: aiAgents.selectedProvider ?? '',
       selectedModel: aiAgents.selectedModel ?? '',
+      mesoCycleProvider: aiAgents.mesoCycleProvider ?? '',
+      mesoCycleModel: aiAgents.mesoCycleModel ?? '',
     }),
-    [aiAgents.selectedModel, aiAgents.selectedProvider],
+    [
+      aiAgents.mesoCycleModel,
+      aiAgents.mesoCycleProvider,
+      aiAgents.selectedModel,
+      aiAgents.selectedProvider,
+    ],
   );
   const [draft, setDraft] = useState<DraftState>(persistedDraft);
   const [cleanDraft, setCleanDraft] = useState<DraftState>(persistedDraft);
@@ -159,6 +168,14 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         current.selectedModel === previousPersisted.selectedModel
           ? persistedDraft.selectedModel
           : current.selectedModel,
+      mesoCycleProvider:
+        current.mesoCycleProvider === previousPersisted.mesoCycleProvider
+          ? persistedDraft.mesoCycleProvider
+          : current.mesoCycleProvider,
+      mesoCycleModel:
+        current.mesoCycleModel === previousPersisted.mesoCycleModel
+          ? persistedDraft.mesoCycleModel
+          : current.mesoCycleModel,
     }));
     setCleanDraft((current) => ({
       openaiApiKey:
@@ -185,6 +202,14 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         current.selectedModel === previousPersisted.selectedModel
           ? persistedDraft.selectedModel
           : current.selectedModel,
+      mesoCycleProvider:
+        current.mesoCycleProvider === previousPersisted.mesoCycleProvider
+          ? persistedDraft.mesoCycleProvider
+          : current.mesoCycleProvider,
+      mesoCycleModel:
+        current.mesoCycleModel === previousPersisted.mesoCycleModel
+          ? persistedDraft.mesoCycleModel
+          : current.mesoCycleModel,
     }));
     previousPersistedRef.current = persistedDraft;
   }, [persistedDraft]);
@@ -195,7 +220,9 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     draft.openrouterApiKey !== cleanDraft.openrouterApiKey ||
     draft.deepseekApiKey !== cleanDraft.deepseekApiKey ||
     draft.selectedProvider !== cleanDraft.selectedProvider ||
-    draft.selectedModel !== cleanDraft.selectedModel;
+    draft.selectedModel !== cleanDraft.selectedModel ||
+    draft.mesoCycleProvider !== cleanDraft.mesoCycleProvider ||
+    draft.mesoCycleModel !== cleanDraft.mesoCycleModel;
   const hasAnyPersistedConnectionValue =
     aiAgents.openaiApiKeySet ||
     aiAgents.geminiApiKeySet ||
@@ -212,6 +239,8 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     const trimmedDeepseek = draft.deepseekApiKey.trim();
     const trimmedProvider = draft.selectedProvider.trim();
     const trimmedModel = draft.selectedModel.trim();
+    const trimmedMesoProvider = draft.mesoCycleProvider.trim();
+    const trimmedMesoModel = draft.mesoCycleModel.trim();
 
     if (trimmedOpenai) {
       request.openaiApiKey = trimmedOpenai;
@@ -234,11 +263,19 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     if (trimmedModel !== persistedDraft.selectedModel && !('selectedModel' in request)) {
       request.selectedModel = trimmedModel.length > 0 ? trimmedModel : '';
     }
+    if (trimmedMesoProvider !== persistedDraft.mesoCycleProvider) {
+      request.mesoCycleProvider = trimmedMesoProvider.length > 0 ? trimmedMesoProvider : '';
+    }
+    if (trimmedMesoModel !== persistedDraft.mesoCycleModel) {
+      request.mesoCycleModel = trimmedMesoModel.length > 0 ? trimmedMesoModel : '';
+    }
 
     return request;
   }, [draft, persistedDraft]);
 
   const selectedProviderOption = getProviderOption(draft.selectedProvider);
+  const mesoProviderOption = getProviderOption(draft.mesoCycleProvider);
+  const mesoSuggestedModels = mesoProviderOption?.suggestedModels ?? [];
   const suggestedModels = selectedProviderOption?.suggestedModels ?? [];
   const openaiHasKey = aiAgents.openaiApiKeySet || draft.openaiApiKey.trim().length > 0;
   const geminiHasKey = aiAgents.geminiApiKeySet || draft.geminiApiKey.trim().length > 0;
@@ -297,6 +334,25 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         ...current,
         selectedProvider: value,
         selectedModel: shouldAutofillModel ? nextOption?.suggestedModels[0] ?? current.selectedModel : current.selectedModel,
+      };
+    });
+  };
+
+  const updateMesoProvider = (value: string) => {
+    clearTestStatusIfNeeded();
+    setDraft((current) => {
+      const previousOption = getProviderOption(current.mesoCycleProvider);
+      const nextOption = getProviderOption(value);
+      const currentModel = current.mesoCycleModel.trim();
+      const shouldAutofillModel =
+        Boolean(nextOption) && (!currentModel || previousOption?.suggestedModels.includes(currentModel));
+
+      return {
+        ...current,
+        mesoCycleProvider: value,
+        mesoCycleModel: shouldAutofillModel
+          ? nextOption?.suggestedModels[0] ?? current.mesoCycleModel
+          : current.mesoCycleModel,
       };
     });
   };
@@ -448,6 +504,71 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="mt-8 rounded-xl border border-white/10 bg-slate-950/40 p-4">
+        <h3 className="text-sm font-semibold text-white">Meso Cycle Coach</h3>
+        <p className="mt-1 text-xs text-slate-400">
+          Optional override for 30-day meso plan generation. Leave empty to use the active provider
+          and model above.
+        </p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div>
+            <label
+              htmlFor="meso-cycle-provider"
+              className="mb-2 block text-xs uppercase tracking-widest text-slate-400"
+            >
+              Meso Provider
+            </label>
+            <select
+              id="meso-cycle-provider"
+              className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 focus:border-cyan-400/50 focus:outline-none"
+              value={draft.mesoCycleProvider}
+              onChange={(event) => updateMesoProvider(event.target.value)}
+            >
+              <option value="">Use active provider</option>
+              {PROVIDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="meso-cycle-model"
+              className="mb-2 block text-xs uppercase tracking-widest text-slate-400"
+            >
+              Meso Model
+            </label>
+            <input
+              id="meso-cycle-model"
+              className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-400/50 focus:outline-none"
+              type="text"
+              placeholder={draft.mesoCycleProvider ? 'Model for meso generation' : 'Uses active model when empty'}
+              value={draft.mesoCycleModel}
+              onChange={(event) => updateDraft('mesoCycleModel', event.target.value)}
+            />
+            {mesoSuggestedModels.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {mesoSuggestedModels.map((model) => (
+                  <button
+                    key={model}
+                    type="button"
+                    className={`rounded-full border px-3 py-1 text-xs transition ${
+                      draft.mesoCycleModel.trim() === model
+                        ? 'border-cyan-400/60 bg-cyan-400/15 text-cyan-200'
+                        : 'border-white/10 bg-slate-900/60 text-slate-300 hover:border-cyan-400/30 hover:text-cyan-200'
+                    }`}
+                    onClick={() => updateDraft('mesoCycleModel', model)}
+                  >
+                    {model}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 

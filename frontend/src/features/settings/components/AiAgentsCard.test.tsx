@@ -83,7 +83,7 @@ describe('AiAgentsCard', () => {
     render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
 
     expect(screen.getByLabelText(/active provider/i)).toHaveValue('openrouter');
-    expect(screen.getByLabelText(/model/i)).toHaveValue('openai/gpt-4o-mini');
+    expect(screen.getByLabelText(/^Model$/i)).toHaveValue('openai/gpt-4o-mini');
     expect(screen.getByRole('button', { name: 'openai/gpt-5' })).toBeInTheDocument();
   });
 
@@ -98,7 +98,7 @@ describe('AiAgentsCard', () => {
 
     render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
 
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: 'anthropic/claude-3.5-sonnet' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
@@ -120,7 +120,7 @@ describe('AiAgentsCard', () => {
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'openrouter' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: 'openai/gpt-4.1-mini' },
     });
     fireEvent.change(screen.getByLabelText(/openrouter api key/i), {
@@ -146,7 +146,7 @@ describe('AiAgentsCard', () => {
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'deepseek' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: 'deepseek-v4-pro' },
     });
     fireEvent.change(screen.getByLabelText(/deepseek api key/i), {
@@ -190,7 +190,7 @@ describe('AiAgentsCard', () => {
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: '' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: '' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
@@ -226,7 +226,7 @@ describe('AiAgentsCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
     expect(screen.getByText(/testing the current visible ai draft/i)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: 'gpt-4o-mini' },
     });
 
@@ -252,7 +252,7 @@ describe('AiAgentsCard', () => {
       target: { value: 'gemini' },
     });
 
-    expect(screen.getByLabelText(/model/i)).toHaveValue('gemini-3-flash-preview');
+    expect(screen.getByLabelText(/^Model$/i)).toHaveValue('gemini-3-flash-preview');
   });
 
   it('autofills deepseek model when provider switches to deepseek', () => {
@@ -262,7 +262,7 @@ describe('AiAgentsCard', () => {
       target: { value: 'deepseek' },
     });
 
-    expect(screen.getByLabelText(/model/i)).toHaveValue('deepseek-v4-flash');
+    expect(screen.getByLabelText(/^Model$/i)).toHaveValue('deepseek-v4-flash');
   });
 
   it('shows higher-end suggested models for each provider', () => {
@@ -295,7 +295,7 @@ describe('AiAgentsCard', () => {
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'openai' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: '' },
     });
 

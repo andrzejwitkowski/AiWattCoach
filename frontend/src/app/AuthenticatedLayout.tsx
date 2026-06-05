@@ -4,6 +4,7 @@ import {
   Bell,
   Bot,
   Calendar,
+  CalendarRange,
   Flag,
   LayoutDashboard,
   ListChecks,
@@ -64,7 +65,8 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
 
         <nav className="mt-4 flex-1 px-3 space-y-1">
           <NavItem to="/app" icon={LayoutDashboard} label={t('nav.dashboard')} />
-          <NavItem to="/calendar" icon={Calendar} label={t('nav.calendar')} />
+          <NavItem end to="/calendar" icon={Calendar} label={t('nav.calendar')} />
+          <NavItem to="/calendar/meso" icon={CalendarRange} label={t('nav.mesoCycle')} />
           <NavItem to="/races" icon={Flag} label={t('nav.races')} />
           <NavItem to="/ai-coach" icon={Bot} label={t('nav.aiCoach')} />
           <NavItem to="/settings" icon={Settings} label={t('nav.settings')} />
@@ -148,12 +150,14 @@ type NavItemProps = {
   to: string;
   icon: ComponentType<{ size?: number; className?: string }>;
   label: string;
+  end?: boolean;
 };
 
-function NavItem({ to, icon: Icon, label }: NavItemProps) {
+function NavItem({ to, icon: Icon, label, end }: NavItemProps) {
   return (
     <NavLink
       key={to + label}
+      end={end}
       to={to}
       className={({ isActive }) =>
         [
