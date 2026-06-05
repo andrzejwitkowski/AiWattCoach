@@ -2,15 +2,10 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 
-import { ApiBaseUrlProvider } from '../lib/apiBaseUrl';
 import { useSettings } from '../features/settings/context/SettingsContext';
 import { useMesoCycleCalendar } from '../features/meso-cycle/hooks/useMesoCycleCalendar';
 
-type MesoCycleCalendarPageProps = {
-  apiBaseUrl: string;
-};
-
-export function MesoCycleCalendarPage({ apiBaseUrl }: MesoCycleCalendarPageProps) {
+export function MesoCycleCalendarPage() {
   const { t } = useTranslation();
   const settingsCtx = useSettings();
   const {
@@ -25,13 +20,11 @@ export function MesoCycleCalendarPage({ apiBaseUrl }: MesoCycleCalendarPageProps
     refresh,
     generate,
   } = useMesoCycleCalendar({
-    apiBaseUrl,
     settings: settingsCtx.settings,
   });
 
   return (
-    <ApiBaseUrlProvider value={apiBaseUrl}>
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 md:px-8">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 md:px-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-2">
             <Link
@@ -57,7 +50,9 @@ export function MesoCycleCalendarPage({ apiBaseUrl }: MesoCycleCalendarPageProps
               }}
               type="button"
             >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw
+                className={`h-4 w-4 ${isLoading ? 'animate-spin motion-reduce:animate-none' : ''}`}
+              />
               {t('mesoCycle.refresh')}
             </button>
             <button
@@ -69,7 +64,11 @@ export function MesoCycleCalendarPage({ apiBaseUrl }: MesoCycleCalendarPageProps
               }}
               type="button"
             >
-              {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {isGenerating ? (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
               {isGenerating ? t('mesoCycle.generating') : t('mesoCycle.generate')}
             </button>
           </div>
@@ -148,6 +147,5 @@ export function MesoCycleCalendarPage({ apiBaseUrl }: MesoCycleCalendarPageProps
           </div>
         )}
       </div>
-    </ApiBaseUrlProvider>
   );
 }

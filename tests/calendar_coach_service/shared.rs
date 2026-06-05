@@ -19,7 +19,7 @@ use aiwattcoach::domain::{
     },
     training_context::{
         RenderedTrainingContext, TrainingContext, TrainingContextBuildResult,
-        TrainingContextBuilder,
+        TrainingContextBuilder, MESO_CYCLE_FOCUS_ID,
     },
 };
 
@@ -528,11 +528,10 @@ impl TrainingContextBuilder for RecordingTrainingContextBuilder {
 
     fn build_meso_cycle_context(
         &self,
-        user_id: &str,
+        _user_id: &str,
         _meso_end: chrono::NaiveDate,
     ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
-        let user_id = user_id.to_string();
-        Box::pin(async move { Ok(Self::result_for(None, &user_id)) })
+        Box::pin(async move { Ok(Self::result_for(None, MESO_CYCLE_FOCUS_ID)) })
     }
 }
 

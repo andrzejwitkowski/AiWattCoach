@@ -14,6 +14,7 @@ pub struct MesoCycleWindowDto {
 pub struct MesoCycleOperationDto {
     #[serde(rename = "operationKey")]
     pub operation_key: String,
+    #[serde(rename = "status")]
     pub status: String,
     #[serde(rename = "mesoStart")]
     pub meso_start: Option<String>,
@@ -27,6 +28,7 @@ pub struct MesoCycleOperationDto {
 
 #[derive(Serialize)]
 pub struct MesoCycleStatusDto {
+    #[serde(rename = "window")]
     pub window: Option<MesoCycleWindowDto>,
     #[serde(rename = "hasPendingGeneration")]
     pub has_pending_generation: bool,
@@ -36,11 +38,13 @@ pub struct MesoCycleStatusDto {
 
 #[derive(Serialize)]
 pub struct MesoCycleCalendarDayDto {
+    #[serde(rename = "date")]
     pub date: String,
     #[serde(rename = "restDay")]
     pub rest_day: bool,
     #[serde(rename = "restDayReason")]
     pub rest_day_reason: Option<String>,
+    #[serde(rename = "name")]
     pub name: Option<String>,
     #[serde(rename = "rawWorkoutDoc")]
     pub raw_workout_doc: Option<String>,

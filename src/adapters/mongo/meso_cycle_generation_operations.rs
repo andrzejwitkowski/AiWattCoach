@@ -6,9 +6,12 @@ use mongodb::{
 use serde::{Deserialize, Serialize};
 
 use super::durable_ops::{mongo_claim_pending, ClaimInput, ClaimOutcome, OpMetadata};
-use super::time::{optional_epoch_seconds_to_bson_datetime, resolve_required_epoch_seconds};
+use super::time::{
+    optional_epoch_seconds_to_bson_datetime, required_epoch_seconds_to_bson_datetime,
+    resolve_required_epoch_seconds,
+};
 use crate::domain::{
-    ai_workflow::{AttemptRecord, WorkflowStatus},
+    ai_workflow::{AttemptRecord, WorkflowPhase, WorkflowStatus},
     llm_tools::LlmToolLoopState,
     meso_cycle::{
         BoxFuture, MesoCycleError, MesoCycleFailureState, MesoCycleGenerationClaimResult,
@@ -266,11 +269,11 @@ fn map_operation_to_document(
         operation_key: operation.operation_key.clone(),
         user_id: operation.user_id.clone(),
         requested_at_epoch_seconds: Some(operation.requested_at_epoch_seconds),
-        requested_at: optional_epoch_seconds_to_bson_datetime(
-            Some(operation.requested_at_epoch_seconds),
+        requested_at: required_epoch_seconds_to_bson_datetime(
+            operation.requested_at_epoch_seconds,
             "requested_at",
         )
-        .expect("requested_at should fit BSON DateTime"),
+        .map_err(MesoCycleError::Repository)?,
         meso_start: operation.meso_start.clone(),
         meso_end: operation.meso_end.clone(),
         status: map_status_to_document(&operation.status).to_string(),
@@ -278,24 +281,16 @@ fn map_operation_to_document(
         raw_plan_description: operation.raw_plan_description.clone(),
         tool_loop_state: operation.tool_loop_state.clone(),
         projection_persisted_at_epoch_seconds: operation.projection_persisted_at_epoch_seconds,
-        projection_persisted_at: operation.projection_persisted_at_epoch_seconds.and_then(
-            |epoch_seconds| {
-                optional_epoch_seconds_to_bson_datetime(
-                    Some(epoch_seconds),
-                    "projection_persisted_at",
-                )
-                .expect("projection_persisted_at should fit BSON DateTime")
-            },
-        ),
+        projection_persisted_at: optional_epoch_seconds_to_bson_datetime(
+            operation.projection_persisted_at_epoch_seconds,
+            "projection_persisted_at",
+        )
+        .map_err(MesoCycleError::Repository)?,
         attempts: operation
             .attempts
             .iter()
-            .map(|attempt| AttemptRecordDocument {
-                phase: format!("{:?}", attempt.phase).to_ascii_lowercase(),
-                attempt_number: i64::from(attempt.attempt_number),
-                recorded_at_epoch_seconds: Some(attempt.recorded_at_epoch_seconds),
-            })
-            .collect(),
+            .map(map_attempt_to_document)
+            .collect::<Result<Vec<_>, _>>()?,
         failure: operation
             .failure
             .as_ref()
@@ -303,31 +298,79 @@ fn map_operation_to_document(
                 message: failure.message.clone(),
             }),
         started_at_epoch_seconds: Some(operation.started_at_epoch_seconds),
-        started_at: optional_epoch_seconds_to_bson_datetime(
-            Some(operation.started_at_epoch_seconds),
+        started_at: required_epoch_seconds_to_bson_datetime(
+            operation.started_at_epoch_seconds,
             "started_at",
         )
-        .expect("started_at should fit BSON DateTime"),
+        .map_err(MesoCycleError::Repository)?,
         last_attempt_at_epoch_seconds: Some(operation.last_attempt_at_epoch_seconds),
-        last_attempt_at: optional_epoch_seconds_to_bson_datetime(
-            Some(operation.last_attempt_at_epoch_seconds),
+        last_attempt_at: required_epoch_seconds_to_bson_datetime(
+            operation.last_attempt_at_epoch_seconds,
             "last_attempt_at",
         )
-        .expect("last_attempt_at should fit BSON DateTime"),
+        .map_err(MesoCycleError::Repository)?,
         attempt_count: i64::from(operation.attempt_count),
         created_at_epoch_seconds: Some(operation.created_at_epoch_seconds),
-        created_at: optional_epoch_seconds_to_bson_datetime(
-            Some(operation.created_at_epoch_seconds),
+        created_at: required_epoch_seconds_to_bson_datetime(
+            operation.created_at_epoch_seconds,
             "created_at",
         )
-        .expect("created_at should fit BSON DateTime"),
+        .map_err(MesoCycleError::Repository)?,
         updated_at_epoch_seconds: Some(operation.updated_at_epoch_seconds),
-        updated_at: optional_epoch_seconds_to_bson_datetime(
-            Some(operation.updated_at_epoch_seconds),
+        updated_at: required_epoch_seconds_to_bson_datetime(
+            operation.updated_at_epoch_seconds,
             "updated_at",
         )
-        .expect("updated_at should fit BSON DateTime"),
+        .map_err(MesoCycleError::Repository)?,
     })
+}
+
+fn map_attempt_to_document(
+    attempt: &AttemptRecord,
+) -> Result<AttemptRecordDocument, MesoCycleError> {
+    Ok(AttemptRecordDocument {
+        phase: map_phase_to_document(&attempt.phase).to_string(),
+        attempt_number: i64::from(attempt.attempt_number),
+        recorded_at_epoch_seconds: Some(attempt.recorded_at_epoch_seconds),
+    })
+}
+
+fn map_document_to_attempt(
+    document: AttemptRecordDocument,
+) -> Result<AttemptRecord, MesoCycleError> {
+    Ok(AttemptRecord {
+        phase: map_document_to_phase(&document.phase)?,
+        attempt_number: u32::try_from(document.attempt_number).map_err(|_| {
+            MesoCycleError::Repository("invalid meso cycle attempt number".to_string())
+        })?,
+        recorded_at_epoch_seconds: resolve_required_epoch_seconds(
+            None,
+            document.recorded_at_epoch_seconds,
+            "recorded_at",
+        )
+        .map_err(MesoCycleError::Repository)?,
+    })
+}
+
+fn map_phase_to_document(phase: &WorkflowPhase) -> &'static str {
+    match phase {
+        WorkflowPhase::WorkoutRecap => "workout_recap",
+        WorkflowPhase::InitialGeneration => "initial_generation",
+        WorkflowPhase::Correction => "correction",
+        WorkflowPhase::ProjectionUpdate => "projection_update",
+    }
+}
+
+fn map_document_to_phase(phase: &str) -> Result<WorkflowPhase, MesoCycleError> {
+    match phase {
+        "workout_recap" => Ok(WorkflowPhase::WorkoutRecap),
+        "initial_generation" => Ok(WorkflowPhase::InitialGeneration),
+        "correction" => Ok(WorkflowPhase::Correction),
+        "projection_update" => Ok(WorkflowPhase::ProjectionUpdate),
+        _ => Err(MesoCycleError::Repository(format!(
+            "invalid meso cycle attempt phase: {phase}"
+        ))),
+    }
 }
 
 fn map_document_to_operation(
@@ -352,12 +395,8 @@ fn map_document_to_operation(
         attempts: document
             .attempts
             .into_iter()
-            .map(|attempt| AttemptRecord {
-                phase: crate::domain::ai_workflow::WorkflowPhase::InitialGeneration,
-                attempt_number: attempt.attempt_number as u32,
-                recorded_at_epoch_seconds: attempt.recorded_at_epoch_seconds.unwrap_or(0),
-            })
-            .collect(),
+            .map(map_document_to_attempt)
+            .collect::<Result<Vec<_>, _>>()?,
         failure: document.failure.map(|failure| MesoCycleFailureState {
             message: failure.message,
         }),

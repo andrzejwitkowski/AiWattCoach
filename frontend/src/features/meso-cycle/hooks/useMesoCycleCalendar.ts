@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useApiBaseUrl } from '../../../lib/apiBaseUrl';
 import { addDays, parseDateKey, toDateKey } from '../../calendar/utils/dateUtils';
 import type { UserSettingsResponse } from '../../settings/types';
 import { generateMesoCyclePlan, loadMesoCycleCalendar, loadMesoCycleStatus } from '../api/mesoCycle';
@@ -9,7 +10,6 @@ const POLL_INTERVAL_MS = 3000;
 const MAX_POLL_ATTEMPTS = 120;
 
 type UseMesoCycleCalendarOptions = {
-  apiBaseUrl: string;
   settings: UserSettingsResponse | null;
 };
 
@@ -47,7 +47,8 @@ export function canGenerateMesoCycle(settings: UserSettingsResponse | null): boo
   return hasKey;
 }
 
-export function useMesoCycleCalendar({ apiBaseUrl, settings }: UseMesoCycleCalendarOptions) {
+export function useMesoCycleCalendar({ settings }: UseMesoCycleCalendarOptions) {
+  const apiBaseUrl = useApiBaseUrl();
   const [state, setState] = useState<MesoCycleCalendarState>({
     status: null,
     days: [],
@@ -114,12 +115,23 @@ export function useMesoCycleCalendar({ apiBaseUrl, settings }: UseMesoCycleCalen
       return;
     }
 
-    setState((current) => ({ ...current, isGenerating: true, error: null }));
+    setState((current) => ({ ...current, error: null }));
     pollAttemptsRef.current = 0;
 
     try {
       await generateMesoCyclePlan(apiBaseUrl);
-      await refresh();
+      setState((current) => ({ ...current, isGenerating: true }));
+      try {
+        await refresh();
+      } catch (refreshError) {
+        setState((current) => ({
+          ...current,
+          error:
+            refreshError instanceof Error
+              ? refreshError.message
+              : 'Failed to refresh meso cycle calendar',
+        }));
+      }
     } catch (error) {
       setState((current) => ({
         ...current,

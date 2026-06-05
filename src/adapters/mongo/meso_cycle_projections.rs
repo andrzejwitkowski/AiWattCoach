@@ -158,12 +158,19 @@ impl MesoCycleProjectionRepository for MongoMesoCycleProjectionRepository {
                     .map_err(|error| MesoCycleError::Repository(error.to_string()))?;
             }
 
+            let active_dates: Vec<&str> = documents
+                .iter()
+                .map(|document| document.date.as_str())
+                .collect();
             collection
                 .update_many(
                     doc! {
                         "user_id": &user_id,
                         "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
-                        "operation_key": { "$ne": &operation_key },
+                        "$or": [
+                            { "operation_key": { "$ne": &operation_key } },
+                            { "date": { "$nin": &active_dates } },
+                        ],
                     },
                     doc! {
                         "$set": {

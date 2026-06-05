@@ -126,7 +126,11 @@ export function App() {
               <Route element={<SettingsPage apiBaseUrl={API_BASE_URL} />} path="/settings" />
               <Route element={<CalendarPage apiBaseUrl={API_BASE_URL} />} path="/calendar" />
               <Route
-                element={<MesoCycleCalendarPage apiBaseUrl={API_BASE_URL} />}
+                element={
+                  <ApiBaseUrlProvider value={API_BASE_URL}>
+                    <MesoCycleCalendarPage />
+                  </ApiBaseUrlProvider>
+                }
                 path="/calendar/meso"
               />
               <Route element={<RacesPage apiBaseUrl={API_BASE_URL} />} path="/races" />

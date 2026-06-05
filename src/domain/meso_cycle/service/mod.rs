@@ -120,20 +120,31 @@ where
     ) -> Result<MesoCycleGenerationOperation, MesoCycleError> {
         let now = self.clock.now_epoch_seconds();
         let operation_key = MesoCycleGenerationOperation::stable_operation_key(user_id);
-        let pending =
-            MesoCycleGenerationOperation::pending(operation_key, user_id.to_string(), now, now);
+        let mut claim_retries = 0;
 
-        let operation = match self
-            .operations
-            .claim_pending(pending, self.stale_pending_before_epoch_seconds())
-            .await?
-        {
-            MesoCycleGenerationClaimResult::Claimed(operation) => operation,
-            MesoCycleGenerationClaimResult::AlreadyPending => {
-                return Err(MesoCycleError::AlreadyPending);
-            }
-            MesoCycleGenerationClaimResult::AlreadyCompleted(_) => {
-                return Err(MesoCycleError::AlreadyPending);
+        let operation = loop {
+            let pending = MesoCycleGenerationOperation::pending(
+                operation_key.clone(),
+                user_id.to_string(),
+                now,
+                now,
+            );
+
+            match self
+                .operations
+                .claim_pending(pending, self.stale_pending_before_epoch_seconds())
+                .await?
+            {
+                MesoCycleGenerationClaimResult::Claimed(operation) => break operation,
+                MesoCycleGenerationClaimResult::AlreadyPending => {
+                    return Err(MesoCycleError::AlreadyPending);
+                }
+                MesoCycleGenerationClaimResult::AlreadyCompleted(_) if claim_retries == 0 => {
+                    claim_retries += 1;
+                }
+                MesoCycleGenerationClaimResult::AlreadyCompleted(_) => {
+                    return Err(MesoCycleError::AlreadyPending);
+                }
             }
         };
 

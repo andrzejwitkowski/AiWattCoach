@@ -103,17 +103,31 @@ impl MongoTrainingPlanGenerationOperationRepository {
 
     pub async fn ensure_indexes(&self) -> Result<(), TrainingPlanError> {
         self.collection
-            .create_indexes([IndexModel::builder()
-                .keys(doc! { "operation_key": 1 })
-                .options(
-                    IndexOptions::builder()
-                        .name(
-                            "training_plan_generation_operations_operation_key_unique".to_string(),
-                        )
-                        .unique(true)
-                        .build(),
-                )
-                .build()])
+            .create_indexes([
+                IndexModel::builder()
+                    .keys(doc! { "operation_key": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name(
+                                "training_plan_generation_operations_operation_key_unique"
+                                    .to_string(),
+                            )
+                            .unique(true)
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1, "status": 1, "updated_at_epoch_seconds": -1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name(
+                                "training_plan_generation_operations_user_status_updated"
+                                    .to_string(),
+                            )
+                            .build(),
+                    )
+                    .build(),
+            ])
             .await
             .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
         Ok(())

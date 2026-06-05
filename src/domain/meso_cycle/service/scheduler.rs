@@ -241,6 +241,7 @@ where
         &self,
         user_id: &str,
         operation_key: &str,
+        requested_at_epoch_seconds: i64,
     ) -> Result<ScheduledTask, MesoCycleError> {
         build_scheduled_task(NewScheduledTaskInput {
             id: self.ids.new_id("task"),
@@ -254,7 +255,7 @@ where
                 max_attempts: MESO_CYCLE_RETRY_MAX_ATTEMPTS,
                 delay_seconds: MESO_CYCLE_RETRY_DELAY_SECONDS,
             },
-            dedupe_key: operation_key.to_string(),
+            dedupe_key: format!("meso-cycle:generate:{user_id}:{requested_at_epoch_seconds}"),
             execution_timeout_seconds: MESO_CYCLE_EXECUTION_TIMEOUT_SECONDS,
             leader_only: false,
             now_epoch_seconds: self.scheduler.now_epoch_seconds(),
@@ -267,7 +268,11 @@ where
         user_id: &str,
     ) -> Result<MesoCycleGenerationOperation, MesoCycleError> {
         let operation = self.base.generate_plan(user_id).await?;
-        let task = self.build_generate_task(user_id, &operation.operation_key)?;
+        let task = self.build_generate_task(
+            user_id,
+            &operation.operation_key,
+            operation.requested_at_epoch_seconds,
+        )?;
         if let Err(error) = self.scheduler.enqueue_no_result_task(task).await {
             let mapped = map_task_scheduler_error(error);
             let _ = self
