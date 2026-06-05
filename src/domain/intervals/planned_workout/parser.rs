@@ -203,24 +203,45 @@ fn parse_repeat(line: &str) -> Result<Option<PlannedWorkoutRepeat>, PlannedWorko
 
 fn parse_duration_token(token: &str) -> Option<i32> {
     let token = token.trim().to_ascii_lowercase();
-    let split_index = token
-        .find(|ch: char| !ch.is_ascii_digit())
-        .unwrap_or(token.len());
-    let (value, unit) = token.split_at(split_index);
-    if value.is_empty() || unit.is_empty() {
+    if token.is_empty() {
         return None;
     }
 
-    let value = value.parse::<i32>().ok()?;
-    if value <= 0 {
-        return None;
+    let mut total_seconds = 0i32;
+    let mut chars = token.chars().peekable();
+
+    while chars.peek().is_some() {
+        let mut digits = String::new();
+        while chars.peek().is_some_and(|ch| ch.is_ascii_digit()) {
+            digits.push(chars.next().expect("peeked digit"));
+        }
+        if digits.is_empty() {
+            return None;
+        }
+
+        let value = digits.parse::<i32>().ok()?;
+        if value <= 0 {
+            return None;
+        }
+
+        let mut unit = String::new();
+        while chars.peek().is_some_and(|ch| ch.is_ascii_alphabetic()) {
+            unit.push(chars.next().expect("peeked unit char"));
+        }
+        if unit.is_empty() {
+            return None;
+        }
+
+        let segment_seconds = match unit.as_str() {
+            "h" | "hr" | "hrs" | "hour" | "hours" => value.checked_mul(3600)?,
+            "m" | "min" | "mins" | "minute" | "minutes" => value.checked_mul(60)?,
+            "s" | "sec" | "secs" | "second" | "seconds" => value,
+            _ => return None,
+        };
+        total_seconds = total_seconds.checked_add(segment_seconds)?;
     }
 
-    match unit {
-        "m" | "min" => value.checked_mul(60),
-        "s" => Some(value),
-        _ => None,
-    }
+    (total_seconds > 0).then_some(total_seconds)
 }
 
 fn parse_target(token: &str) -> Option<PlannedWorkoutTarget> {
@@ -374,6 +395,24 @@ fn is_exact_date(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_planned_workout_accepts_compound_duration_tokens() {
+        let workout = parse_planned_workout("- 4m30s 65%")
+            .expect("compound minute-second duration should parse");
+
+        assert_eq!(
+            workout.lines,
+            vec![PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                duration_seconds: 270,
+                kind: PlannedWorkoutStepKind::Steady,
+                target: PlannedWorkoutTarget::PercentFtp {
+                    min: 65.0,
+                    max: 65.0,
+                },
+            })]
+        );
+    }
 
     #[test]
     fn parse_planned_workout_preserves_blank_lines() {
