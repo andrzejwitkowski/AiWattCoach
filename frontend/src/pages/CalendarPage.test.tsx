@@ -1,5 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../i18n';
@@ -39,6 +40,14 @@ vi.mock('../features/calendar/hooks/useCalendarCoachChat', () => ({
   })),
 }));
 
+function renderCalendarPage(apiBaseUrl: string) {
+  return render(
+    <MemoryRouter>
+      <CalendarPage apiBaseUrl={apiBaseUrl} />
+    </MemoryRouter>,
+  );
+}
+
 describe('CalendarPage', () => {
   beforeEach(async () => {
     setScreenWidth(1280);
@@ -49,8 +58,8 @@ describe('CalendarPage', () => {
       isLoading: false,
       isStartingNewConversation: false,
       isConnected: false,
-  isCoachTyping: false,
-  isCoachThinking: false,
+      isCoachTyping: false,
+      isCoachThinking: false,
       error: null,
       sendMessage: vi.fn().mockResolvedValue(true),
       startNewConversation: vi.fn().mockResolvedValue(true),
@@ -64,7 +73,7 @@ describe('CalendarPage', () => {
   });
 
   it('renders a fixed AI Coach button above the calendar', () => {
-    render(<CalendarPage apiBaseUrl="/api" />);
+    renderCalendarPage('/api');
 
     expect(screen.getByTestId('calendar-grid')).toBeInTheDocument();
 
@@ -78,7 +87,7 @@ describe('CalendarPage', () => {
   it('keeps the mobile-safe coach button spacing on narrow screens', () => {
     setScreenWidth(390);
 
-    render(<CalendarPage apiBaseUrl="/api" />);
+    renderCalendarPage('/api');
 
     const openButton = screen.getByRole('button', { name: /open ai coach/i });
 
@@ -89,7 +98,7 @@ describe('CalendarPage', () => {
   it('opens and closes the calendar coach modal', async () => {
     const user = userEvent.setup();
 
-    render(<CalendarPage apiBaseUrl="/backend" />);
+    renderCalendarPage('/backend');
 
     await user.click(screen.getByRole('button', { name: /open ai coach/i }));
 
@@ -109,7 +118,7 @@ describe('CalendarPage', () => {
   it('traps focus inside the modal while tabbing', async () => {
     const user = userEvent.setup();
 
-    render(<CalendarPage apiBaseUrl="" />);
+    renderCalendarPage('');
 
     await user.click(screen.getByRole('button', { name: /open ai coach/i }));
 
@@ -136,7 +145,7 @@ describe('CalendarPage', () => {
     const { useCalendarCoachChat } = await import('../features/calendar/hooks/useCalendarCoachChat');
     const user = userEvent.setup();
 
-    render(<CalendarPage apiBaseUrl="/backend" />);
+    renderCalendarPage('/backend');
 
     await user.click(screen.getByRole('button', { name: /open ai coach/i }));
 
