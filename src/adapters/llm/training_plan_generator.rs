@@ -23,7 +23,7 @@ use crate::domain::{
         training_plan_llm_envelope_json_schema, training_plan_output_grammar,
         training_plan_planning_guidelines, TrainingPlanConversationRole, TrainingPlanError,
         TrainingPlanGenerator, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
-        TrainingPlanToolLoopCheckpoint,
+        TrainingPlanToolLoopCheckpoint, TRAINING_PLAN_WINDOW_DAY_COUNT,
     },
     workout_summary::WorkoutRecap,
 };
@@ -552,7 +552,10 @@ fn training_plan_initial_window_system_prompt(availability_configured: bool) -> 
     format!(
         "{TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {PACKED_TRAINING_CONTEXT_LEGEND}",
         training_plan_llm_envelope_json_schema(),
-        training_plan_planning_guidelines(availability_configured),
+        training_plan_planning_guidelines(
+            availability_configured,
+            TRAINING_PLAN_WINDOW_DAY_COUNT,
+        ),
         training_plan_output_grammar(),
     )
 }
@@ -561,7 +564,10 @@ fn training_plan_correction_system_prompt(availability_configured: bool) -> Stri
     format!(
         "{TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {PACKED_TRAINING_CONTEXT_LEGEND}",
         training_plan_llm_envelope_json_schema(),
-        training_plan_planning_guidelines(availability_configured),
+        training_plan_planning_guidelines(
+            availability_configured,
+            TRAINING_PLAN_WINDOW_DAY_COUNT,
+        ),
         training_plan_output_grammar(),
     )
 }

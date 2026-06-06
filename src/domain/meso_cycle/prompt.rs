@@ -100,7 +100,7 @@ pub fn meso_cycle_system_prompt(availability_configured: bool) -> String {
     format!(
         "{MESO_CYCLE_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {PACKED_TRAINING_CONTEXT_LEGEND}",
         training_plan_llm_envelope_json_schema(),
-        training_plan_planning_guidelines(availability_configured),
+        training_plan_planning_guidelines(availability_configured, MESO_CYCLE_WINDOW_DAY_COUNT),
         training_plan_output_grammar(),
     )
 }

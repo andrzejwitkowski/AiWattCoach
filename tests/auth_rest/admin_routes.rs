@@ -218,6 +218,7 @@ async fn admin_prompt_preview_meso_cycle_returns_payload_for_admin() {
     let payload: Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(payload["meta"]["surface"], "meso_cycle_coach");
+    assert_eq!(payload["meta"]["userId"], "user-1");
     assert_eq!(payload["meta"]["mesoStart"], "2026-05-02");
     assert_eq!(payload["request"]["systemPrompt"], "meso-cycle-system");
 }

@@ -23,7 +23,9 @@ pub use ports::{
     TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
     TrainingPlanToolLoopCheckpoint, TrainingPlanWorkoutSummaryPort,
 };
-pub use prompt_guidance::{training_plan_output_grammar, training_plan_planning_guidelines};
+pub use prompt_guidance::{
+    training_plan_output_grammar, training_plan_planning_guidelines, TRAINING_PLAN_WINDOW_DAY_COUNT,
+};
 pub use service::{
     training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
     TrainingPlanGenerationService, TrainingPlanUseCases,
