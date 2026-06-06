@@ -1,6 +1,7 @@
 mod model;
 mod parsing;
 mod ports;
+mod prompt;
 mod service;
 mod window;
 
@@ -14,6 +15,10 @@ pub use parsing::parse_meso_plan_window;
 pub use ports::{
     BoxFuture, MesoCycleGenerationOperationRepository, MesoCycleGenerator, MesoCycleLlmConfigPort,
     MesoCycleProjectionRepository, MesoCycleToolLoopCheckpoint, MesoCycleWindowPort,
+};
+pub use prompt::{
+    assemble_meso_cycle_coach_request, meso_cycle_system_prompt, MesoCycleCoachPromptBundle,
+    MesoCycleCoachPromptInput,
 };
 pub use service::{
     meso_cycle_generate_task_handler, MesoCycleService, MesoCycleServiceExecutor,

@@ -28,6 +28,20 @@ export function MetaBar({ meta }: MetaBarProps) {
           </span>
         </>
       ) : null}
+      {meta.mesoStart && meta.mesoEnd ? (
+        <>
+          <span className="text-slate-500">·</span>
+          <span>
+            meso {meta.mesoStart} → {meta.mesoEnd}
+          </span>
+        </>
+      ) : null}
+      {meta.aiCoachLastDate ? (
+        <>
+          <span className="text-slate-500">·</span>
+          <span>ai coach end {meta.aiCoachLastDate}</span>
+        </>
+      ) : null}
     </div>
   );
 }

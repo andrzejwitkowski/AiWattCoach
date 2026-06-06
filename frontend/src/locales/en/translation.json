@@ -64,6 +64,7 @@
     "dateLabel": "Date",
     "postWorkoutButton": "Preview post-workout request",
     "calendarCoachButton": "Preview calendar view coach",
+    "mesoCycleButton": "Preview meso cycle coach",
     "loading": "Loading preview...",
     "empty": "Choose a user, date, and preview action to render the request JSON here.",
     "validation": "Enter a user ID and date.",

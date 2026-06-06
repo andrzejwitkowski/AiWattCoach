@@ -64,6 +64,7 @@
     "dateLabel": "Data",
     "postWorkoutButton": "Podgląd post-workout",
     "calendarCoachButton": "Podgląd coacha kalendarza",
+    "mesoCycleButton": "Podgląd coacha meso cycle",
     "loading": "Ładowanie podglądu...",
     "empty": "Wybierz użytkownika, datę i akcję podglądu, aby wyświetlić JSON żądania.",
     "validation": "Podaj ID użytkownika i datę.",

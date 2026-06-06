@@ -1,6 +1,7 @@
 mod llm_output;
 mod model;
 mod ports;
+mod prompt_guidance;
 mod service;
 
 pub(crate) use llm_output::should_retry_training_plan_llm_envelope_repair;
@@ -22,6 +23,7 @@ pub use ports::{
     TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
     TrainingPlanToolLoopCheckpoint, TrainingPlanWorkoutSummaryPort,
 };
+pub use prompt_guidance::{training_plan_output_grammar, training_plan_planning_guidelines};
 pub use service::{
     training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
     TrainingPlanGenerationService, TrainingPlanUseCases,

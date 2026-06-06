@@ -25,6 +25,9 @@ export const adminPromptPreviewResponseSchema = z.object({
     selectedWorkoutId: z.string().optional(),
     selectionMethod: z.string().optional(),
     complianceScore: z.number().optional(),
+    mesoStart: z.string().optional(),
+    mesoEnd: z.string().optional(),
+    aiCoachLastDate: z.string().optional(),
   }),
   request: z.object({
     systemPrompt: z.string(),

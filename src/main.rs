@@ -107,8 +107,8 @@ use aiwattcoach::{
     },
     domain::intervals::IntervalsService,
     domain::meso_cycle::{
-        meso_cycle_generate_task_handler, MesoCycleService, SchedulerBackedMesoCycleService,
-        TrainingPlanBackedMesoWindowPort,
+        meso_cycle_generate_task_handler, MesoCycleService, MesoCycleWindowPort,
+        SchedulerBackedMesoCycleService, TrainingPlanBackedMesoWindowPort,
     },
     domain::planned_workouts::AuthoritativePlannedWorkoutRepository,
     domain::races::{AuthoritativeRaceRepository, RaceService},
@@ -727,12 +727,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     ));
     let meso_cycle_llm_config_provider =
         Arc::new(MesoCycleLlmConfigProvider::new(settings_service.clone()));
+    let admin_meso_window_port: Arc<dyn MesoCycleWindowPort> =
+        Arc::new(TrainingPlanBackedMesoWindowPort::new(
+            training_plan_window_port_ops.clone(),
+            training_plan_window_port_projections.clone(),
+        ));
     let meso_cycle_direct_service = Arc::new(MesoCycleService::new(
         meso_cycle_generation_operation_repository,
         meso_cycle_projection_repository,
         MesoCycleLlmGenerator::new(
             llm_adapter.clone(),
-            meso_cycle_llm_config_provider,
+            meso_cycle_llm_config_provider.clone(),
             training_context_builder.clone(),
             get_selected_workout_data_port.clone(),
             SystemClock,
@@ -791,6 +796,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             settings_service.clone(),
             Some(get_selected_workout_data_port.clone()),
             Some(planned_workout_update_port.clone()),
+            Some(admin_meso_window_port),
+            Some(meso_cycle_llm_config_provider),
             SystemClock,
         ));
 
