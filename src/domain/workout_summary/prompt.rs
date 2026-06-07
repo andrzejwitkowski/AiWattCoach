@@ -24,6 +24,8 @@ const WORKOUT_COACH_SELECTED_WORKOUT_PROMPT: &str = "Use the provided selected w
 
 const WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT: &str = "Saved workout summaries for recent sessions appear in packed context as wr (preferred) and optionally as recap on matching entries in rd. Treat each saved recap as already-known context for that workout. Do not ask the athlete again for information clearly stated in wr, recap, RPE, or earlier messages in the current workout thread. Ask follow-up questions only when a decision still depends on missing or ambiguous information.";
 
+const WORKOUT_COACH_MESO_ROADMAP_PROMPT: &str = "When meso_cycle_roadmap is present, treat it only as flexible future orientation from meso_cycle_roadmap_guidance. Do not treat it as a fixed schedule, and do not contradict the active 14-day AI coach plan without a clear reason grounded in the workout discussion.";
+
 pub struct WorkoutSummaryCoachPromptInput {
     pub user_id: String,
     pub config: LlmProviderConfig,
@@ -35,6 +37,7 @@ pub struct WorkoutSummaryCoachPromptInput {
     pub today: String,
     pub data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
     pub reusable_cache_id: Option<String>,
+    pub meso_roadmap_stable_context: Option<String>,
 }
 
 pub fn assemble_workout_summary_coach_request(
@@ -45,6 +48,7 @@ pub fn assemble_workout_summary_coach_request(
         &input.training_context.focus_date,
         &input.training_context.rendered.stable_context,
         input.athlete_summary_text.as_deref(),
+        input.meso_roadmap_stable_context.as_deref(),
     );
     let volatile_context = build_volatile_context(
         &input.training_context.rendered.volatile_context,
@@ -109,7 +113,7 @@ fn apply_tool_scope(
 
 pub fn workout_coach_system_prompt() -> String {
     format!(
-        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\n{WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT}\nworkout_summary_coach_reply_schema={}\n{PACKED_TRAINING_CONTEXT_LEGEND}",
+        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\n{WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT}\n{WORKOUT_COACH_MESO_ROADMAP_PROMPT}\nworkout_summary_coach_reply_schema={}\n{PACKED_TRAINING_CONTEXT_LEGEND}",
         workout_summary_coach_reply_json_schema()
     )
 }
@@ -119,6 +123,7 @@ pub fn build_stable_context(
     selected_workout_date: &str,
     packed_training_context: &str,
     athlete_summary_text: Option<&str>,
+    meso_roadmap_stable_context: Option<&str>,
 ) -> String {
     let mut context = format!(
         "workout_summary={{\"workoutId\":\"{}\",\"rpe\":{}}}\nselected_workout={{\"workoutId\":\"{}\",\"date\":\"{}\"}}\ncurrent_workout_context=You are discussing the completed workout from {}.",
@@ -142,6 +147,11 @@ pub fn build_stable_context(
         .filter(|value| !value.trim().is_empty())
     {
         context.push_str(&format!("\ncurrent_workout_recap={recap}"));
+    }
+
+    if let Some(meso_roadmap) = meso_roadmap_stable_context.filter(|value| !value.trim().is_empty())
+    {
+        context.push_str(&format!("\n{meso_roadmap}"));
     }
 
     context.push_str(&format!(

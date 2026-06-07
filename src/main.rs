@@ -292,6 +292,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let meso_cycle_projection_repository =
         MongoMesoCycleProjectionRepository::new(mongo_client.clone(), &mongo_database);
     meso_cycle_projection_repository.ensure_indexes().await?;
+    let meso_cycle_projection_repository_for_coach = meso_cycle_projection_repository.clone();
     let training_plan_window_port_ops = training_plan_generation_operation_repository.clone();
     let training_plan_window_port_projections = training_plan_projection_repository.clone();
     // These repositories are bootstrapped at startup so their durable collections
@@ -618,7 +619,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     SystemClock,
                 )
                 .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone()))
-                .with_data_port(get_selected_workout_data_port.clone()),
+                .with_data_port(get_selected_workout_data_port.clone())
+                .with_meso_projection_repository(Arc::new(
+                    meso_cycle_projection_repository_for_coach.clone(),
+                )),
             ),
         )
         .with_athlete_summary_service(athlete_summary_direct_service.clone())
@@ -798,6 +802,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             Some(planned_workout_update_port.clone()),
             Some(admin_meso_window_port),
             Some(meso_cycle_llm_config_provider),
+            Some(Arc::new(meso_cycle_projection_repository_for_coach)),
             SystemClock,
         ));
 

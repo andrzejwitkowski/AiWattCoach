@@ -15,15 +15,16 @@ use crate::domain::{
     llm_tools::{GetSelectedWorkoutDataPort, UpdatePlannedWorkoutDataPort},
     meso_cycle::{
         assemble_meso_cycle_coach_request, MesoCycleCoachPromptInput, MesoCycleLlmConfigPort,
-        MesoCycleWindowPort,
+        MesoCycleProjectionRepository, MesoCycleWindowPort,
     },
     planned_workouts::PlannedWorkoutRepository,
     settings::UserSettingsUseCases,
     special_days::SpecialDayRepository,
     training_context::{pick_representative_completed_workout_for_day, TrainingContextBuilder},
     workout_summary::{
-        assemble_workout_summary_coach_request, CompletedWorkoutTargetUseCases, WorkoutSummary,
-        WorkoutSummaryCoachPromptInput, WorkoutSummaryRepository, ADMIN_PREVIEW_USER_MESSAGE,
+        assemble_workout_summary_coach_request, try_load_meso_roadmap_stable_context,
+        CompletedWorkoutTargetUseCases, WorkoutSummary, WorkoutSummaryCoachPromptInput,
+        WorkoutSummaryRepository, ADMIN_PREVIEW_USER_MESSAGE,
     },
 };
 
@@ -52,6 +53,7 @@ where
     planned_workout_update_port: Option<Arc<dyn UpdatePlannedWorkoutDataPort>>,
     meso_window_port: Option<Arc<dyn MesoCycleWindowPort>>,
     meso_llm_config_provider: Option<Arc<dyn MesoCycleLlmConfigPort>>,
+    meso_projection_repository: Option<Arc<dyn MesoCycleProjectionRepository>>,
     clock: Time,
 }
 
@@ -79,6 +81,7 @@ where
         planned_workout_update_port: Option<Arc<dyn UpdatePlannedWorkoutDataPort>>,
         meso_window_port: Option<Arc<dyn MesoCycleWindowPort>>,
         meso_llm_config_provider: Option<Arc<dyn MesoCycleLlmConfigPort>>,
+        meso_projection_repository: Option<Arc<dyn MesoCycleProjectionRepository>>,
         clock: Time,
     ) -> Self {
         Self {
@@ -95,6 +98,7 @@ where
             planned_workout_update_port,
             meso_window_port,
             meso_llm_config_provider,
+            meso_projection_repository,
             clock,
         }
     }
@@ -108,13 +112,6 @@ where
             return Err(AdminPromptPreviewError::FutureDate);
         }
         Ok(parsed)
-    }
-
-    fn end_of_utc_day_epoch_seconds(date: NaiveDate) -> i64 {
-        date.and_hms_opt(23, 59, 59)
-            .expect("valid end-of-day timestamp")
-            .and_utc()
-            .timestamp()
     }
 
     fn map_response(input: MappedPreviewResponse<'_>) -> AdminPromptPreviewResponse {
@@ -267,7 +264,7 @@ where
         date: &str,
     ) -> Result<AdminPromptPreviewResponse, AdminPromptPreviewError> {
         let focus_date = self.validate_date(date)?;
-        let preview_epoch = Self::end_of_utc_day_epoch_seconds(focus_date);
+        let preview_epoch = preview_focus_date_epoch_seconds(focus_date);
 
         let settings = self
             .settings_service
@@ -322,6 +319,10 @@ where
             .await
             .map_err(AdminPromptPreviewError::Llm)?;
 
+        let meso_roadmap_stable_context = match self.meso_projection_repository.as_deref() {
+            Some(repository) => try_load_meso_roadmap_stable_context(repository, user_id).await,
+            None => None,
+        };
         let request = assemble_workout_summary_coach_request(WorkoutSummaryCoachPromptInput {
             user_id: user_id.to_string(),
             config: config.clone(),
@@ -333,6 +334,7 @@ where
             today: date.to_string(),
             data_port: self.data_port.clone(),
             reusable_cache_id: None,
+            meso_roadmap_stable_context,
         });
 
         Ok(Self::map_response(MappedPreviewResponse {
@@ -357,7 +359,7 @@ where
         date: &str,
     ) -> Result<AdminPromptPreviewResponse, AdminPromptPreviewError> {
         let focus_date = self.validate_date(date)?;
-        let preview_epoch = Self::end_of_utc_day_epoch_seconds(focus_date);
+        let preview_epoch = preview_focus_date_epoch_seconds(focus_date);
 
         let training_context = self
             .training_context_builder
@@ -420,7 +422,7 @@ where
         date: &str,
     ) -> Result<AdminPromptPreviewResponse, AdminPromptPreviewError> {
         let focus_date = self.validate_date(date)?;
-        let preview_epoch = Self::end_of_utc_day_epoch_seconds(focus_date);
+        let preview_epoch = preview_focus_date_epoch_seconds(focus_date);
         let meso_window_port =
             self.meso_window_port
                 .as_ref()
@@ -503,6 +505,13 @@ struct MesoPreviewMeta {
     ai_coach_last_date: Option<String>,
 }
 
+fn preview_focus_date_epoch_seconds(date: NaiveDate) -> i64 {
+    date.and_hms_opt(12, 0, 0)
+        .expect("valid preview focus timestamp")
+        .and_utc()
+        .timestamp()
+}
+
 fn preview_workout_summary(user_id: &str, workout_id: &str, now: i64) -> WorkoutSummary {
     WorkoutSummary {
         id: format!("preview-{workout_id}"),
@@ -518,5 +527,19 @@ fn preview_workout_summary(user_id: &str, workout_id: &str, now: i64) -> Workout
         workout_recap_generated_at_epoch_seconds: None,
         created_at_epoch_seconds: now,
         updated_at_epoch_seconds: now,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::llm::epoch_seconds_to_rfc3339;
+
+    #[test]
+    fn preview_focus_date_uses_noon_utc_to_avoid_next_day_in_positive_timezones() {
+        let focus_date = NaiveDate::from_ymd_opt(2026, 6, 7).expect("valid date");
+        let epoch = preview_focus_date_epoch_seconds(focus_date);
+
+        assert_eq!(epoch_seconds_to_rfc3339(epoch), "2026-06-07T12:00:00+00:00");
     }
 }

@@ -529,6 +529,8 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "ai_agents.deepseek_api_key": &ai_agents.deepseek_api_key,
                             "ai_agents.selected_provider": ai_agents.selected_provider.as_ref().map(|provider| provider.as_str()),
                             "ai_agents.selected_model": &ai_agents.selected_model,
+                            "ai_agents.meso_cycle_provider": ai_agents.meso_cycle_provider.as_ref().map(|provider| provider.as_str()),
+                            "ai_agents.meso_cycle_model": &ai_agents.meso_cycle_model,
                             "updated_at_epoch_seconds": updated_at,
                             "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at), "updated_at")
                                 .map_err(SettingsError::Repository)?,

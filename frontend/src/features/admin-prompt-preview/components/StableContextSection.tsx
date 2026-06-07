@@ -46,6 +46,8 @@ export function StableContextSection({ rawText }: StableContextSectionProps) {
       athleteSummary: lines.athlete_summary_text?.trim() ?? null,
       mesoWindowStart: lines.meso_cycle_window_start?.trim() ?? null,
       mesoWindowEnd: lines.meso_cycle_window_end?.trim() ?? null,
+      mesoRoadmapGuidance: lines.meso_cycle_roadmap_guidance?.trim() ?? null,
+      mesoRoadmap: readJsonField(lines, 'meso_cycle_roadmap'),
       savedAtEpochSeconds: lines.saved_at_epoch_seconds?.trim() ?? null,
       calendarConversation,
       packed,
@@ -134,6 +136,26 @@ export function StableContextSection({ rawText }: StableContextSectionProps) {
               </summary>
               <div className="prompt-preview-text border-t border-white/5 px-4 py-3 text-sm">
                 <MarkdownContent>{parsed.athleteSummary}</MarkdownContent>
+              </div>
+            </details>
+          )}
+
+          {parsed.mesoRoadmapGuidance && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-100/90">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.15em] text-amber-200/70">
+                Meso Cycle Roadmap (predicted)
+              </div>
+              {parsed.mesoRoadmapGuidance}
+            </div>
+          )}
+
+          {parsed.mesoRoadmap && (
+            <details className="rounded-xl border border-white/10 bg-white/[0.02]" open>
+              <summary className="cursor-pointer px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+                Meso Cycle Roadmap Days
+              </summary>
+              <div className="border-t border-white/5 px-4 py-3">
+                <DecodedPackedContext label="Meso Cycle Roadmap" data={parsed.mesoRoadmap} />
               </div>
             </details>
           )}

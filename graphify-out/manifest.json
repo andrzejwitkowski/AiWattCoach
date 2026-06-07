@@ -308,8 +308,8 @@
     "hash": "846af6c8a9d8ef970f949b7a6ff4a428"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/settings_rest/settings_endpoints.rs": {
-    "mtime": 1780681613.4359975,
-    "hash": "d957135bd39be4e7e99023bdf1cbb64b"
+    "mtime": 1780847419.4658277,
+    "hash": "dfb2c4d69208af63ccb8111eebb0b991"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/settings_rest/admin_endpoints.rs": {
     "mtime": 1778178824.869497,
@@ -376,8 +376,8 @@
     "hash": "9e990d9e2b2ff2e6641f3e85f1b2cce4"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/auth_rest/admin_routes.rs": {
-    "mtime": 1780733129.926508,
-    "hash": "a185fe51056257aff6f9a757c7f6dc2a"
+    "mtime": 1780734656.9006796,
+    "hash": "9f13790335b3684bfeb951c985ca15f6"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/auth_rest/error_cases.rs": {
     "mtime": 1777106174.2057483,
@@ -836,8 +836,8 @@
     "hash": "3f01bf7187afe96bec366defe124ba6d"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/pages/AdminPromptPreviewPage.tsx": {
-    "mtime": 1780733110.2706597,
-    "hash": "c4ec05e60a2ee7a1e125a3a673c70439"
+    "mtime": 1780733492.0752604,
+    "hash": "3e87085e8e196a068b4b5113f300a95b"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/pages/SettingsPage.test.tsx": {
     "mtime": 1779639841.9973857,
@@ -980,8 +980,8 @@
     "hash": "ec68cbb1bc07d14576c385dbb1fd6300"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/features/admin-prompt-preview/components/StableContextSection.tsx": {
-    "mtime": 1780732761.7684824,
-    "hash": "bfa780cb5935bf39ecdd2c1764c2ff78"
+    "mtime": 1780847866.0986228,
+    "hash": "01044a72700155ccbc3e59d6c6e271c3"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/features/admin-prompt-preview/components/DecodedPackedContext.tsx": {
     "mtime": 1780675842.1590636,
@@ -1028,7 +1028,7 @@
     "hash": "d07702513d082ea1b74bc54cb70ad273"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/features/settings/api/settings.ts": {
-    "mtime": 1780732621.9125538,
+    "mtime": 1780847223.2819507,
     "hash": "83fda25b2d82fd065d0c1a88719fe486"
   },
   "/home/andrzej/Projects/AiWattCoach/frontend/src/features/settings/api/athleteSummary.ts": {
@@ -1644,8 +1644,8 @@
     "hash": "0978dcdfaa6aba4a7370a8808b1d1763"
   },
   "/home/andrzej/Projects/AiWattCoach/src/main.rs": {
-    "mtime": 1780733281.442602,
-    "hash": "e28af8fa3cff8525d830e91db4f139d1"
+    "mtime": 1780847860.4937036,
+    "hash": "979b560e8d34d96114a00ee04d13641f"
   },
   "/home/andrzej/Projects/AiWattCoach/src/lib.rs": {
     "mtime": 1778610164.4543948,
@@ -1836,12 +1836,12 @@
     "hash": "308932ad10861ba7bce37b7f9e57a523"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/llm/workout_summary_coach.rs": {
-    "mtime": 1780675842.220681,
-    "hash": "e4a41d247ac5fb43532f8788f423ff54"
+    "mtime": 1780847868.9331563,
+    "hash": "80cac448b77e87b86fd6f286bf931cba"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/llm/training_plan_generator.rs": {
-    "mtime": 1780733016.988234,
-    "hash": "d0af0139c6d9d7814a14b9b44db556f2"
+    "mtime": 1780734822.6097171,
+    "hash": "8c5bfdb104a0526be075103cf1b60c8d"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/llm/meso_cycle_generator.rs": {
     "mtime": 1780733280.5856638,
@@ -2332,8 +2332,8 @@
     "hash": "73defb5519c4e5cb19049098dd13f302"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/mongo/settings.rs": {
-    "mtime": 1780680695.3606992,
-    "hash": "713e51bad83cc989b3ff510f7c340a19"
+    "mtime": 1780847363.6172755,
+    "hash": "e094d4ea6da79ce33585a5b18295172e"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/mongo/training_plan_generation_operations.rs": {
     "mtime": 1780686518.7549045,
@@ -2660,16 +2660,20 @@
     "hash": "e0a077825eda75b459ba909acff9b4b7"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/workout_summary/prompt.rs": {
-    "mtime": 1780675842.2252338,
-    "hash": "db8bcd40c298a2cd1f45fc114de71943"
+    "mtime": 1780847827.3490975,
+    "hash": "64ac0c00eede254ea762175d4bc5e14f"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/workout_summary/mod.rs": {
-    "mtime": 1780675842.2251449,
-    "hash": "4bc28464456144cd9b9bfdec6ebbbb5c"
+    "mtime": 1780847814.2932045,
+    "hash": "b8973bf41d8e6663d7050f4f22f37c7a"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/workout_summary/ports.rs": {
     "mtime": 1778178824.865497,
     "hash": "a592ae595553304236b01dc0bbc84ae2"
+  },
+  "/home/andrzej/Projects/AiWattCoach/src/domain/workout_summary/meso_roadmap.rs": {
+    "mtime": 1780847821.378817,
+    "hash": "c3ab506eeae6170e28b72f3f35c2758d"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/workout_summary/test_support.rs": {
     "mtime": 1779724927.8621883,
@@ -2832,8 +2836,8 @@
     "hash": "0d44208621d69b359cd470da1c8beadd"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/admin_prompt_preview/service.rs": {
-    "mtime": 1780733280.861644,
-    "hash": "b50d396efe359b1de58221ba352a70de"
+    "mtime": 1780847880.2907734,
+    "hash": "b0d407ab0bdb1bf1efdc5f75fc50dac4"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/admin_prompt_preview/error.rs": {
     "mtime": 1780733036.715588,
@@ -3612,16 +3616,16 @@
     "hash": "7e39257ef8604a5435ef600ef95940ff"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/training_plan/mod.rs": {
-    "mtime": 1780733281.3246105,
-    "hash": "bc441e1dfc489e0168aba0a5c3b547b1"
+    "mtime": 1780734823.2967088,
+    "hash": "eeb5a2ae778dbd258179ee474e3432fe"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/training_plan/ports.rs": {
     "mtime": 1780680236.1964087,
     "hash": "1c763d105211e1fc6067c798cf9f70d0"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/training_plan/prompt_guidance.rs": {
-    "mtime": 1780732992.6728058,
-    "hash": "4f6a04f800160bbbc3163342f82029d9"
+    "mtime": 1780734823.2997088,
+    "hash": "cab774501829a2067deab400b040b0cf"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/training_plan/llm_output.rs": {
     "mtime": 1779900911.619441,
@@ -3652,8 +3656,8 @@
     "hash": "6ec32979f0e2b6b0e62e22cdfc373e82"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/meso_cycle/prompt.rs": {
-    "mtime": 1780733281.125625,
-    "hash": "06a78bbc7a5e9aa00a2efd37305cac05"
+    "mtime": 1780734656.7019303,
+    "hash": "b815dca0c2d217f04f0c75115f112827"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/meso_cycle/mod.rs": {
     "mtime": 1780733281.122625,
