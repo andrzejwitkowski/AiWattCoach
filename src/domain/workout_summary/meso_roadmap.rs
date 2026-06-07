@@ -53,17 +53,8 @@ pub async fn try_load_meso_roadmap_stable_context(
     repository: &dyn MesoCycleProjectionRepository,
     user_id: &str,
 ) -> Option<String> {
-    match repository.list_active_by_user_id(user_id).await {
-        Ok(days) => format_meso_roadmap_stable_context(&days),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                user_id = %user_id,
-                "failed to load meso cycle roadmap"
-            );
-            None
-        }
-    }
+    let days = repository.list_active_by_user_id(user_id).await.ok()?;
+    format_meso_roadmap_stable_context(&days)
 }
 
 fn projected_workout_name(day: &MesoCycleProjectedDay) -> Option<String> {

@@ -319,10 +319,12 @@ where
             .await
             .map_err(AdminPromptPreviewError::Llm)?;
 
-        let meso_roadmap_stable_context = match self.meso_projection_repository.as_deref() {
-            Some(repository) => try_load_meso_roadmap_stable_context(repository, user_id).await,
-            None => None,
-        };
+        let meso_roadmap_stable_context =
+            if let Some(repository) = self.meso_projection_repository.as_deref() {
+                try_load_meso_roadmap_stable_context(repository, user_id).await
+            } else {
+                None
+            };
         let request = assemble_workout_summary_coach_request(WorkoutSummaryCoachPromptInput {
             user_id: user_id.to_string(),
             config: config.clone(),

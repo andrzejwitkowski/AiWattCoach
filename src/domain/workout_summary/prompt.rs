@@ -24,8 +24,6 @@ const WORKOUT_COACH_SELECTED_WORKOUT_PROMPT: &str = "Use the provided selected w
 
 const WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT: &str = "Saved workout summaries for recent sessions appear in packed context as wr (preferred) and optionally as recap on matching entries in rd. Treat each saved recap as already-known context for that workout. Do not ask the athlete again for information clearly stated in wr, recap, RPE, or earlier messages in the current workout thread. Ask follow-up questions only when a decision still depends on missing or ambiguous information.";
 
-const WORKOUT_COACH_MESO_ROADMAP_PROMPT: &str = "When meso_cycle_roadmap is present, treat it only as flexible future orientation from meso_cycle_roadmap_guidance. Do not treat it as a fixed schedule, and do not contradict the active 14-day AI coach plan without a clear reason grounded in the workout discussion.";
-
 pub struct WorkoutSummaryCoachPromptInput {
     pub user_id: String,
     pub config: LlmProviderConfig,
@@ -113,7 +111,7 @@ fn apply_tool_scope(
 
 pub fn workout_coach_system_prompt() -> String {
     format!(
-        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\n{WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT}\n{WORKOUT_COACH_MESO_ROADMAP_PROMPT}\nworkout_summary_coach_reply_schema={}\n{PACKED_TRAINING_CONTEXT_LEGEND}",
+        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\n{WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT}\nworkout_summary_coach_reply_schema={}\n{PACKED_TRAINING_CONTEXT_LEGEND}",
         workout_summary_coach_reply_json_schema()
     )
 }

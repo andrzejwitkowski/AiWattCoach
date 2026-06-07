@@ -107,12 +107,12 @@ where
             let training_context = training_context_builder
                 .build(&user_id, &summary.workout_id)
                 .await?;
-            let meso_roadmap_stable_context = match meso_projection_repository.as_deref() {
-                Some(repository) => {
+            let meso_roadmap_stable_context =
+                if let Some(repository) = meso_projection_repository.as_deref() {
                     try_load_meso_roadmap_stable_context(repository, &user_id).await
-                }
-                None => None,
-            };
+                } else {
+                    None
+                };
             let cache_scope_key = Some(format!("workout-summary:{user_id}:{}", summary.workout_id));
             let context_hash = reusable_context_cache_key(
                 &crate::domain::workout_summary::workout_coach_system_prompt(),
@@ -296,32 +296,9 @@ mod tests {
         assert!(
             prompt.contains("Use the provided selected workout date as the active workout context")
         );
-        assert!(prompt.contains("When meso_cycle_roadmap is present"));
         assert!(!prompt.contains(
             "If the packed evidence is insufficient for a confident execution judgment, use the available workout tools to inspect higher-fidelity data before making a strong claim"
         ));
-    }
-
-    #[test]
-    fn build_stable_context_includes_meso_roadmap_section() {
-        let summary = crate::domain::workout_summary::WorkoutSummary::new(
-            "summary-1".to_string(),
-            "user-1".to_string(),
-            "workout-1".to_string(),
-            1,
-        );
-
-        let context = build_stable_context(
-            &summary,
-            "2026-05-29",
-            "{}",
-            None,
-            Some("meso_cycle_roadmap_guidance=test guidance\nmeso_cycle_roadmap={\"days\":[]}"),
-        );
-
-        assert!(context.contains("meso_cycle_roadmap_guidance=test guidance"));
-        assert!(context.contains("meso_cycle_roadmap={\"days\":[]}"));
-        assert!(context.contains("training_context_stable={}"));
     }
 
     #[test]

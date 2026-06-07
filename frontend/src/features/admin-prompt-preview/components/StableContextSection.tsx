@@ -140,22 +140,18 @@ export function StableContextSection({ rawText }: StableContextSectionProps) {
             </details>
           )}
 
-          {parsed.mesoRoadmapGuidance && (
-            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-100/90">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.15em] text-amber-200/70">
-                Meso Cycle Roadmap (predicted)
-              </div>
-              {parsed.mesoRoadmapGuidance}
-            </div>
-          )}
-
-          {parsed.mesoRoadmap && (
-            <details className="rounded-xl border border-white/10 bg-white/[0.02]" open>
+          {(parsed.mesoRoadmapGuidance || parsed.mesoRoadmap) && (
+            <details className="rounded-xl border border-white/10 bg-white/[0.02]">
               <summary className="cursor-pointer px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
-                Meso Cycle Roadmap Days
+                Meso Cycle Roadmap (predicted)
               </summary>
-              <div className="border-t border-white/5 px-4 py-3">
-                <DecodedPackedContext label="Meso Cycle Roadmap" data={parsed.mesoRoadmap} />
+              <div className="space-y-3 border-t border-white/5 px-4 py-3 text-sm">
+                {parsed.mesoRoadmapGuidance && (
+                  <p className="prompt-preview-text text-slate-300">{parsed.mesoRoadmapGuidance}</p>
+                )}
+                {parsed.mesoRoadmap && (
+                  <DecodedPackedContext label="Meso Cycle Roadmap" data={parsed.mesoRoadmap} />
+                )}
               </div>
             </details>
           )}
