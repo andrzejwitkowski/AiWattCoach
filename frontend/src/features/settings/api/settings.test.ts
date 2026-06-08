@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { defaultAvailabilityDays, settingsApiResponseBody } from '../mockData';
+import { buildTestSettings, defaultAvailabilityDays } from '../mockData';
 import { userSettingsResponseSchema } from '../types';
 import {
   testAiAgentsConnection,
@@ -131,7 +131,7 @@ describe('settings api', () => {
   });
 
   it('patches explicit weekly availability payloads', async () => {
-    const responseBody = settingsApiResponseBody({
+    const responseBody = buildTestSettings({
       aiAgents: {
         openaiApiKey: null,
         openaiApiKeySet: false,
@@ -232,7 +232,7 @@ describe('settings api', () => {
   it('rejects duplicate weekdays in settings responses', () => {
     expect(() =>
       userSettingsResponseSchema.parse(
-        settingsApiResponseBody({
+        buildTestSettings({
           availability: {
             configured: true,
             days: [

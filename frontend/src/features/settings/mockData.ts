@@ -104,7 +104,3 @@ export function unsetAvailabilityDays(): UserSettingsResponse['availability']['d
     { weekday: 'sun', available: false, maxDurationMinutes: null },
   ];
 }
-
-export function settingsApiResponseBody(overrides?: TestSettingsOverrides): UserSettingsResponse {
-  return buildTestSettings(overrides);
-}
