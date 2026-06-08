@@ -2,6 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildTestSettings } from '../features/settings/mockData';
+import type { UserSettingsResponse } from '../features/settings/types';
 import { SettingsProvider } from '../features/settings/context/SettingsContext';
 import { SettingsPage } from './SettingsPage';
 

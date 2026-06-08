@@ -62,7 +62,9 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
   const selectedProviderOption = getProviderOption(draft.selectedProvider);
   const mesoProviderOption = getProviderOption(draft.mesoCycleProvider);
   const providerKeyState = getProviderKeyState(draft.selectedProvider, draft, aiAgents);
-  const validationMessage = resolveProviderValidationMessage(draft, providerKeyState);
+  const validationMessage =
+    resolveProviderValidationMessage(draft, providerKeyState) ??
+    resolveMesoValidationMessage(draft);
   const canSave = hasDirtyDraft && !validationMessage;
   const canTest =
     !validationMessage &&
@@ -194,6 +196,18 @@ function hasAnyPersistedConnectionValue(aiAgents: UserSettingsResponse['aiAgents
     Boolean(aiAgents.selectedProvider) ||
     Boolean(aiAgents.selectedModel)
   );
+}
+
+function resolveMesoValidationMessage(draft: AiAgentsDraftState) {
+  const hasProvider = Boolean(draft.mesoCycleProvider.trim());
+  const hasModel = Boolean(draft.mesoCycleModel.trim());
+  if (hasProvider && !hasModel) {
+    return 'Choose a model for the meso cycle provider.';
+  }
+  if (hasModel && !hasProvider) {
+    return 'Choose a provider for the meso cycle model.';
+  }
+  return null;
 }
 
 function resolveProviderValidationMessage(

@@ -1,5 +1,14 @@
 import type { UserSettingsResponse } from './types';
 
+export type TestSettingsOverrides = {
+  aiAgents?: Partial<UserSettingsResponse['aiAgents']>;
+  intervals?: Partial<UserSettingsResponse['intervals']>;
+  wahoo?: Partial<UserSettingsResponse['wahoo']>;
+  options?: Partial<UserSettingsResponse['options']>;
+  availability?: Partial<UserSettingsResponse['availability']>;
+  cycling?: Partial<UserSettingsResponse['cycling']>;
+};
+
 export const defaultAvailabilityDays: UserSettingsResponse['availability']['days'] = [
   { weekday: 'mon', available: true, maxDurationMinutes: 60 },
   { weekday: 'tue', available: false, maxDurationMinutes: null },
@@ -10,12 +19,8 @@ export const defaultAvailabilityDays: UserSettingsResponse['availability']['days
   { weekday: 'sun', available: false, maxDurationMinutes: null },
 ];
 
-export function buildTestSettings(
-  overrides?: Partial<UserSettingsResponse> & { aiAgents?: Partial<UserSettingsResponse['aiAgents']> },
-): UserSettingsResponse {
-  const { aiAgents: aiAgentsOverrides, ...rest } = overrides ?? {};
-
-  return {
+export function buildTestSettings(overrides: TestSettingsOverrides = {}): UserSettingsResponse {
+  const settings: UserSettingsResponse = {
     aiAgents: {
       openaiApiKey: '***...1234',
       openaiApiKeySet: true,
@@ -29,14 +34,12 @@ export function buildTestSettings(
       selectedModel: 'openai/gpt-4o-mini',
       mesoCycleProvider: null,
       mesoCycleModel: null,
-      ...aiAgentsOverrides,
     },
     intervals: {
       apiKey: null,
       apiKeySet: false,
       athleteId: null,
       connected: false,
-      ...rest.intervals,
     },
     wahoo: {
       available: false,
@@ -45,16 +48,13 @@ export function buildTestSettings(
       refreshTokenSet: false,
       expiresAtEpochSeconds: null,
       connected: false,
-      ...rest.wahoo,
     },
     options: {
       analyzeWithoutHeartRate: false,
-      ...rest.options,
     },
     availability: {
       configured: true,
       days: defaultAvailabilityDays,
-      ...rest.availability,
     },
     cycling: {
       fullName: null,
@@ -68,10 +68,29 @@ export function buildTestSettings(
       medications: null,
       athleteNotes: null,
       lastZoneUpdateEpochSeconds: null,
-      ...rest.cycling,
     },
-    ...rest,
   };
+
+  if (overrides.aiAgents) {
+    Object.assign(settings.aiAgents, overrides.aiAgents);
+  }
+  if (overrides.intervals) {
+    Object.assign(settings.intervals, overrides.intervals);
+  }
+  if (overrides.wahoo) {
+    Object.assign(settings.wahoo, overrides.wahoo);
+  }
+  if (overrides.options) {
+    Object.assign(settings.options, overrides.options);
+  }
+  if (overrides.availability) {
+    Object.assign(settings.availability, overrides.availability);
+  }
+  if (overrides.cycling) {
+    Object.assign(settings.cycling, overrides.cycling);
+  }
+
+  return settings;
 }
 
 export function unsetAvailabilityDays(): UserSettingsResponse['availability']['days'] {
@@ -86,8 +105,6 @@ export function unsetAvailabilityDays(): UserSettingsResponse['availability']['d
   ];
 }
 
-export function settingsApiResponseBody(
-  overrides?: Partial<UserSettingsResponse> & { aiAgents?: Partial<UserSettingsResponse['aiAgents']> },
-): UserSettingsResponse {
+export function settingsApiResponseBody(overrides?: TestSettingsOverrides): UserSettingsResponse {
   return buildTestSettings(overrides);
 }

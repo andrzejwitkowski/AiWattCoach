@@ -45,7 +45,10 @@ function buildSettings(overrides?: SettingsOverrides): UserSettingsResponse {
       connected: true,
       ...overrides?.intervals,
     },
-    ...overrides,
+    wahoo: overrides?.wahoo,
+    options: overrides?.options,
+    availability: overrides?.availability,
+    cycling: overrides?.cycling,
   });
 }
 
