@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useApiBaseUrl } from '../../../lib/apiBaseUrl';
 import { addDays, parseDateKey, toDateKey } from '../../calendar/utils/dateUtils';
+import { isLlmProviderKeyConfigured } from '../../settings/llmProviders';
 import type { UserSettingsResponse } from '../../settings/types';
 import { generateMesoCyclePlan, loadMesoCycleCalendar, loadMesoCycleStatus } from '../api/mesoCycle';
 import type { MesoCycleCalendarDay, MesoCycleStatus } from '../types';
@@ -33,18 +34,7 @@ export function canGenerateMesoCycle(settings: UserSettingsResponse | null): boo
     return false;
   }
 
-  const hasKey =
-    provider === 'openai'
-      ? ai.openaiApiKeySet
-      : provider === 'gemini'
-        ? ai.geminiApiKeySet
-        : provider === 'openrouter'
-          ? ai.openrouterApiKeySet
-          : provider === 'deepseek'
-            ? ai.deepseekApiKeySet
-            : false;
-
-  return hasKey;
+  return isLlmProviderKeyConfigured(provider, ai);
 }
 
 export function useMesoCycleCalendar({ settings }: UseMesoCycleCalendarOptions) {

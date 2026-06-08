@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { mockFetch } from '../../test/mockFetch';
 import {
   loadAdminCalendarCoachPromptPreview,
   loadAdminMesoCyclePromptPreview,
@@ -95,15 +96,3 @@ describe('admin prompt preview api', () => {
     expect(result.meta.mesoStart).toBe('2026-05-02');
   });
 });
-
-function mockFetch(payload: unknown) {
-  const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-    .mockResolvedValue(
-      new Response(JSON.stringify(payload), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-  global.fetch = fetchMock as typeof fetch;
-  return fetchMock;
-}

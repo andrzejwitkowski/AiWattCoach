@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const mesoCycleWindowSchema = z.object({
+const mesoCycleWindowSchema = z.object({
   mesoStart: z.string(),
   mesoEnd: z.string(),
   aiCoachLastDate: z.string().nullable(),
@@ -32,4 +32,3 @@ export const mesoCycleCalendarDaySchema = z.object({
 
 export type MesoCycleStatus = z.infer<typeof mesoCycleStatusSchema>;
 export type MesoCycleCalendarDay = z.infer<typeof mesoCycleCalendarDaySchema>;
-export type MesoCycleOperation = z.infer<typeof mesoCycleOperationSchema>;

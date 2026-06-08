@@ -1,9 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AthleteSummaryCard } from './AthleteSummaryCard';
 import { generateAthleteSummary, loadAthleteSummary } from '../api/athleteSummary';
+import { buildTestSettings } from '../mockData';
 import type { UserSettingsResponse } from '../types';
+import { AthleteSummaryCard } from './AthleteSummaryCard';
 
 vi.mock('../api/athleteSummary', () => ({
   loadAthleteSummary: vi.fn(),
@@ -23,7 +24,7 @@ type SettingsOverrides = {
 };
 
 function buildSettings(overrides?: SettingsOverrides): UserSettingsResponse {
-  return {
+  return buildTestSettings({
     aiAgents: {
       openaiApiKey: null,
       openaiApiKeySet: false,
@@ -44,47 +45,8 @@ function buildSettings(overrides?: SettingsOverrides): UserSettingsResponse {
       connected: true,
       ...overrides?.intervals,
     },
-    wahoo: {
-      available: false,
-      accessToken: null,
-      accessTokenSet: false,
-      refreshTokenSet: false,
-      expiresAtEpochSeconds: null,
-      connected: false,
-      ...overrides?.wahoo,
-    },
-    options: {
-      analyzeWithoutHeartRate: false,
-      ...overrides?.options,
-    },
-    availability: {
-      configured: true,
-      days: [
-        { weekday: 'mon', available: true, maxDurationMinutes: 60 },
-        { weekday: 'tue', available: false, maxDurationMinutes: null },
-        { weekday: 'wed', available: true, maxDurationMinutes: 90 },
-        { weekday: 'thu', available: false, maxDurationMinutes: null },
-        { weekday: 'fri', available: true, maxDurationMinutes: 120 },
-        { weekday: 'sat', available: false, maxDurationMinutes: null },
-        { weekday: 'sun', available: false, maxDurationMinutes: null },
-      ],
-      ...overrides?.availability,
-    },
-    cycling: {
-      fullName: null,
-      age: null,
-      heightCm: null,
-      weightKg: null,
-      ftpWatts: null,
-      hrMaxBpm: null,
-      vo2Max: null,
-      athletePrompt: null,
-      medications: null,
-      athleteNotes: null,
-      lastZoneUpdateEpochSeconds: null,
-      ...overrides?.cycling,
-    },
-  };
+    ...overrides,
+  });
 }
 
 afterEach(() => {

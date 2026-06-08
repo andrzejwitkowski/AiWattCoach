@@ -6,20 +6,9 @@ import { ApiBaseUrlProvider } from '../../../lib/apiBaseUrl';
 import { CALENDAR_PAGINATION_TRIGGER_OFFSET } from '../constants';
 import type { CalendarWeek } from '../types';
 import { makeEvent } from '../testData';
+import { calendarTranslationMock } from '../../../test/calendarTranslationMock';
+import { setScreenWidth } from '../../../test/setScreenWidth';
 import { CalendarGrid } from './CalendarGrid';
-
-function setScreenWidth(width: number) {
-  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: query === '(max-width: 767px)' ? width <= 767 : false,
-    media: query,
-    onchange: null,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    dispatchEvent: () => false,
-  })) as typeof window.matchMedia;
-}
 
 vi.mock('react-i18next', async () => {
   const actual = await vi.importActual<typeof import('react-i18next')>('react-i18next');
@@ -27,62 +16,7 @@ vi.mock('react-i18next', async () => {
   return {
     ...actual,
     useTranslation: () => ({
-      t: (key: string, options?: { count?: number; priority?: string; value?: string }) => {
-        switch (key) {
-          case 'calendar.performanceCalendar':
-            return 'Performance Calendar';
-          case 'calendar.baseMonth':
-            return 'Base Month';
-          case 'calendar.visibleWindow':
-            return 'Visible Window';
-          case 'calendar.scrollMode':
-            return 'Scroll Mode';
-          case 'calendar.infinite':
-            return 'Infinite';
-          case 'calendar.noEvents':
-            return 'No events';
-          case 'calendar.dayItems':
-            return 'Day items';
-          case 'calendar.viewItems':
-            return `View ${options?.count ?? 0} items`;
-          case 'calendar.closeDayItems':
-            return 'Close day items';
-          case 'calendar.closeRaceDetails':
-            return 'Close race details';
-          case 'calendar.closeWorkoutDetails':
-            return 'Close workout details';
-          case 'calendar.mobilePreviousWeeks':
-            return 'Show previous weeks';
-          case 'calendar.mobileNextWeeks':
-            return 'Show next weeks';
-          case 'calendar.raceDay':
-            return 'Race Day';
-          case 'calendar.plannedWorkout':
-            return 'Planned Workout';
-          case 'calendar.completedWorkout':
-            return 'Completed Workout';
-          case 'calendar.eventOther':
-            return 'Event';
-          case 'calendar.raceDistance':
-            return 'Distance';
-          case 'calendar.raceDiscipline':
-            return 'Discipline';
-          case 'calendar.racePriority':
-            return 'Priority';
-          case 'calendar.raceSyncStatus':
-            return 'Sync Status';
-          case 'calendar.priorityLabel':
-            return `Cat. ${options?.priority ?? ''}`;
-          case 'calendar.raceDisciplineRoad':
-            return 'Road';
-          case 'races.distanceValue':
-            return `${options?.value ?? ''} km`;
-          case 'races.syncStatus.synced':
-            return 'Synced';
-          default:
-            return key;
-        }
-      },
+      t: calendarTranslationMock,
       i18n: {
         resolvedLanguage: 'en',
         language: 'en',

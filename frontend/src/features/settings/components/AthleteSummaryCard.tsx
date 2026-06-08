@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, RefreshCw, ScrollText } from 'lucide-react';
+import { RefreshCw, ScrollText } from 'lucide-react';
 
 import { generateAthleteSummary, loadAthleteSummary } from '../api/athleteSummary';
+import { isLlmProviderKeyConfigured } from '../llmProviders';
 import type { AthleteSummaryResponse, UserSettingsResponse } from '../types';
+import { SettingsStatusBanner, type SettingsStatus } from './SettingsStatusBanner';
 
 type AthleteSummaryCardProps = {
   settings: UserSettingsResponse;
@@ -13,23 +15,12 @@ export function AthleteSummaryCard({ settings, apiBaseUrl }: AthleteSummaryCardP
   const [summary, setSummary] = useState<AthleteSummaryResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [status, setStatus] = useState<{
-    tone: 'neutral' | 'success' | 'error';
-    label: string;
-    message: string;
-  } | null>(null);
+  const [status, setStatus] = useState<SettingsStatus | null>(null);
 
   const canGenerate = useMemo(() => {
     const ai = settings.aiAgents;
     const hasProvider = Boolean(ai.selectedProvider && ai.selectedModel);
-    const hasKey =
-      ai.selectedProvider === 'openai'
-        ? ai.openaiApiKeySet
-        : ai.selectedProvider === 'gemini'
-          ? ai.geminiApiKeySet
-          : ai.selectedProvider === 'openrouter'
-            ? ai.openrouterApiKeySet
-            : false;
+    const hasKey = isLlmProviderKeyConfigured(ai.selectedProvider, ai);
     const intervalsReady = settings.intervals.apiKeySet && Boolean(settings.intervals.athleteId);
     return hasProvider && hasKey && intervalsReady;
   }, [settings]);
@@ -113,16 +104,6 @@ export function AthleteSummaryCard({ settings, apiBaseUrl }: AthleteSummaryCardP
     }
   };
 
-  const statusClasses =
-    status?.tone === 'success'
-      ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
-      : status?.tone === 'error'
-        ? 'border-red-500/30 bg-red-500/10 text-red-200'
-        : 'border-cyan-400/20 bg-cyan-400/10 text-cyan-100';
-
-  const StatusIcon =
-    status?.tone === 'success' ? CheckCircle2 : status?.tone === 'error' ? AlertCircle : RefreshCw;
-
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
       <div className="flex items-start gap-4">
@@ -165,24 +146,7 @@ export function AthleteSummaryCard({ settings, apiBaseUrl }: AthleteSummaryCardP
         </div>
       ) : null}
 
-      {status ? (
-        <div
-          className={`mt-4 rounded-xl border px-4 py-3 text-sm ${statusClasses}`}
-          role={status.tone === 'error' ? 'alert' : 'status'}
-          aria-live={status.tone === 'error' ? 'assertive' : 'polite'}
-        >
-          <div className="flex items-start gap-3">
-            <StatusIcon
-              size={16}
-              className={status.tone === 'neutral' ? 'mt-0.5 shrink-0 animate-spin' : 'mt-0.5 shrink-0'}
-            />
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider">{status.label}</p>
-              <p className="mt-1">{status.message}</p>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {status ? <SettingsStatusBanner status={status} /> : null}
 
       <div className="mt-6 flex gap-3">
         <button

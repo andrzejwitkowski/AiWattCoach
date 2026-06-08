@@ -7,7 +7,7 @@ import {
   VOLATILE_PACKED_CONTEXT_KEYS,
 } from '../utils/contextSections';
 import { tryParseJson } from '../utils/parseContextLines';
-import { DecodedPackedContext } from './DecodedPackedContext';
+import { PackedContextPanel } from './PackedContextPanel';
 import { SectionCard } from './SectionCard';
 
 type VolatileContextSectionProps = {
@@ -26,7 +26,6 @@ function packedContextLabel(sourceKey: string): string {
 }
 
 export function VolatileContextSection({ rawText }: VolatileContextSectionProps) {
-  const [showRaw, setShowRaw] = useState(false);
   const [expanded, setExpanded] = useState(true);
 
   const parsed = useMemo(() => {
@@ -76,25 +75,10 @@ export function VolatileContextSection({ rawText }: VolatileContextSectionProps)
           )}
 
           {parsed.packed && (
-            <div>
-              <button
-                type="button"
-                onClick={() => setShowRaw(!showRaw)}
-                className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-300"
-              >
-                {showRaw ? 'Decoded view' : 'Show raw JSON'}
-              </button>
-              {showRaw ? (
-                <pre className="prompt-preview-text max-h-80 overflow-auto rounded-xl border border-white/10 bg-[#070b12] p-4 font-mono text-xs leading-5 text-slate-400">
-                  {JSON.stringify(parsed.packed.data, null, 2)}
-                </pre>
-              ) : (
-                <DecodedPackedContext
-                  label={packedContextLabel(parsed.packed.sourceKey)}
-                  data={parsed.packed.data}
-                />
-              )}
-            </div>
+            <PackedContextPanel
+              label={packedContextLabel(parsed.packed.sourceKey)}
+              data={parsed.packed.data}
+            />
           )}
         </div>
       )}

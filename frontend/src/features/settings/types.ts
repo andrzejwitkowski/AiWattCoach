@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const llmProviderSchema = z.enum(['openai', 'gemini', 'openrouter', 'deepseek']);
+const llmProviderSchema = z.enum(['openai', 'gemini', 'openrouter', 'deepseek']);
 const availabilityWeekdaySchema = z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 
 const aiAgentsSettingsSchema = z.object({
@@ -54,7 +54,7 @@ const analysisOptionsSettingsSchema = z.object({
   analyzeWithoutHeartRate: z.boolean(),
 });
 
-export const availabilityDaySchema = z.object({
+const availabilityDaySchema = z.object({
   weekday: availabilityWeekdaySchema,
   available: z.boolean(),
   maxDurationMinutes: z.number().int().nullable(),
@@ -156,14 +156,10 @@ export const updateAiAgentsRequestSchema = z.object({
 
 export type LlmProvider = z.infer<typeof llmProviderSchema>;
 
-export type UpdateAiAgentsRequest = z.infer<typeof updateAiAgentsRequestSchema>;
-
 export const updateIntervalsRequestSchema = z.object({
   apiKey: z.string().nullable().optional(),
   athleteId: z.string().nullable().optional(),
 });
-
-export type UpdateIntervalsRequest = z.infer<typeof updateIntervalsRequestSchema>;
 
 export type TestIntervalsConnectionResponse = z.infer<typeof testIntervalsConnectionResponseSchema>;
 export type TestAiAgentsConnectionResponse = z.infer<typeof testAiAgentsConnectionResponseSchema>;
@@ -180,8 +176,6 @@ export const updateAvailabilityRequestSchema = z.object({
   validateExplicitWeek(value.days, ctx);
 });
 
-export type UpdateAvailabilityRequest = z.infer<typeof updateAvailabilityRequestSchema>;
-
 export const updateCyclingRequestSchema = z.object({
   fullName: z.string().nullable().optional(),
   age: z.number().int().positive().max(120).nullable().optional(),
@@ -195,9 +189,6 @@ export const updateCyclingRequestSchema = z.object({
   athleteNotes: z.string().max(8000).nullable().optional(),
 });
 
-export type UpdateCyclingRequest = z.infer<typeof updateCyclingRequestSchema>;
-
-export type CyclingSettingsData = z.infer<typeof cyclingSettingsDataSchema>;
 export type AvailabilitySettingsData = z.infer<typeof availabilitySettingsSchema>;
 export type AvailabilityDay = z.infer<typeof availabilityDaySchema>;
 

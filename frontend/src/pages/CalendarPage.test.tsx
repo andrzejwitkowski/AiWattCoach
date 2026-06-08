@@ -4,21 +4,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../i18n';
+import { setScreenWidth } from '../test/setScreenWidth';
 import { useCalendarCoachChat } from '../features/calendar/hooks/useCalendarCoachChat';
 import { CalendarPage } from './CalendarPage';
-
-function setScreenWidth(width: number) {
-  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: query === '(max-width: 767px)' ? width <= 767 : false,
-    media: query,
-    onchange: null,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    dispatchEvent: () => false,
-  })) as typeof window.matchMedia;
-}
 
 vi.mock('../features/calendar/components/CalendarGrid', () => ({
   CalendarGrid: ({ apiBaseUrl }: { apiBaseUrl: string }) => (

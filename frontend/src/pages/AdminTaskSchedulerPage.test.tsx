@@ -3,20 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiBaseUrlProvider } from '../lib/apiBaseUrl';
+import { setScreenWidth } from '../test/setScreenWidth';
 import { AdminTaskSchedulerPage } from './AdminTaskSchedulerPage';
-
-function setScreenWidth(width: number) {
-  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: query === '(max-width: 767px)' ? width <= 767 : false,
-    media: query,
-    onchange: null,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    dispatchEvent: () => false,
-  })) as typeof window.matchMedia;
-}
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({

@@ -1,9 +1,9 @@
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { SettingsPage } from './SettingsPage';
+import { buildTestSettings } from '../features/settings/mockData';
 import { SettingsProvider } from '../features/settings/context/SettingsContext';
-import type { UserSettingsResponse } from '../features/settings/types';
+import { SettingsPage } from './SettingsPage';
 
 vi.mock('../features/settings/api/settings', () => ({
   loadSettings: vi.fn(),
@@ -47,7 +47,7 @@ const { IntervalsCard } = await import('../features/settings/components/Interval
 const loadSettingsMock = vi.mocked(loadSettings);
 const intervalsCardMock = vi.mocked(IntervalsCard);
 
-const settingsFixture: UserSettingsResponse = {
+const settingsFixture = buildTestSettings({
   aiAgents: {
     openaiApiKey: null,
     openaiApiKeySet: false,
@@ -74,35 +74,7 @@ const settingsFixture: UserSettingsResponse = {
     expiresAtEpochSeconds: null,
     connected: false,
   },
-  options: {
-    analyzeWithoutHeartRate: false,
-  },
-  availability: {
-    configured: true,
-    days: [
-      { weekday: 'mon', available: true, maxDurationMinutes: 60 },
-      { weekday: 'tue', available: false, maxDurationMinutes: null },
-      { weekday: 'wed', available: true, maxDurationMinutes: 90 },
-      { weekday: 'thu', available: false, maxDurationMinutes: null },
-      { weekday: 'fri', available: true, maxDurationMinutes: 120 },
-      { weekday: 'sat', available: false, maxDurationMinutes: null },
-      { weekday: 'sun', available: false, maxDurationMinutes: null },
-    ],
-  },
-  cycling: {
-    fullName: null,
-    age: null,
-    heightCm: null,
-    weightKg: null,
-    ftpWatts: null,
-    hrMaxBpm: null,
-    vo2Max: null,
-    athletePrompt: null,
-    medications: null,
-    athleteNotes: null,
-    lastZoneUpdateEpochSeconds: null,
-  },
-};
+});
 
 afterEach(() => {
   vi.clearAllMocks();
