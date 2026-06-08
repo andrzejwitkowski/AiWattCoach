@@ -1,6 +1,5 @@
 import { MarkdownContent } from '../../../lib/markdown/MarkdownContent';
 import type { ParsedStableContext } from '../utils/parseStableContext';
-import { DecodedPackedContext } from './DecodedPackedContext';
 import { PackedContextPanel } from './PackedContextPanel';
 
 type StableContextBodyProps = {
@@ -157,7 +156,7 @@ function StableMesoRoadmap({
       </summary>
       <div className="space-y-3 border-t border-white/5 px-4 py-3 text-sm">
         {guidance ? <p className="prompt-preview-text text-slate-300">{guidance}</p> : null}
-        {roadmap ? <DecodedPackedContext label="Meso Cycle Roadmap" data={roadmap} /> : null}
+        {roadmap ? <PackedContextPanel label="Meso Cycle Roadmap" data={roadmap} /> : null}
       </div>
     </details>
   );
