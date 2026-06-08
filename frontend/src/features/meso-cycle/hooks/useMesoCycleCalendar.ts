@@ -110,23 +110,26 @@ export function useMesoCycleCalendar({ settings }: UseMesoCycleCalendarOptions) 
 
     try {
       await generateMesoCyclePlan(apiBaseUrl);
-      setState((current) => ({ ...current, isGenerating: true }));
-      try {
-        await refresh();
-      } catch (refreshError) {
-        setState((current) => ({
-          ...current,
-          error:
-            refreshError instanceof Error
-              ? refreshError.message
-              : 'Failed to refresh meso cycle calendar',
-        }));
-      }
     } catch (error) {
       setState((current) => ({
         ...current,
         isGenerating: false,
         error: error instanceof Error ? error.message : 'Failed to start meso cycle generation',
+      }));
+      return;
+    }
+
+    setState((current) => ({ ...current, isGenerating: true }));
+
+    try {
+      await refresh();
+    } catch (refreshError) {
+      setState((current) => ({
+        ...current,
+        error:
+          refreshError instanceof Error
+            ? refreshError.message
+            : 'Failed to refresh meso cycle calendar',
       }));
     }
   }, [apiBaseUrl, canGenerate, refresh]);

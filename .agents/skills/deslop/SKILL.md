@@ -1,6 +1,6 @@
 ---
 name: deslop
-description: Remove AI-generated code slop and clean up code style. Use when cleaning up a branch diff, before commit, or when the user asks to deslop.
+description: Remove AI-generated code slop and clean up code style
 ---
 
 # Remove AI code slop
