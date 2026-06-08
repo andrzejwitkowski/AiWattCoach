@@ -9,6 +9,7 @@ pub enum AdminPromptPreviewError {
     Repository(String),
     TargetResolution(String),
     Llm(crate::domain::llm::LlmError),
+    MesoCycle(crate::domain::meso_cycle::MesoCycleError),
 }
 
 impl fmt::Display for AdminPromptPreviewError {
@@ -23,6 +24,7 @@ impl fmt::Display for AdminPromptPreviewError {
             Self::Repository(message) => write!(f, "{message}"),
             Self::TargetResolution(message) => write!(f, "{message}"),
             Self::Llm(error) => write!(f, "{error}"),
+            Self::MesoCycle(error) => write!(f, "{error}"),
         }
     }
 }

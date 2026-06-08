@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+. "$(dirname -- "$0")/hook-env.sh"
 
 echo "Running limited verification before push"
 bun run verify:rust

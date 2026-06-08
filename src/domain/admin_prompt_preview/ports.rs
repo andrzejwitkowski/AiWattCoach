@@ -16,4 +16,10 @@ pub trait AdminPromptPreviewUseCases: Send + Sync {
         user_id: &str,
         date: &str,
     ) -> BoxFuture<Result<AdminPromptPreviewResponse, AdminPromptPreviewError>>;
+
+    fn preview_meso_cycle_coach(
+        &self,
+        user_id: &str,
+        date: &str,
+    ) -> BoxFuture<Result<AdminPromptPreviewResponse, AdminPromptPreviewError>>;
 }

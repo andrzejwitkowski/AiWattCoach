@@ -1,60 +1,110 @@
 import type { UserSettingsResponse } from './types';
 
-const twelveDaysAgo = Math.floor(Date.now() / 1000) - 12 * 24 * 60 * 60;
-
-export const mockSettings: UserSettingsResponse = {
-  aiAgents: {
-    openaiApiKey: 'sk_test_REDACTED',
-    openaiApiKeySet: true,
-    geminiApiKey: '<redacted>',
-    geminiApiKeySet: true,
-    openrouterApiKey: null,
-    openrouterApiKeySet: false,
-    deepseekApiKey: null,
-    deepseekApiKeySet: false,
-    selectedProvider: 'openai',
-    selectedModel: 'gpt-4o-mini',
-  },
-  intervals: {
-    apiKey: '<redacted>',
-    apiKeySet: true,
-    athleteId: 'i123456',
-    connected: true,
-  },
-  wahoo: {
-    available: true,
-    accessToken: null,
-    accessTokenSet: false,
-    refreshTokenSet: false,
-    expiresAtEpochSeconds: null,
-    connected: false,
-  },
-  options: {
-    analyzeWithoutHeartRate: true,
-  },
-  availability: {
-    configured: true,
-    days: [
-      { weekday: 'mon', available: true, maxDurationMinutes: 60 },
-      { weekday: 'tue', available: false, maxDurationMinutes: null },
-      { weekday: 'wed', available: true, maxDurationMinutes: 90 },
-      { weekday: 'thu', available: false, maxDurationMinutes: null },
-      { weekday: 'fri', available: true, maxDurationMinutes: 120 },
-      { weekday: 'sat', available: true, maxDurationMinutes: 180 },
-      { weekday: 'sun', available: false, maxDurationMinutes: null },
-    ],
-  },
-  cycling: {
-    fullName: 'Alex Rivier',
-    age: 28,
-    heightCm: 182,
-    weightKg: 74,
-    ftpWatts: 280,
-    hrMaxBpm: 192,
-    vo2Max: 62,
-    athletePrompt: 'Masters athlete preparing for fondos and stage races. Prefers practical coaching feedback.',
-    medications: 'Seasonal antihistamine as needed.',
-    athleteNotes: 'Works a variable schedule and occasionally has limited sleep after travel.',
-    lastZoneUpdateEpochSeconds: twelveDaysAgo,
-  },
+export type TestSettingsOverrides = {
+  aiAgents?: Partial<UserSettingsResponse['aiAgents']>;
+  intervals?: Partial<UserSettingsResponse['intervals']>;
+  wahoo?: Partial<UserSettingsResponse['wahoo']>;
+  options?: Partial<UserSettingsResponse['options']>;
+  availability?: Partial<UserSettingsResponse['availability']>;
+  cycling?: Partial<UserSettingsResponse['cycling']>;
 };
+
+export const defaultAvailabilityDays: UserSettingsResponse['availability']['days'] = [
+  { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+  { weekday: 'tue', available: false, maxDurationMinutes: null },
+  { weekday: 'wed', available: true, maxDurationMinutes: 90 },
+  { weekday: 'thu', available: false, maxDurationMinutes: null },
+  { weekday: 'fri', available: true, maxDurationMinutes: 120 },
+  { weekday: 'sat', available: false, maxDurationMinutes: null },
+  { weekday: 'sun', available: false, maxDurationMinutes: null },
+];
+
+export function buildTestSettings(overrides: TestSettingsOverrides = {}): UserSettingsResponse {
+  const settings: UserSettingsResponse = {
+    aiAgents: {
+      openaiApiKey: '***...1234',
+      openaiApiKeySet: true,
+      geminiApiKey: null,
+      geminiApiKeySet: false,
+      openrouterApiKey: '***...9999',
+      openrouterApiKeySet: true,
+      deepseekApiKey: null,
+      deepseekApiKeySet: false,
+      selectedProvider: 'openrouter',
+      selectedModel: 'openai/gpt-4o-mini',
+      mesoCycleProvider: null,
+      mesoCycleModel: null,
+    },
+    intervals: {
+      apiKey: null,
+      apiKeySet: false,
+      athleteId: null,
+      connected: false,
+    },
+    wahoo: {
+      available: false,
+      accessToken: null,
+      accessTokenSet: false,
+      refreshTokenSet: false,
+      expiresAtEpochSeconds: null,
+      connected: false,
+    },
+    options: {
+      analyzeWithoutHeartRate: false,
+    },
+    availability: {
+      configured: true,
+      days: defaultAvailabilityDays,
+    },
+    cycling: {
+      fullName: null,
+      age: null,
+      heightCm: null,
+      weightKg: null,
+      ftpWatts: null,
+      hrMaxBpm: null,
+      vo2Max: null,
+      athletePrompt: null,
+      medications: null,
+      athleteNotes: null,
+      lastZoneUpdateEpochSeconds: null,
+    },
+  };
+
+  if (overrides.aiAgents) {
+    Object.assign(settings.aiAgents, overrides.aiAgents);
+  }
+  if (overrides.intervals) {
+    Object.assign(settings.intervals, overrides.intervals);
+  }
+  if (overrides.wahoo) {
+    Object.assign(settings.wahoo, overrides.wahoo);
+  }
+  if (overrides.options) {
+    Object.assign(settings.options, overrides.options);
+  }
+  if (overrides.availability) {
+    Object.assign(settings.availability, overrides.availability);
+  }
+  if (overrides.cycling) {
+    Object.assign(settings.cycling, overrides.cycling);
+  }
+
+  return settings;
+}
+
+export function unsetAvailabilityDays(): UserSettingsResponse['availability']['days'] {
+  return [
+    { weekday: 'mon', available: false, maxDurationMinutes: null },
+    { weekday: 'tue', available: false, maxDurationMinutes: null },
+    { weekday: 'wed', available: false, maxDurationMinutes: null },
+    { weekday: 'thu', available: false, maxDurationMinutes: null },
+    { weekday: 'fri', available: false, maxDurationMinutes: null },
+    { weekday: 'sat', available: false, maxDurationMinutes: null },
+    { weekday: 'sun', available: false, maxDurationMinutes: null },
+  ];
+}
+
+export function settingsApiResponseBody(overrides?: TestSettingsOverrides): UserSettingsResponse {
+  return buildTestSettings(overrides);
+}

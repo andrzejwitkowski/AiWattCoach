@@ -695,6 +695,71 @@ async fn update_ai_agents_supports_openrouter_provider_and_model() {
 }
 
 #[tokio::test]
+async fn update_ai_agents_persists_meso_cycle_provider_and_model() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let patch_body = serde_json::json!({
+        "openrouterApiKey": "or-key-123456",
+        "selectedProvider": "openrouter",
+        "selectedModel": "openai/gpt-4o-mini",
+        "mesoCycleProvider": "gemini",
+        "mesoCycleModel": "gemini-2.5-flash"
+    });
+
+    let patch_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/ai-agents")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&patch_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(patch_response.status(), StatusCode::OK);
+
+    let get_response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/settings")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let response_body: Value = get_json(get_response).await;
+    let ai_agents = response_body.get("aiAgents").unwrap();
+
+    assert_eq!(
+        ai_agents
+            .get("mesoCycleProvider")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "gemini"
+    );
+    assert_eq!(
+        ai_agents.get("mesoCycleModel").unwrap().as_str().unwrap(),
+        "gemini-2.5-flash"
+    );
+    assert_eq!(
+        ai_agents.get("selectedProvider").unwrap().as_str().unwrap(),
+        "openrouter"
+    );
+}
+
+#[tokio::test]
 async fn update_ai_agents_supports_deepseek_provider_and_model() {
     let app = settings_test_app(
         TestIdentityServiceWithSession::default(),
@@ -1219,6 +1284,8 @@ async fn test_ai_agents_connection_returns_bad_request_when_provider_changes_wit
         deepseek_api_key: None,
         selected_provider: Some(aiwattcoach::domain::llm::LlmProvider::OpenAi),
         selected_model: Some("gpt-4o-mini".to_string()),
+        meso_cycle_provider: None,
+        meso_cycle_model: None,
     };
     let app = settings_test_app_with_services(
         TestIdentityServiceWithSession::default(),

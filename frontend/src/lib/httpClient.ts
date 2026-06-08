@@ -16,6 +16,7 @@ export class HttpError extends Error {
 
 type ErrorResponseBody = {
   message?: string;
+  error?: string;
 };
 
 export class AuthenticationError extends Error {
@@ -37,13 +38,7 @@ type RequestOptions = {
   timeoutMs?: number;
 };
 
-async function request<TRes>(
-  method: string,
-  apiBaseUrl: string,
-  path: string,
-  body?: unknown,
-  options?: RequestOptions,
-): Promise<TRes> {
+function buildRequestHeaders(body: unknown): Record<string, string> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
     traceparent: generateTraceparent(),
@@ -53,14 +48,66 @@ async function request<TRes>(
     headers['Content-Type'] = 'application/json';
   }
 
+  return headers;
+}
+
+function buildRequestSignal(timeoutMs?: number): AbortSignal | undefined {
+  if (timeoutMs === undefined || timeoutMs <= 0) {
+    return undefined;
+  }
+
+  return AbortSignal.timeout(timeoutMs);
+}
+
+async function parseResponseBody(response: Response): Promise<unknown> {
+  if (response.status === 204) {
+    return undefined;
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    return undefined;
+  }
+}
+
+function isErrorResponseBody(body: unknown): body is ErrorResponseBody {
+  return typeof body === 'object' && body !== null && ('message' in body || 'error' in body);
+}
+
+function getErrorMessage(method: string, path: string, status: number, body: unknown): string {
+  if (isErrorResponseBody(body)) {
+    if (typeof body.message === 'string' && body.message.trim()) {
+      return body.message;
+    }
+    if (typeof body.error === 'string' && body.error.trim()) {
+      return body.error;
+    }
+  }
+
+  return `${method} ${path} failed: ${status}`;
+}
+
+function shouldThrowForStatus(
+  response: Response,
+  allowedErrorStatuses: number[] | undefined,
+): boolean {
+  return !response.ok && !allowedErrorStatuses?.includes(response.status);
+}
+
+async function request<TRes>(
+  method: string,
+  apiBaseUrl: string,
+  path: string,
+  body?: unknown,
+  options?: RequestOptions,
+): Promise<TRes> {
   const response = await fetch(buildUrl(apiBaseUrl, path), {
     method,
-    headers,
+    headers: buildRequestHeaders(body),
     credentials: 'include',
     body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal: options?.timeoutMs !== undefined && options.timeoutMs > 0
-      ? AbortSignal.timeout(options.timeoutMs)
-      : undefined,
+    signal: buildRequestSignal(options?.timeoutMs),
   });
 
   if (response.status === 401) {
@@ -69,7 +116,7 @@ async function request<TRes>(
 
   const responseBody = await parseResponseBody(response);
 
-  if (!response.ok && !options?.allowedErrorStatuses?.includes(response.status)) {
+  if (shouldThrowForStatus(response, options?.allowedErrorStatuses)) {
     throw new HttpError(
       response.status,
       getErrorMessage(method, path, response.status, responseBody),
@@ -86,30 +133,6 @@ async function request<TRes>(
   }
 
   return responseBody as TRes;
-}
-
-async function parseResponseBody(response: Response): Promise<unknown> {
-  if (response.status === 204) {
-    return undefined;
-  }
-
-  try {
-    return await response.json();
-  } catch {
-    return undefined;
-  }
-}
-
-function getErrorMessage(method: string, path: string, status: number, body: unknown): string {
-  if (isErrorResponseBody(body) && typeof body.message === 'string' && body.message.trim()) {
-    return body.message;
-  }
-
-  return `${method} ${path} failed: ${status}`;
-}
-
-function isErrorResponseBody(body: unknown): body is ErrorResponseBody {
-  return typeof body === 'object' && body !== null && 'message' in body;
 }
 
 export function get<TRes>(apiBaseUrl: string, path: string, options?: RequestOptions): Promise<TRes> {

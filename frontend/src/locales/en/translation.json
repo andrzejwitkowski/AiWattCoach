@@ -12,6 +12,7 @@
     "dashboard": "Dashboard",
     "settings": "Settings",
     "calendar": "Calendar",
+    "mesoCycle": "Meso Coach",
     "races": "Races",
     "aiCoach": "AI Coach",
     "workspace": "Workspace",
@@ -34,8 +35,26 @@
       "workspace": "Workspace",
       "systemInfo": "System Info",
       "taskScheduler": "Task Scheduler",
-      "promptPreview": "Prompt Preview"
+      "promptPreview": "Prompt Preview",
+      "mesoCycle": "Meso Cycle Coach"
     }
+  },
+  "mesoCycle": {
+    "openMesoCalendar": "Open 30-day meso cycle coach",
+    "backToCalendar": "Back to main calendar",
+    "kicker": "Strategic planning",
+    "title": "Meso Cycle Coach",
+    "description": "Review a 30-day preliminary plan separate from your AI coach 14-day window. Days that overlap the active AI coach plan are marked outdated.",
+    "refresh": "Refresh",
+    "generate": "Generate meso plan",
+    "generating": "Generating...",
+    "windowLabel": "Window: {{from}} to {{to}}",
+    "noWindow": "No meso window resolved yet. Generate a plan to create the next 30-day window.",
+    "loading": "Loading meso cycle calendar...",
+    "outdated": "Outdated",
+    "restDay": "Rest day",
+    "noPlanYet": "No meso projection yet",
+    "configureAiFirst": "Configure an AI provider and API key in Settings before generating a meso plan."
   },
   "adminPromptPreview": {
     "title": "LLM prompt preview",
@@ -45,6 +64,7 @@
     "dateLabel": "Date",
     "postWorkoutButton": "Preview post-workout request",
     "calendarCoachButton": "Preview calendar view coach",
+    "mesoCycleButton": "Preview meso cycle coach",
     "loading": "Loading preview...",
     "empty": "Choose a user, date, and preview action to render the request JSON here.",
     "validation": "Enter a user ID and date.",

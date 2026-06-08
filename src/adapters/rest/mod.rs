@@ -12,6 +12,7 @@ mod health;
 mod intervals;
 mod logging;
 mod logs;
+mod meso_cycle;
 mod races;
 mod same_origin;
 mod settings;
@@ -96,6 +97,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                     get(admin_prompt_preview::preview_calendar_coach),
                 )
                 .route(
+                    "/api/admin/users/{user_id}/prompt-preview/meso-cycle",
+                    get(admin_prompt_preview::preview_meso_cycle_coach),
+                )
+                .route(
                     "/api/admin/task-scheduler/tasks",
                     get(admin_task_scheduler::list_tasks),
                 )
@@ -150,6 +155,22 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                 .route(
                     "/api/athlete-summary/generate",
                     post(athlete_summary::generate_athlete_summary),
+                )
+                .route(
+                    "/api/meso-cycle/status",
+                    get(meso_cycle::get_meso_cycle_status),
+                )
+                .route(
+                    "/api/meso-cycle/calendar",
+                    get(meso_cycle::get_meso_cycle_calendar),
+                )
+                .route(
+                    "/api/meso-cycle/generate",
+                    post(meso_cycle::post_generate_meso_cycle),
+                )
+                .route(
+                    "/api/meso-cycle/operations/{operation_key}",
+                    get(meso_cycle::get_meso_cycle_operation),
                 )
                 .route("/api/calendar/events", get(calendar::list_events))
                 .route("/api/calendar/labels", get(calendar::list_labels))

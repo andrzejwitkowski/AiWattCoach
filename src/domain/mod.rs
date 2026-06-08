@@ -12,6 +12,7 @@ pub mod identity;
 pub mod intervals;
 pub mod llm;
 pub mod llm_tools;
+pub mod meso_cycle;
 pub mod planned_completed_links;
 pub mod planned_workout_tokens;
 pub mod planned_workout_wahoo_syncs;

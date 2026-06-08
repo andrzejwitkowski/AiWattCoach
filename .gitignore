@@ -11,6 +11,7 @@
 .worktrees/
 /frontend/.vite/
 /graphify-out/cache/
+**/.fallow/
 /.sisyphus/
 /.pup/
 /docker-compose-sandbox.yml

@@ -35,6 +35,7 @@ pub struct WorkoutSummaryCoachPromptInput {
     pub today: String,
     pub data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
     pub reusable_cache_id: Option<String>,
+    pub meso_roadmap_stable_context: Option<String>,
 }
 
 pub fn assemble_workout_summary_coach_request(
@@ -45,6 +46,7 @@ pub fn assemble_workout_summary_coach_request(
         &input.training_context.focus_date,
         &input.training_context.rendered.stable_context,
         input.athlete_summary_text.as_deref(),
+        input.meso_roadmap_stable_context.as_deref(),
     );
     let volatile_context = build_volatile_context(
         &input.training_context.rendered.volatile_context,
@@ -119,6 +121,7 @@ pub fn build_stable_context(
     selected_workout_date: &str,
     packed_training_context: &str,
     athlete_summary_text: Option<&str>,
+    meso_roadmap_stable_context: Option<&str>,
 ) -> String {
     let mut context = format!(
         "workout_summary={{\"workoutId\":\"{}\",\"rpe\":{}}}\nselected_workout={{\"workoutId\":\"{}\",\"date\":\"{}\"}}\ncurrent_workout_context=You are discussing the completed workout from {}.",
@@ -142,6 +145,11 @@ pub fn build_stable_context(
         .filter(|value| !value.trim().is_empty())
     {
         context.push_str(&format!("\ncurrent_workout_recap={recap}"));
+    }
+
+    if let Some(meso_roadmap) = meso_roadmap_stable_context.filter(|value| !value.trim().is_empty())
+    {
+        context.push_str(&format!("\n{meso_roadmap}"));
     }
 
     context.push_str(&format!(

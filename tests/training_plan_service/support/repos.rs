@@ -413,6 +413,25 @@ impl TrainingPlanGenerationOperationRepository for InMemoryTrainingPlanOperation
             Ok(operation)
         })
     }
+
+    fn find_latest_completed_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<Option<TrainingPlanGenerationOperation>, TrainingPlanError>,
+    > {
+        let operation = self
+            .operations
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|operation| {
+                operation.user_id == user_id && operation.status == WorkflowStatus::Completed
+            })
+            .max_by_key(|operation| operation.updated_at_epoch_seconds)
+            .cloned();
+        Box::pin(async move { Ok(operation) })
+    }
 }
 
 impl TrainingPlanGenerationOperationRepository for FailingUpsertTrainingPlanOperationRepository {
@@ -449,5 +468,14 @@ impl TrainingPlanGenerationOperationRepository for FailingUpsertTrainingPlanOper
     > {
         let error_message = self.error_message.clone();
         Box::pin(async move { Err(TrainingPlanError::Repository(error_message)) })
+    }
+
+    fn find_latest_completed_by_user_id(
+        &self,
+        _user_id: &str,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<Option<TrainingPlanGenerationOperation>, TrainingPlanError>,
+    > {
+        Box::pin(async move { Ok(None) })
     }
 }

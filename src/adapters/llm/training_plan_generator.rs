@@ -20,9 +20,10 @@ use crate::domain::{
     training_context::{TrainingContext, TrainingContextBuilder},
     training_plan::{
         parse_training_plan_llm_envelope, should_retry_training_plan_llm_envelope_repair,
-        training_plan_llm_envelope_json_schema, TrainingPlanConversationRole, TrainingPlanError,
+        training_plan_llm_envelope_json_schema, training_plan_output_grammar,
+        training_plan_planning_guidelines, TrainingPlanConversationRole, TrainingPlanError,
         TrainingPlanGenerator, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
-        TrainingPlanToolLoopCheckpoint,
+        TrainingPlanToolLoopCheckpoint, TRAINING_PLAN_WINDOW_DAY_COUNT,
     },
     workout_summary::WorkoutRecap,
 };
@@ -31,13 +32,6 @@ const TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling 
 const TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling coach and a strict syntax generator for Intervals.icu planned workouts. Generate a 14-day internal cycling plan window using only the backend-supported workout grammar. Use the packed training context and the completed workout recap as the planning basis.";
 const TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling coach and a strict syntax generator for Intervals.icu planned workouts. Help correct invalid dated workout sections using only the backend-supported workout grammar. Only rewrite the invalid dated sections provided.";
 const TRAINING_PLAN_ENVELOPE_REPAIR_SYSTEM_PROMPT_BASE: &str = "You are repairing one previously generated training-plan reply into the exact app JSON envelope. Do not generate a new plan. Do not invent workouts, dates, or commentary. Extract only the existing training-plan content already present in the previous assistant reply.";
-const TRAINING_PLAN_OUTPUT_GRAMMAR: &str = "Critical rules: Output ONLY valid JSON matching this schema. Your full response is parsed directly as JSON by the application. Any text outside the JSON object will be treated as an invalid response. Do not include markdown fences or any extra text outside the JSON object. Put the workout-builder text only in the `plan` field. Put any coach commentary only in the optional `description` field. Apply every workout-builder grammar rule specifically to the `plan` field value. Every actionable workout step in `plan` MUST begin with a hyphen followed by a space (`- `). Do not invent syntax. Output grammar for the `plan` field: One dated section per day. Start each section with a YYYY-MM-DD line. Follow with either `Rest Day`, `Rest Day: <reason>`, or workout-builder text lines. Use `Rest Day: <reason>` when you intentionally prescribe full rest so the backend can persist the reason. Block titles and descriptions are allowed on lines that do not start with `- ` and do not end with `x`. Step syntax: `- [Duration] [Target]`. Ramp syntax: `- [Duration] ramp [Start Target]-[End Target]`. Repeat headers must end with `x`, such as `Main Set 4x`. Supported durations: `30s`, `5m`, `45m`. Supported targets: `65%`, `95-105%`, `120-160W`. Example step: `- 45m 65%`. Example `plan` value: `2026-04-06\nWarmup\n- 15m ramp 100-270W\n2026-04-07\nRest Day: accumulated fatigue after race block`. Do not use cadence, zone targets, inline text cues, hour units, or distance units because the current backend parser does not accept them. For correction prompts, only output corrected dated sections for the invalid dates you are fixing inside the `plan` field.";
-const TRAINING_PLAN_PLANNING_GUIDELINES_BASE: &str = "Planning guidelines: Follow a durability-first approach. Road cycling, especially masters racing, is stochastic; prioritize power repeatability and lactate clearance over pure steady-state aerobic work. Treat athlete age 45+, body-weight changes, and medications such as beta-blockers as fixed environmental constraints, not pathologies. Metric hierarchy: RPE over power over TSS/TSB over heart rate. If RPE stays low or moderate despite high fatigue metrics, trust recovery capacity and maintain load. Ignore heart rate for intensity pacing when beta-blockers are present. Never prescribe more than 2 consecutive Rest Day entries unless the athlete explicitly reports illness or injury. During build phases, TSB/Form may sit in the -15 to -25 range without forcing emergency rest. Prevent detraining by preferring Active Recovery or Z1 over total inactivity when extra recovery is needed. If the athlete reports fatigue or low freshness, first choose a short Z1 ride when availability allows a safe low-load session; prescribe Rest Day only when availability blocks even an easy ride or the context clearly supports full rest, and include a short concrete reason after `Rest Day:`. Plan beyond isolated days: shape the 14-day window as part of a coherent mesocycle with a clear phase progression, not a pile of disconnected sessions. Weekly load progression should be intentional. Treat races as Category C by default unless the context explicitly says otherwise. For Category C races, do not taper: treat the race like a high-intensity stochastic interval session, keep normal training load during race week, keep Tuesday and Wednesday interval sessions before a Sunday race when the context supports it, allow at most one light spinning or Rest Day on Friday or Saturday before the race, and schedule recovery or light endurance the day after the race before returning to structured intervals within 48 hours. When race time is materially earlier than normal training time, gradually shift key sessions toward the race start window to support circadian rhythm and heat adaptation.";
-const TRAINING_PLAN_CONVERSATION_GUIDANCE: &str = "If earlier conversation messages are present, treat them as the exact conversation that led to this plan. Earlier assistant-role messages are your own earlier coach statements. If those earlier coach statements promised specific workouts, sequencing, or an easy/recovery/rest week structure, return a plan that stays consistent with those promises unless the packed training context clearly makes them unsafe or impossible. When you must override an earlier promise for safety, availability, or hard context constraints, stay as close as possible to the original intent and preserve any easy/recovery character of the block.";
-const TRAINING_PLAN_FORWARD_LOAD_GUIDANCE: &str = "Forecast load sequentially before choosing each next day. Start from the current historical CTL, ATL, and TSB in the packed training context. Treat previously projected planned days (`pd`) as already planned/completed inputs when they exist, then simulate the effect of each newly planned workout before choosing the following day. Do not plan all 14 days from one static CTL/ATL/TSB snapshot. If the conversation or context says rest week, easy week, or recovery block, keep the forward simulation aligned with that low-load intent and avoid hard sessions unless they are truly necessary.";
-const TRAINING_PLAN_AVAILABILITY_CONFIGURED_GUIDANCE: &str = "Weekly availability is mandatory and must be respected: only schedule workouts on weekdays marked available, keep unavailable days as Rest Day with a reason when full rest is intentional, and never exceed the configured max duration minutes for each available weekday.";
-const TRAINING_PLAN_AVAILABILITY_UNCONFIGURED_GUIDANCE: &str = "Weekly availability is not configured in this context. Do not infer unavailable days or extra rest constraints from missing availability data. Plan a sensible 14-day cycling window from the training context alone, and avoid claiming that weekly availability is configured.";
-
 #[derive(Clone)]
 pub struct TrainingPlanLlmGenerator<Time>
 where
@@ -542,8 +536,9 @@ fn training_plan_recap_system_prompt() -> String {
 
 fn training_plan_envelope_repair_system_prompt() -> String {
     format!(
-        "{TRAINING_PLAN_ENVELOPE_REPAIR_SYSTEM_PROMPT_BASE} JSON schema: {} {TRAINING_PLAN_OUTPUT_GRAMMAR}",
+        "{TRAINING_PLAN_ENVELOPE_REPAIR_SYSTEM_PROMPT_BASE} JSON schema: {} {}",
         training_plan_llm_envelope_json_schema(),
+        training_plan_output_grammar(),
     )
 }
 
@@ -555,35 +550,28 @@ fn training_plan_envelope_repair_user_prompt(previous_assistant_content: &str) -
 
 fn training_plan_initial_window_system_prompt(availability_configured: bool) -> String {
     format!(
-        "{TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE} JSON schema: {} {} {TRAINING_PLAN_OUTPUT_GRAMMAR} {PACKED_TRAINING_CONTEXT_LEGEND}",
+        "{TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {PACKED_TRAINING_CONTEXT_LEGEND}",
         training_plan_llm_envelope_json_schema(),
-        training_plan_planning_guidelines(availability_configured),
+        training_plan_planning_guidelines(
+            availability_configured,
+            TRAINING_PLAN_WINDOW_DAY_COUNT,
+        ),
+        training_plan_output_grammar(),
     )
 }
 
 fn training_plan_correction_system_prompt(availability_configured: bool) -> String {
     format!(
-        "{TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE} JSON schema: {} {} {TRAINING_PLAN_OUTPUT_GRAMMAR} {PACKED_TRAINING_CONTEXT_LEGEND}",
+        "{TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {PACKED_TRAINING_CONTEXT_LEGEND}",
         training_plan_llm_envelope_json_schema(),
-        training_plan_planning_guidelines(availability_configured),
+        training_plan_planning_guidelines(
+            availability_configured,
+            TRAINING_PLAN_WINDOW_DAY_COUNT,
+        ),
+        training_plan_output_grammar(),
     )
 }
 
-fn training_plan_planning_guidelines(availability_configured: bool) -> String {
-    let availability_guidance = if availability_configured {
-        TRAINING_PLAN_AVAILABILITY_CONFIGURED_GUIDANCE
-    } else {
-        TRAINING_PLAN_AVAILABILITY_UNCONFIGURED_GUIDANCE
-    };
-
-    format!(
-        "{TRAINING_PLAN_PLANNING_GUIDELINES_BASE} {TRAINING_PLAN_CONVERSATION_GUIDANCE} {TRAINING_PLAN_FORWARD_LOAD_GUIDANCE} {availability_guidance}"
-    )
-}
-
-/// Uses the current planning window end as the synthetic "today" anchor for
-/// both initial generation and correction. Callers should rebuild the training
-/// context before correction if they want that planning anchor refreshed.
 fn training_plan_tool_context_today(training_context: &TrainingContext) -> String {
     training_context.history.window_end.clone()
 }

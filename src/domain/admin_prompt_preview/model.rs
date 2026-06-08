@@ -9,6 +9,7 @@ use crate::domain::llm::{
 pub enum AdminPromptPreviewSurface {
     PostWorkout,
     CalendarCoach,
+    MesoCycleCoach,
 }
 
 impl AdminPromptPreviewSurface {
@@ -16,6 +17,7 @@ impl AdminPromptPreviewSurface {
         match self {
             Self::PostWorkout => "post_workout",
             Self::CalendarCoach => "calendar_coach",
+            Self::MesoCycleCoach => "meso_cycle_coach",
         }
     }
 }
@@ -35,6 +37,12 @@ pub struct AdminPromptPreviewMeta {
     pub selection_method: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compliance_score: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meso_start: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meso_end: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ai_coach_last_date: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]

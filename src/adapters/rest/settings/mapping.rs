@@ -32,6 +32,12 @@ pub(super) fn map_settings_to_dto(
                 .as_ref()
                 .map(|provider| provider.as_str().to_string()),
             selected_model: settings.ai_agents.selected_model.clone(),
+            meso_cycle_provider: settings
+                .ai_agents
+                .meso_cycle_provider
+                .as_ref()
+                .map(|provider| provider.as_str().to_string()),
+            meso_cycle_model: settings.ai_agents.meso_cycle_model.clone(),
         },
         intervals: IntervalsDto {
             api_key: mask_sensitive(&settings.intervals.api_key),
@@ -113,6 +119,8 @@ pub(super) fn map_ai_agents_update(
 ) -> Result<AiAgentsConfig, SettingsError> {
     let selected_provider_update = parse_provider_settings_input(body.selected_provider)?;
     let selected_model_update = normalize_string_input(body.selected_model);
+    let meso_cycle_provider_update = parse_provider_settings_input(body.meso_cycle_provider)?;
+    let meso_cycle_model_update = normalize_string_input(body.meso_cycle_model);
     let openai_api_key = normalize_string_input(body.openai_api_key);
     let gemini_api_key = normalize_string_input(body.gemini_api_key);
     let openrouter_api_key = normalize_string_input(body.openrouter_api_key);
@@ -153,6 +161,40 @@ pub(super) fn map_ai_agents_update(
         _ => {}
     }
 
+    let meso_cycle_provider_changed = match &meso_cycle_provider_update {
+        FieldUpdate::Missing => false,
+        FieldUpdate::Clear => current.ai_agents.meso_cycle_provider.is_some(),
+        FieldUpdate::Set(provider) => {
+            current.ai_agents.meso_cycle_provider.as_ref() != Some(provider)
+        }
+    };
+    let meso_cycle_provider = apply_field_update(
+        meso_cycle_provider_update,
+        current.ai_agents.meso_cycle_provider.clone(),
+    );
+    let meso_cycle_model = validation::validate_ai_model(if meso_cycle_provider_changed {
+        apply_field_update(meso_cycle_model_update, None)
+    } else {
+        apply_field_update(
+            meso_cycle_model_update,
+            current.ai_agents.meso_cycle_model.clone(),
+        )
+    })?;
+
+    match (&meso_cycle_provider, &meso_cycle_model) {
+        (Some(_), None) => {
+            return Err(SettingsError::Validation(
+                "mesoCycleModel must not be empty".to_string(),
+            ))
+        }
+        (None, Some(_)) => {
+            return Err(SettingsError::Validation(
+                "mesoCycleProvider must not be empty".to_string(),
+            ))
+        }
+        _ => {}
+    }
+
     Ok(AiAgentsConfig {
         openai_api_key: apply_field_update(
             openai_api_key,
@@ -172,6 +214,8 @@ pub(super) fn map_ai_agents_update(
         ),
         selected_provider: validation::validate_ai_provider(selected_provider)?,
         selected_model,
+        meso_cycle_provider: validation::validate_ai_provider(meso_cycle_provider)?,
+        meso_cycle_model,
     })
 }
 

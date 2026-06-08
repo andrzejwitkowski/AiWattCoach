@@ -1,9 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AiAgentsCard } from './AiAgentsCard';
-import type { UserSettingsResponse } from '../types';
 import { testAiAgentsConnection, updateAiAgents } from '../api/settings';
+import { buildTestSettings } from '../mockData';
+import { AiAgentsCard } from './AiAgentsCard';
 
 vi.mock('../api/settings', () => ({
   updateAiAgents: vi.fn(),
@@ -13,66 +13,6 @@ vi.mock('../api/settings', () => ({
 const updateAiAgentsMock = vi.mocked(updateAiAgents);
 const testAiAgentsConnectionMock = vi.mocked(testAiAgentsConnection);
 
-function buildSettings(overrides?: Partial<UserSettingsResponse['aiAgents']>): UserSettingsResponse {
-  return {
-    aiAgents: {
-      openaiApiKey: '***...1234',
-      openaiApiKeySet: true,
-      geminiApiKey: null,
-      geminiApiKeySet: false,
-      openrouterApiKey: '***...9999',
-      openrouterApiKeySet: true,
-      deepseekApiKey: null,
-      deepseekApiKeySet: false,
-      selectedProvider: 'openrouter',
-      selectedModel: 'openai/gpt-4o-mini',
-      ...overrides,
-    },
-    intervals: {
-      apiKey: null,
-      apiKeySet: false,
-      athleteId: null,
-      connected: false,
-    },
-    wahoo: {
-      available: false,
-      accessToken: null,
-      accessTokenSet: false,
-      refreshTokenSet: false,
-      expiresAtEpochSeconds: null,
-      connected: false,
-    },
-    options: {
-      analyzeWithoutHeartRate: false,
-    },
-    availability: {
-      configured: true,
-      days: [
-        { weekday: 'mon', available: true, maxDurationMinutes: 60 },
-        { weekday: 'tue', available: false, maxDurationMinutes: null },
-        { weekday: 'wed', available: true, maxDurationMinutes: 90 },
-        { weekday: 'thu', available: false, maxDurationMinutes: null },
-        { weekday: 'fri', available: true, maxDurationMinutes: 120 },
-        { weekday: 'sat', available: false, maxDurationMinutes: null },
-        { weekday: 'sun', available: false, maxDurationMinutes: null },
-      ],
-    },
-    cycling: {
-      fullName: null,
-      age: null,
-      heightCm: null,
-      weightKg: null,
-      ftpWatts: null,
-      hrMaxBpm: null,
-      vo2Max: null,
-      athletePrompt: null,
-      medications: null,
-      athleteNotes: null,
-      lastZoneUpdateEpochSeconds: null,
-    },
-  };
-}
-
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -80,10 +20,10 @@ afterEach(() => {
 
 describe('AiAgentsCard', () => {
   it('shows persisted provider and model values', () => {
-    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildTestSettings()} apiBaseUrl="" onSave={() => {}} />);
 
     expect(screen.getByLabelText(/active provider/i)).toHaveValue('openrouter');
-    expect(screen.getByLabelText(/model/i)).toHaveValue('openai/gpt-4o-mini');
+    expect(screen.getByLabelText(/^Model$/i)).toHaveValue('openai/gpt-4o-mini');
     expect(screen.getByRole('button', { name: 'openai/gpt-5' })).toBeInTheDocument();
   });
 
@@ -96,9 +36,9 @@ describe('AiAgentsCard', () => {
       usedSavedModel: false,
     });
 
-    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildTestSettings()} apiBaseUrl="" onSave={() => {}} />);
 
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: 'anthropic/claude-3.5-sonnet' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
@@ -112,15 +52,15 @@ describe('AiAgentsCard', () => {
   });
 
   it('saves provider, model, and openrouter key', async () => {
-    updateAiAgentsMock.mockResolvedValue(buildSettings());
+    updateAiAgentsMock.mockResolvedValue(buildTestSettings());
     const onSave = vi.fn();
 
-    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={onSave} />);
+    render(<AiAgentsCard settings={buildTestSettings()} apiBaseUrl="" onSave={onSave} />);
 
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'openrouter' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: 'openai/gpt-4.1-mini' },
     });
     fireEvent.change(screen.getByLabelText(/openrouter api key/i), {
@@ -138,15 +78,15 @@ describe('AiAgentsCard', () => {
   });
 
   it('saves deepseek provider, model, and key', async () => {
-    updateAiAgentsMock.mockResolvedValue(buildSettings());
+    updateAiAgentsMock.mockResolvedValue(buildTestSettings());
     const onSave = vi.fn();
 
-    render(<AiAgentsCard settings={buildSettings({ selectedProvider: null, selectedModel: null })} apiBaseUrl="" onSave={onSave} />);
+    render(<AiAgentsCard settings={buildTestSettings({ aiAgents: { selectedProvider: null, selectedModel: null } })} apiBaseUrl="" onSave={onSave} />);
 
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'deepseek' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: 'deepseek-v4-pro' },
     });
     fireEvent.change(screen.getByLabelText(/deepseek api key/i), {
@@ -165,9 +105,9 @@ describe('AiAgentsCard', () => {
   });
 
   it('clears plaintext api key fields after a successful save', async () => {
-    updateAiAgentsMock.mockResolvedValue(buildSettings());
+    updateAiAgentsMock.mockResolvedValue(buildTestSettings());
 
-    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildTestSettings()} apiBaseUrl="" onSave={() => {}} />);
 
     const openrouterKeyInput = screen.getByLabelText(/openrouter api key/i) as HTMLInputElement;
     fireEvent.change(openrouterKeyInput, {
@@ -183,14 +123,16 @@ describe('AiAgentsCard', () => {
   });
 
   it('sends explicit provider and model clears on save', async () => {
-    updateAiAgentsMock.mockResolvedValue(buildSettings({ selectedProvider: null, selectedModel: null }));
+    updateAiAgentsMock.mockResolvedValue(
+      buildTestSettings({ aiAgents: { selectedProvider: null, selectedModel: null } }),
+    );
 
-    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildTestSettings()} apiBaseUrl="" onSave={() => {}} />);
 
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: '' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: '' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
@@ -221,12 +163,12 @@ describe('AiAgentsCard', () => {
         }),
     );
 
-    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildTestSettings()} apiBaseUrl="" onSave={() => {}} />);
 
     fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
     expect(screen.getByText(/testing the current visible ai draft/i)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: 'gpt-4o-mini' },
     });
 
@@ -246,27 +188,27 @@ describe('AiAgentsCard', () => {
   });
 
   it('autofills a recommended model when provider changes', () => {
-    render(<AiAgentsCard settings={buildSettings({ selectedProvider: null, selectedModel: null })} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildTestSettings({ aiAgents: { selectedProvider: null, selectedModel: null } })} apiBaseUrl="" onSave={() => {}} />);
 
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'gemini' },
     });
 
-    expect(screen.getByLabelText(/model/i)).toHaveValue('gemini-3-flash-preview');
+    expect(screen.getByLabelText(/^Model$/i)).toHaveValue('gemini-3-flash-preview');
   });
 
   it('autofills deepseek model when provider switches to deepseek', () => {
-    render(<AiAgentsCard settings={buildSettings({ selectedProvider: null, selectedModel: null })} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildTestSettings({ aiAgents: { selectedProvider: null, selectedModel: null } })} apiBaseUrl="" onSave={() => {}} />);
 
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'deepseek' },
     });
 
-    expect(screen.getByLabelText(/model/i)).toHaveValue('deepseek-v4-flash');
+    expect(screen.getByLabelText(/^Model$/i)).toHaveValue('deepseek-v4-flash');
   });
 
   it('shows higher-end suggested models for each provider', () => {
-    render(<AiAgentsCard settings={buildSettings({ selectedProvider: 'openai', selectedModel: 'gpt-5' })} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildTestSettings({ aiAgents: { selectedProvider: 'openai', selectedModel: 'gpt-5' } })} apiBaseUrl="" onSave={() => {}} />);
 
     expect(screen.getByRole('button', { name: 'gpt-5' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'gpt-5.4' })).toBeInTheDocument();
@@ -290,12 +232,12 @@ describe('AiAgentsCard', () => {
   });
 
   it('shows inline validation and disables actions when provider config is incomplete', () => {
-    render(<AiAgentsCard settings={buildSettings({ selectedProvider: null, selectedModel: null })} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildTestSettings({ aiAgents: { selectedProvider: null, selectedModel: null } })} apiBaseUrl="" onSave={() => {}} />);
 
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'openai' },
     });
-    fireEvent.change(screen.getByLabelText(/model/i), {
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
       target: { value: '' },
     });
 
@@ -305,7 +247,7 @@ describe('AiAgentsCard', () => {
   });
 
   it('de-emphasizes irrelevant provider key fields', () => {
-    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildTestSettings()} apiBaseUrl="" onSave={() => {}} />);
 
     const openaiInput = screen.getByLabelText(/openai api key/i);
     const openrouterInput = screen.getByLabelText(/openrouter api key/i);
@@ -315,7 +257,7 @@ describe('AiAgentsCard', () => {
   });
 
   it('emphasizes deepseek key field when deepseek is selected', () => {
-    render(<AiAgentsCard settings={buildSettings({ selectedProvider: 'deepseek', selectedModel: 'deepseek-v4-flash' })} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildTestSettings({ aiAgents: { selectedProvider: 'deepseek', selectedModel: 'deepseek-v4-flash' } })} apiBaseUrl="" onSave={() => {}} />);
 
     const deepseekInput = screen.getByLabelText(/deepseek api key/i);
     const openrouterInput = screen.getByLabelText(/openrouter api key/i);
@@ -327,11 +269,13 @@ describe('AiAgentsCard', () => {
   it('does not claim an inactive provider key is saved when none exists', () => {
     render(
       <AiAgentsCard
-        settings={buildSettings({
-          geminiApiKey: null,
-          geminiApiKeySet: false,
-          selectedProvider: 'openai',
-          selectedModel: 'gpt-5',
+        settings={buildTestSettings({
+          aiAgents: {
+            geminiApiKey: null,
+            geminiApiKeySet: false,
+            selectedProvider: 'openai',
+            selectedModel: 'gpt-5',
+          },
         })}
         apiBaseUrl=""
         onSave={() => {}}

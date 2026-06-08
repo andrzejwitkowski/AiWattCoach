@@ -9,8 +9,30 @@ import {
   useAdminTaskSchedulerApi,
 } from './api';
 import { ApiBaseUrlProvider } from '../../lib/apiBaseUrl';
+import { mockFetch } from '../../test/mockFetch';
 
 const originalFetch = global.fetch;
+
+const DEFAULT_TASK_LIST_PARAMS = {
+  limit: 20,
+  offset: 0,
+  sortField: 'createdAt',
+  sortDirection: 'desc',
+} as const;
+
+function expectTaskListFetch(
+  fetchMock: ReturnType<typeof mockFetch>,
+  expectedItemId: string,
+) {
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/admin/task-scheduler/tasks?limit=20&offset=0&sortField=createdAt&sortDirection=desc',
+    expect.objectContaining({
+      method: 'GET',
+      credentials: 'include',
+    }),
+  );
+  return expectedItemId;
+}
 
 afterEach(() => {
   global.fetch = originalFetch;
@@ -26,17 +48,9 @@ describe('admin task scheduler api', () => {
       limit: 20,
     });
 
-    const page = await loadAdminSchedulerTasks('', {
-      limit: 20,
-      offset: 0,
-      sortField: 'createdAt',
-      sortDirection: 'desc',
-    });
+    const page = await loadAdminSchedulerTasks('', DEFAULT_TASK_LIST_PARAMS);
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/admin/task-scheduler/tasks?limit=20&offset=0&sortField=createdAt&sortDirection=desc', expect.objectContaining({
-      method: 'GET',
-      credentials: 'include',
-    }));
+    expectTaskListFetch(fetchMock, 'task-1');
     expect(page.items[0].id).toBe('task-1');
     expect(page.nextOffset).toBe(20);
   });
@@ -82,17 +96,9 @@ describe('admin task scheduler api', () => {
       wrapper: wrapper(''),
     });
 
-    const page = await result.current.loadAdminSchedulerTasks({
-      limit: 20,
-      offset: 0,
-      sortField: 'createdAt',
-      sortDirection: 'desc',
-    });
+    const page = await result.current.loadAdminSchedulerTasks(DEFAULT_TASK_LIST_PARAMS);
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/admin/task-scheduler/tasks?limit=20&offset=0&sortField=createdAt&sortDirection=desc', expect.objectContaining({
-      method: 'GET',
-      credentials: 'include',
-    }));
+    expectTaskListFetch(fetchMock, 'task-1');
     expect(page.items[0].id).toBe('task-1');
   });
 });
@@ -101,16 +107,6 @@ function wrapper(apiBaseUrl: string) {
   return function Wrapper({ children }: { children: ReactNode }) {
     return createElement(ApiBaseUrlProvider, { value: apiBaseUrl }, children);
   };
-}
-
-function mockFetch(payload: unknown) {
-  const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-    .mockResolvedValue(new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    }));
-  global.fetch = fetchMock as typeof fetch;
-  return fetchMock;
 }
 
 function taskPayload(id: string, status: string) {

@@ -1,9 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { IntervalsCard } from './IntervalsCard';
-import type { TestIntervalsConnectionResponse, UserSettingsResponse } from '../types';
 import { testIntervalsConnection, updateIntervals } from '../api/settings';
+import { buildTestSettings } from '../mockData';
+import type { TestIntervalsConnectionResponse, UserSettingsResponse } from '../types';
+import { IntervalsCard } from './IntervalsCard';
 
 vi.mock('../api/settings', () => ({
   updateIntervals: vi.fn(),
@@ -15,7 +16,7 @@ const testIntervalsConnectionMock = vi.mocked(testIntervalsConnection);
 type TestResolver = (value: TestIntervalsConnectionResponse) => void;
 
 function buildSettings(overrides?: Partial<UserSettingsResponse['intervals']>): UserSettingsResponse {
-  return {
+  return buildTestSettings({
     aiAgents: {
       openaiApiKey: null,
       openaiApiKeySet: false,
@@ -27,6 +28,8 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['intervals']>): 
       deepseekApiKeySet: false,
       selectedProvider: null,
       selectedModel: null,
+      mesoCycleProvider: null,
+      mesoCycleModel: null,
     },
     intervals: {
       apiKey: '***...1234',
@@ -35,43 +38,7 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['intervals']>): 
       connected: false,
       ...overrides,
     },
-    wahoo: {
-      available: false,
-      accessToken: null,
-      accessTokenSet: false,
-      refreshTokenSet: false,
-      expiresAtEpochSeconds: null,
-      connected: false,
-    },
-    options: {
-      analyzeWithoutHeartRate: false,
-    },
-    availability: {
-      configured: true,
-      days: [
-        { weekday: 'mon', available: true, maxDurationMinutes: 60 },
-        { weekday: 'tue', available: false, maxDurationMinutes: null },
-        { weekday: 'wed', available: true, maxDurationMinutes: 90 },
-        { weekday: 'thu', available: false, maxDurationMinutes: null },
-        { weekday: 'fri', available: true, maxDurationMinutes: 120 },
-        { weekday: 'sat', available: false, maxDurationMinutes: null },
-        { weekday: 'sun', available: false, maxDurationMinutes: null },
-      ],
-    },
-    cycling: {
-      fullName: null,
-      age: null,
-      heightCm: null,
-      weightKg: null,
-      ftpWatts: null,
-      hrMaxBpm: null,
-      vo2Max: null,
-      athletePrompt: null,
-      medications: null,
-      athleteNotes: null,
-      lastZoneUpdateEpochSeconds: null,
-    },
-  };
+  });
 }
 
 afterEach(() => {

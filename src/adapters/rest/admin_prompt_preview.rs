@@ -54,9 +54,26 @@ pub async fn preview_calendar_coach(
     .await
 }
 
+pub async fn preview_meso_cycle_coach(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<AdminPromptPreviewPath>,
+    Query(query): Query<AdminPromptPreviewQuery>,
+) -> impl IntoResponse {
+    preview_with_surface(
+        state,
+        headers,
+        path,
+        query,
+        PreviewSurfaceRoute::MesoCycleCoach,
+    )
+    .await
+}
+
 enum PreviewSurfaceRoute {
     PostWorkout,
     CalendarCoach,
+    MesoCycleCoach,
 }
 
 async fn preview_with_surface(
@@ -99,6 +116,11 @@ async fn preview_with_surface(
                 .preview_calendar_coach(&path.user_id, &query.date)
                 .await
         }
+        PreviewSurfaceRoute::MesoCycleCoach => {
+            service
+                .preview_meso_cycle_coach(&path.user_id, &query.date)
+                .await
+        }
     };
 
     match result {
@@ -113,7 +135,8 @@ async fn preview_with_surface(
             AdminPromptPreviewError::Settings(_)
             | AdminPromptPreviewError::Repository(_)
             | AdminPromptPreviewError::TargetResolution(_)
-            | AdminPromptPreviewError::Llm(_),
+            | AdminPromptPreviewError::Llm(_)
+            | AdminPromptPreviewError::MesoCycle(_),
         ) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

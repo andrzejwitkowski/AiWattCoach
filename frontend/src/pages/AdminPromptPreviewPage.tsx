@@ -19,15 +19,18 @@ function todayIsoDate() {
 export function AdminPromptPreviewPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { loadAdminPostWorkoutPromptPreview, loadAdminCalendarCoachPromptPreview } =
-    useAdminPromptPreviewApi();
+  const {
+    loadAdminPostWorkoutPromptPreview,
+    loadAdminCalendarCoachPromptPreview,
+    loadAdminMesoCyclePromptPreview,
+  } = useAdminPromptPreviewApi();
   const [userId, setUserId] = useState(user?.id ?? '');
   const [date, setDate] = useState(todayIsoDate());
   const [preview, setPreview] = useState<AdminPromptPreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loadingSurface, setLoadingSurface] = useState<'post-workout' | 'calendar-coach' | null>(
-    null,
-  );
+  const [loadingSurface, setLoadingSurface] = useState<
+    'post-workout' | 'calendar-coach' | 'meso-cycle' | null
+  >(null);
 
   const maxDate = useMemo(() => todayIsoDate(), []);
   const formattedPreview = useMemo(
@@ -36,7 +39,7 @@ export function AdminPromptPreviewPage() {
   );
   const [showRawJson, setShowRawJson] = useState(false);
 
-  const runPreview = async (surface: 'post-workout' | 'calendar-coach') => {
+  const runPreview = async (surface: 'post-workout' | 'calendar-coach' | 'meso-cycle') => {
     if (!userId.trim() || !date) {
       setError(t('adminPromptPreview.validation'));
       return;
@@ -52,7 +55,9 @@ export function AdminPromptPreviewPage() {
       const response =
         surface === 'post-workout'
           ? await loadAdminPostWorkoutPromptPreview(userId.trim(), date)
-          : await loadAdminCalendarCoachPromptPreview(userId.trim(), date);
+          : surface === 'calendar-coach'
+            ? await loadAdminCalendarCoachPromptPreview(userId.trim(), date)
+            : await loadAdminMesoCyclePromptPreview(userId.trim(), date);
       setPreview(response);
     } catch {
       setPreview(null);
@@ -111,6 +116,16 @@ export function AdminPromptPreviewPage() {
             {loadingSurface === 'calendar-coach'
               ? t('adminPromptPreview.loading')
               : t('adminPromptPreview.calendarCoachButton')}
+          </button>
+          <button
+            type="button"
+            disabled={loadingSurface !== null}
+            onClick={() => void runPreview('meso-cycle')}
+            className="rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:border-[#f2c98e]/45 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingSurface === 'meso-cycle'
+              ? t('adminPromptPreview.loading')
+              : t('adminPromptPreview.mesoCycleButton')}
           </button>
         </div>
       </div>

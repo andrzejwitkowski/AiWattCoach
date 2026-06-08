@@ -3,9 +3,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import '../../../i18n';
-import { AvailabilityCard } from './AvailabilityCard';
-import type { UserSettingsResponse } from '../types';
 import { updateAvailability } from '../api/settings';
+import { buildTestSettings, unsetAvailabilityDays } from '../mockData';
+import type { UserSettingsResponse } from '../types';
+import { AvailabilityCard } from './AvailabilityCard';
 
 vi.mock('../api/settings', () => ({
   updateAvailability: vi.fn(),
@@ -14,47 +15,10 @@ vi.mock('../api/settings', () => ({
 const updateAvailabilityMock = vi.mocked(updateAvailability);
 
 function buildSettings(): UserSettingsResponse {
-  return {
-    aiAgents: {
-      openaiApiKey: null,
-      openaiApiKeySet: false,
-      geminiApiKey: null,
-      geminiApiKeySet: false,
-      openrouterApiKey: null,
-      openrouterApiKeySet: false,
-      deepseekApiKey: null,
-      deepseekApiKeySet: false,
-      selectedProvider: null,
-      selectedModel: null,
-    },
-    intervals: {
-      apiKey: null,
-      apiKeySet: false,
-      athleteId: null,
-      connected: false,
-    },
-    wahoo: {
-      available: false,
-      accessToken: null,
-      accessTokenSet: false,
-      refreshTokenSet: false,
-      expiresAtEpochSeconds: null,
-      connected: false,
-    },
-    options: {
-      analyzeWithoutHeartRate: false,
-    },
+  return buildTestSettings({
     availability: {
       configured: false,
-      days: [
-        { weekday: 'mon', available: false, maxDurationMinutes: null },
-        { weekday: 'tue', available: false, maxDurationMinutes: null },
-        { weekday: 'wed', available: false, maxDurationMinutes: null },
-        { weekday: 'thu', available: false, maxDurationMinutes: null },
-        { weekday: 'fri', available: false, maxDurationMinutes: null },
-        { weekday: 'sat', available: false, maxDurationMinutes: null },
-        { weekday: 'sun', available: false, maxDurationMinutes: null },
-      ],
+      days: unsetAvailabilityDays(),
     },
     cycling: {
       fullName: null,
@@ -69,7 +33,7 @@ function buildSettings(): UserSettingsResponse {
       athleteNotes: null,
       lastZoneUpdateEpochSeconds: null,
     },
-  };
+  });
 }
 
 afterEach(() => {

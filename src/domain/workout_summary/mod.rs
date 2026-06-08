@@ -1,6 +1,7 @@
 pub(crate) mod alias_batch_lookup;
 mod coach;
 mod coach_output;
+mod meso_roadmap;
 mod model;
 mod ports;
 mod prompt;
@@ -12,6 +13,7 @@ pub use coach::{MockWorkoutCoach, WorkoutCoach};
 pub use coach_output::{
     parse_coach_reply, workout_summary_coach_reply_json_schema, ParsedCoachReply,
 };
+pub use meso_roadmap::{format_meso_roadmap_stable_context, try_load_meso_roadmap_stable_context};
 pub use model::{
     validate_message_content, validate_rpe, CoachQuestion, CoachReply, CoachReplyClaimResult,
     CoachReplyOperation, CoachReplyOperationFailureKind, CoachReplyOperationStatus,

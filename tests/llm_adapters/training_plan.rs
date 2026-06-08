@@ -11,7 +11,7 @@ use aiwattcoach::{
     domain::training_context::{
         IntervalsStatusContext, RenderedTrainingContext, TrainingContext,
         TrainingContextBuildResult, TrainingContextBuilder, ATHLETE_SUMMARY_FOCUS_ID,
-        CALENDAR_OVERVIEW_FOCUS_ID,
+        CALENDAR_OVERVIEW_FOCUS_ID, MESO_CYCLE_FOCUS_ID,
     },
     domain::training_plan::{
         training_plan_llm_envelope_json_schema, TrainingPlanConversationMessage,
@@ -98,6 +98,14 @@ impl TrainingContextBuilder for LargeContextTrainingContextBuilder {
     ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
         self.build("user-1", ATHLETE_SUMMARY_FOCUS_ID)
     }
+
+    fn build_meso_cycle_context(
+        &self,
+        user_id: &str,
+        _meso_end: chrono::NaiveDate,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        self.build(user_id, MESO_CYCLE_FOCUS_ID)
+    }
 }
 
 impl TrainingContextBuilder for UnconfiguredAvailabilityTrainingContextBuilder {
@@ -168,6 +176,14 @@ impl TrainingContextBuilder for UnconfiguredAvailabilityTrainingContextBuilder {
         _user_id: &str,
     ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
         self.build("user-1", ATHLETE_SUMMARY_FOCUS_ID)
+    }
+
+    fn build_meso_cycle_context(
+        &self,
+        user_id: &str,
+        _meso_end: chrono::NaiveDate,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        self.build(user_id, MESO_CYCLE_FOCUS_ID)
     }
 }
 

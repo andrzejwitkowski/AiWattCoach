@@ -15,8 +15,16 @@ import { AdminSystemInfoPage } from './pages/AdminSystemInfoPage';
 import { AdminPromptPreviewPage } from './pages/AdminPromptPreviewPage';
 import { AdminTaskSchedulerPage } from './pages/AdminTaskSchedulerPage';
 import { CalendarPage } from './pages/CalendarPage';
+import { MesoCycleCalendarPage } from './pages/MesoCycleCalendarPage';
 import { AICoachPage } from './pages/AICoachPage';
 import { LandingPage } from './pages/LandingPage';
+import {
+  navigateToWhitelistRequested,
+  PENDING_APPROVAL_MESSAGE,
+  resolvePublicLandingMessages,
+  resolvePublicLandingReturnTo,
+  WHITELIST_REQUESTED_MESSAGE,
+} from './pages/publicLandingRoute';
 import { RacesPage } from './pages/RacesPage';
 import { SettingsPage } from './pages/SettingsPage';
 
@@ -54,8 +62,7 @@ const loadingFallback: BackendStatus = {
   checkedAtLabel: 'pending',
 };
 
-export const WHITELIST_REQUESTED_MESSAGE = 'Requested whitelist access. We will reach out after approval.';
-export const PENDING_APPROVAL_MESSAGE = 'Your account is pending approval. Join the whitelist or wait for approval before signing in.';
+export { PENDING_APPROVAL_MESSAGE, WHITELIST_REQUESTED_MESSAGE };
 
 export function App() {
   const [backendStatus, setBackendStatus] = useState<BackendStatus>(loadingFallback);
@@ -124,6 +131,14 @@ export function App() {
               <Route element={<AppHomePage apiBaseUrl={API_BASE_URL} />} path="/app" />
               <Route element={<SettingsPage apiBaseUrl={API_BASE_URL} />} path="/settings" />
               <Route element={<CalendarPage apiBaseUrl={API_BASE_URL} />} path="/calendar" />
+              <Route
+                element={
+                  <ApiBaseUrlProvider value={API_BASE_URL}>
+                    <MesoCycleCalendarPage />
+                  </ApiBaseUrlProvider>
+                }
+                path="/calendar/meso"
+              />
               <Route element={<RacesPage apiBaseUrl={API_BASE_URL} />} path="/races" />
               <Route element={<AICoachPage apiBaseUrl={API_BASE_URL} />} path="/ai-coach" />
               <Route element={<RequireRole role="admin" />}>
@@ -169,15 +184,8 @@ export function App() {
 function PublicLandingRoute({ apiBaseUrl }: { apiBaseUrl: string }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const searchParams = new URLSearchParams(location.search);
-  const searchReturnTo = searchParams.get('returnTo');
-  const authStatus = searchParams.get('auth');
-  const whitelistStatus = searchParams.get('whitelist');
-  const stateValue = (location.state as { from?: unknown } | null)?.from;
-  const stateReturnTo = typeof stateValue === 'string' && stateValue.length > 0 ? stateValue : null;
-  const returnTo = (typeof searchReturnTo === 'string' && searchReturnTo.length > 0 ? searchReturnTo : null) || stateReturnTo || '/calendar';
-  const whitelistMessage = whitelistStatus === 'requested' ? WHITELIST_REQUESTED_MESSAGE : null;
-  const authMessage = authStatus === 'pending-approval' ? PENDING_APPROVAL_MESSAGE : null;
+  const returnTo = resolvePublicLandingReturnTo(location);
+  const { authMessage, whitelistMessage } = resolvePublicLandingMessages(location.search);
 
   return (
     <LandingPage
@@ -189,16 +197,7 @@ function PublicLandingRoute({ apiBaseUrl }: { apiBaseUrl: string }) {
       }}
       onJoinWhitelist={async (email) => {
         await joinWhitelist(apiBaseUrl, email);
-        const params = new URLSearchParams(location.search);
-        params.delete('auth');
-        params.set('whitelist', 'requested');
-        void navigate({
-          pathname: location.pathname,
-          search: `?${params.toString()}`
-        }, {
-          replace: true,
-          state: location.state
-        });
+        navigateToWhitelistRequested(location, navigate);
       }}
     />
   );

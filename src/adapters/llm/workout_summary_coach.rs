@@ -8,10 +8,11 @@ use crate::domain::{
         LlmProvider, ReusableContextCacheLookup, ReusableContextCacheUpsert, UserLlmConfigProvider,
     },
     llm_tools::{run_tool_loop, GetSelectedWorkoutDataPort, LlmToolLoopOutput, ToolScope},
+    meso_cycle::MesoCycleProjectionRepository,
     training_context::TrainingContextBuilder,
     workout_summary::{
-        assemble_workout_summary_coach_request, WorkoutCoach, WorkoutSummary,
-        WorkoutSummaryCoachPromptInput,
+        assemble_workout_summary_coach_request, try_load_meso_roadmap_stable_context, WorkoutCoach,
+        WorkoutSummary, WorkoutSummaryCoachPromptInput,
     },
 };
 
@@ -25,6 +26,7 @@ where
     training_context_builder: Arc<dyn TrainingContextBuilder>,
     context_cache_repository: Option<Arc<dyn LlmContextCacheRepository>>,
     data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
+    meso_projection_repository: Option<Arc<dyn MesoCycleProjectionRepository>>,
     clock: Time,
 }
 
@@ -44,6 +46,7 @@ where
             training_context_builder,
             context_cache_repository: None,
             data_port: None,
+            meso_projection_repository: None,
             clock,
         }
     }
@@ -58,6 +61,14 @@ where
 
     pub fn with_data_port(mut self, data_port: Arc<dyn GetSelectedWorkoutDataPort>) -> Self {
         self.data_port = Some(data_port);
+        self
+    }
+
+    pub fn with_meso_projection_repository(
+        mut self,
+        meso_projection_repository: Arc<dyn MesoCycleProjectionRepository>,
+    ) -> Self {
+        self.meso_projection_repository = Some(meso_projection_repository);
         self
     }
 }
@@ -78,6 +89,7 @@ where
         let training_context_builder = self.training_context_builder.clone();
         let context_cache_repository = self.context_cache_repository.clone();
         let data_port = self.data_port.clone();
+        let meso_projection_repository = self.meso_projection_repository.clone();
         let clock = self.clock.clone();
         let user_id = user_id.to_string();
         let summary = summary.clone();
@@ -95,6 +107,12 @@ where
             let training_context = training_context_builder
                 .build(&user_id, &summary.workout_id)
                 .await?;
+            let meso_roadmap_stable_context =
+                if let Some(repository) = meso_projection_repository.as_deref() {
+                    try_load_meso_roadmap_stable_context(repository, &user_id).await
+                } else {
+                    None
+                };
             let cache_scope_key = Some(format!("workout-summary:{user_id}:{}", summary.workout_id));
             let context_hash = reusable_context_cache_key(
                 &crate::domain::workout_summary::workout_coach_system_prompt(),
@@ -103,6 +121,7 @@ where
                     &training_context.focus_date,
                     &training_context.rendered.stable_context,
                     athlete_summary_text.as_deref(),
+                    meso_roadmap_stable_context.as_deref(),
                 ),
             );
             let reusable_cache_id = if config.provider == LlmProvider::Gemini {
@@ -180,6 +199,7 @@ where
                     today,
                     data_port,
                     reusable_cache_id,
+                    meso_roadmap_stable_context,
                 });
             request.cache_key = Some(context_hash.clone());
             request.cache_scope_key = cache_scope_key.clone();
@@ -290,7 +310,7 @@ mod tests {
             1,
         );
 
-        let context = build_stable_context(&summary, "2026-05-29", "{}", None);
+        let context = build_stable_context(&summary, "2026-05-29", "{}", None, None);
 
         assert!(
             context.contains(r#"selected_workout={"workoutId":"workout-1","date":"2026-05-29"}"#)

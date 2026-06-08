@@ -103,17 +103,31 @@ impl MongoTrainingPlanGenerationOperationRepository {
 
     pub async fn ensure_indexes(&self) -> Result<(), TrainingPlanError> {
         self.collection
-            .create_indexes([IndexModel::builder()
-                .keys(doc! { "operation_key": 1 })
-                .options(
-                    IndexOptions::builder()
-                        .name(
-                            "training_plan_generation_operations_operation_key_unique".to_string(),
-                        )
-                        .unique(true)
-                        .build(),
-                )
-                .build()])
+            .create_indexes([
+                IndexModel::builder()
+                    .keys(doc! { "operation_key": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name(
+                                "training_plan_generation_operations_operation_key_unique"
+                                    .to_string(),
+                            )
+                            .unique(true)
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1, "status": 1, "updated_at_epoch_seconds": -1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name(
+                                "training_plan_generation_operations_user_status_updated"
+                                    .to_string(),
+                            )
+                            .build(),
+                    )
+                    .build(),
+            ])
             .await
             .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
         Ok(())
@@ -193,6 +207,25 @@ impl TrainingPlanGenerationOperationRepository for MongoTrainingPlanGenerationOp
                 .await
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
             Ok(operation)
+        })
+    }
+
+    fn find_latest_completed_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<TrainingPlanGenerationOperation>, TrainingPlanError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let document = collection
+                .find_one(doc! {
+                    "user_id": &user_id,
+                    "status": "completed",
+                })
+                .sort(doc! { "updated_at_epoch_seconds": -1 })
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+            document.map(map_document_to_operation).transpose()
         })
     }
 }

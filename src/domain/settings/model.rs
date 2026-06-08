@@ -27,6 +27,8 @@ pub struct AiAgentsConfig {
     pub deepseek_api_key: Option<String>,
     pub selected_provider: Option<LlmProvider>,
     pub selected_model: Option<String>,
+    pub meso_cycle_provider: Option<LlmProvider>,
+    pub meso_cycle_model: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]

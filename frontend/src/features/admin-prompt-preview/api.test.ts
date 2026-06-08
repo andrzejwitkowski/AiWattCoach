@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { mockFetch } from '../../test/mockFetch';
 import {
   loadAdminCalendarCoachPromptPreview,
+  loadAdminMesoCyclePromptPreview,
   loadAdminPostWorkoutPromptPreview,
 } from './api';
 
@@ -65,16 +67,32 @@ describe('admin prompt preview api', () => {
     const result = await loadAdminCalendarCoachPromptPreview('', 'user-1', '2026-05-01');
     expect(result.meta.surface).toBe('calendar_coach');
   });
-});
 
-function mockFetch(payload: unknown) {
-  const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-    .mockResolvedValue(
-      new Response(JSON.stringify(payload), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-  global.fetch = fetchMock as typeof fetch;
-  return fetchMock;
-}
+  it('loads meso cycle preview', async () => {
+    mockFetch({
+      meta: {
+        userId: 'user-1',
+        date: '2026-05-01',
+        surface: 'meso_cycle_coach',
+        provider: 'openrouter',
+        model: 'test-model',
+        focusDate: '2026-05-01',
+        mesoStart: '2026-05-02',
+        mesoEnd: '2026-05-31',
+      },
+      request: {
+        systemPrompt: 'system',
+        stableContext: 'stable',
+        volatileContext: 'volatile',
+        conversation: [{ role: 'user', content: 'generate' }],
+        tools: [],
+        toolChoice: 'auto',
+      },
+      providerMessages: [],
+    });
+
+    const result = await loadAdminMesoCyclePromptPreview('', 'user-1', '2026-05-01');
+    expect(result.meta.surface).toBe('meso_cycle_coach');
+    expect(result.meta.mesoStart).toBe('2026-05-02');
+  });
+});

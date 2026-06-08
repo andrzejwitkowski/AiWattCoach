@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { defaultAvailabilityDays, settingsApiResponseBody } from '../mockData';
 import { userSettingsResponseSchema } from '../types';
 import {
   testAiAgentsConnection,
@@ -130,7 +131,7 @@ describe('settings api', () => {
   });
 
   it('patches explicit weekly availability payloads', async () => {
-    const responseBody = {
+    const responseBody = settingsApiResponseBody({
       aiAgents: {
         openaiApiKey: null,
         openaiApiKeySet: false,
@@ -143,49 +144,7 @@ describe('settings api', () => {
         selectedProvider: null,
         selectedModel: null,
       },
-      intervals: {
-        apiKey: null,
-        apiKeySet: false,
-        athleteId: null,
-        connected: false,
-      },
-      wahoo: {
-        available: false,
-        accessToken: null,
-        accessTokenSet: false,
-        refreshTokenSet: false,
-        expiresAtEpochSeconds: null,
-        connected: false,
-      },
-      options: {
-        analyzeWithoutHeartRate: false,
-      },
-      availability: {
-        configured: true,
-        days: [
-          { weekday: 'mon', available: true, maxDurationMinutes: 60 },
-          { weekday: 'tue', available: false, maxDurationMinutes: null },
-          { weekday: 'wed', available: true, maxDurationMinutes: 90 },
-          { weekday: 'thu', available: false, maxDurationMinutes: null },
-          { weekday: 'fri', available: true, maxDurationMinutes: 120 },
-          { weekday: 'sat', available: false, maxDurationMinutes: null },
-          { weekday: 'sun', available: false, maxDurationMinutes: null },
-        ],
-      },
-      cycling: {
-        fullName: null,
-        age: null,
-        heightCm: null,
-        weightKg: null,
-        ftpWatts: null,
-        hrMaxBpm: null,
-        vo2Max: null,
-        athletePrompt: null,
-        medications: null,
-        athleteNotes: null,
-        lastZoneUpdateEpochSeconds: null,
-      },
-    };
+    });
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
       .mockResolvedValue(
@@ -198,15 +157,7 @@ describe('settings api', () => {
     global.fetch = fetchMock as typeof fetch;
 
     const result = await updateAvailability('', {
-      days: [
-        { weekday: 'mon', available: true, maxDurationMinutes: 60 },
-        { weekday: 'tue', available: false, maxDurationMinutes: null },
-        { weekday: 'wed', available: true, maxDurationMinutes: 90 },
-        { weekday: 'thu', available: false, maxDurationMinutes: null },
-        { weekday: 'fri', available: true, maxDurationMinutes: 120 },
-        { weekday: 'sat', available: false, maxDurationMinutes: null },
-        { weekday: 'sun', available: false, maxDurationMinutes: null },
-      ],
+      days: defaultAvailabilityDays,
     });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/settings/availability', {
@@ -279,62 +230,24 @@ describe('settings api', () => {
   });
 
   it('rejects duplicate weekdays in settings responses', () => {
-    expect(() => userSettingsResponseSchema.parse({
-      aiAgents: {
-        openaiApiKey: null,
-        openaiApiKeySet: false,
-        geminiApiKey: null,
-        geminiApiKeySet: false,
-        openrouterApiKey: null,
-        openrouterApiKeySet: false,
-        deepseekApiKey: null,
-        deepseekApiKeySet: false,
-        selectedProvider: null,
-        selectedModel: null,
-      },
-      intervals: {
-        apiKey: null,
-        apiKeySet: false,
-        athleteId: null,
-        connected: false,
-      },
-      wahoo: {
-        available: false,
-        accessToken: null,
-        accessTokenSet: false,
-        refreshTokenSet: false,
-        expiresAtEpochSeconds: null,
-        connected: false,
-      },
-      options: {
-        analyzeWithoutHeartRate: false,
-      },
-      availability: {
-        configured: true,
-        days: [
-          { weekday: 'mon', available: true, maxDurationMinutes: 60 },
-          { weekday: 'mon', available: false, maxDurationMinutes: null },
-          { weekday: 'wed', available: true, maxDurationMinutes: 90 },
-          { weekday: 'thu', available: false, maxDurationMinutes: null },
-          { weekday: 'fri', available: true, maxDurationMinutes: 120 },
-          { weekday: 'sat', available: false, maxDurationMinutes: null },
-          { weekday: 'sun', available: false, maxDurationMinutes: null },
-        ],
-      },
-      cycling: {
-        fullName: null,
-        age: null,
-        heightCm: null,
-        weightKg: null,
-        ftpWatts: null,
-        hrMaxBpm: null,
-        vo2Max: null,
-        athletePrompt: null,
-        medications: null,
-        athleteNotes: null,
-        lastZoneUpdateEpochSeconds: null,
-      },
-    })).toThrow(/each weekday exactly once/i);
+    expect(() =>
+      userSettingsResponseSchema.parse(
+        settingsApiResponseBody({
+          availability: {
+            configured: true,
+            days: [
+              { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+              { weekday: 'mon', available: false, maxDurationMinutes: null },
+              { weekday: 'wed', available: true, maxDurationMinutes: 90 },
+              { weekday: 'thu', available: false, maxDurationMinutes: null },
+              { weekday: 'fri', available: true, maxDurationMinutes: 120 },
+              { weekday: 'sat', available: false, maxDurationMinutes: null },
+              { weekday: 'sun', available: false, maxDurationMinutes: null },
+            ],
+          },
+        }),
+      ),
+    ).toThrow(/each weekday exactly once/i);
   });
 
   it('posts ai test settings and parses a successful response', async () => {

@@ -11,7 +11,10 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 export function DecodedPackedContext({ label, data }: DecodedPackedContextProps) {
-  const sections = useMemo(() => buildSections(data), [data]);
+  const sections = useMemo(
+    () => (isMesoRoadmapData(data) ? buildMesoRoadmapSections(data) : buildSections(data)),
+    [data],
+  );
 
   return (
     <div className="space-y-4">
@@ -21,6 +24,83 @@ export function DecodedPackedContext({ label, data }: DecodedPackedContextProps)
           {section}
         </div>
       ))}
+    </div>
+  );
+}
+
+function isMesoRoadmapData(data: Record<string, unknown>): boolean {
+  return typeof data.windowStart === 'string' && Array.isArray(data.days);
+}
+
+function buildMesoRoadmapSections(data: Record<string, unknown>): React.ReactNode[] {
+  const days = data.days as unknown[];
+  return [
+    <div key="meso-window" className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Meso Window</div>
+      <div className="flex flex-wrap gap-4 text-sm">
+        <span className="text-slate-400">
+          Start: <span className="text-slate-200">{String(data.windowStart)}</span>
+        </span>
+        <span className="text-slate-400">
+          End: <span className="text-slate-200">{String(data.windowEnd ?? '')}</span>
+        </span>
+      </div>
+    </div>,
+    <div key="meso-days" className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+      {buildMesoRoadmapDaysTable(days)}
+    </div>,
+  ];
+}
+
+function buildMesoRoadmapDaysTable(days: unknown[]) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        Planned Days ({days.length})
+      </div>
+      <div className="max-h-96 overflow-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-white/10 text-left text-xs uppercase text-slate-500">
+              <th className="pb-1 pr-3">Date</th>
+              <th className="pb-1 pr-3">Type</th>
+              <th className="pb-1 pr-3">Label</th>
+              <th className="pb-1 pr-3">Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {days.map((item) => {
+              const day = item as Record<string, unknown>;
+              const restDay = Boolean(day.restDay);
+              const date = String(day.date ?? '');
+              const label = restDay
+                ? String(day.restDayReason ?? 'Rest Day')
+                : String(day.name ?? 'Workout');
+              const workoutDoc = typeof day.rawWorkoutDoc === 'string' ? day.rawWorkoutDoc : null;
+
+              return (
+                <tr key={date} className="border-b border-white/5 text-slate-200">
+                  <td className="py-1 pr-3 text-slate-400">{date}</td>
+                  <td className="py-1 pr-3">{restDay ? 'Rest' : 'Workout'}</td>
+                  <td className="py-1 pr-3">{label}</td>
+                  <td className="py-1 pr-3">
+                    {workoutDoc ? (
+                      <details>
+                        <summary className="cursor-pointer text-xs text-cyan-400">Workout doc</summary>
+                        <pre className="prompt-preview-text mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-xs text-slate-400">
+                          {workoutDoc}
+                        </pre>
+                      </details>
+                    ) : (
+                      <span className="text-slate-500">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

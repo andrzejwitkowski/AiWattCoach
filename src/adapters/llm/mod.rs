@@ -4,6 +4,8 @@ pub mod context_prelude;
 pub mod dev_adapter;
 pub mod gemini;
 pub mod get_selected_workout_data;
+pub mod meso_cycle_generator;
+pub mod meso_cycle_llm_config;
 pub mod openai_compatible;
 pub mod openrouter;
 pub mod settings_adapter;
