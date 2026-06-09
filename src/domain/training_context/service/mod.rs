@@ -649,7 +649,6 @@ where
                 workout_recaps_by_id: &workout_recaps_by_id,
                 recent_interval_blocks_by_activity_id: &recent_interval_blocks_by_activity_id,
             },
-            configured_ftp,
         );
         let recent_days = build_recent_day_contexts(
             recent_start,

@@ -31,7 +31,6 @@ pub(super) fn build_historical_context(
     activities: &[Activity],
     load_sources: HistoricalLoadSources<'_>,
     workout_sources: HistoricalWorkoutSources<'_>,
-    _configured_ftp: Option<i32>,
 ) -> HistoricalTrainingContext {
     let complete_snapshot_coverage =
         has_complete_snapshot_coverage(load_sources.daily_snapshots, start, end);

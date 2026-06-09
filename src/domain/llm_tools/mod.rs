@@ -601,7 +601,7 @@ fn scope_specific_tool_guidance(
     if has_selected_workout {
         guidance.push(
             format!(
-                "- For workout-summary execution judgments, `{selected_workout_tool_name}` is the fallback when packed evidence like bl, p3, and c5 is insufficient. It returns the full workout streams without downsampling."
+                "- For workout-summary execution judgments, `{selected_workout_tool_name}` is the fallback when packed evidence like bl, p3, and c5 is insufficient. It returns uncapped streams (watts in 3-second buckets, cadence in 5-second buckets, heartrate at full 1-second resolution)."
             ),
         );
     }
@@ -780,7 +780,7 @@ mod tests {
         assert!(selected_workout_by_id_line.contains("without guessing the date"));
         assert!(selected_workout_line.contains("fallback"));
         assert!(selected_workout_line.contains("bl, p3, and c5"));
-        assert!(selected_workout_line.contains("full workout streams without downsampling"));
+        assert!(selected_workout_line.contains("uncapped streams"));
         assert!(!selected_workout_line.contains("bl, pc, and c5"));
         assert!(selected_workout_line.contains("insufficient"));
         assert!(power_curve_line.contains("supplemental"));
