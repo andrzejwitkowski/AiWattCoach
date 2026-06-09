@@ -149,7 +149,7 @@ struct CompactRecentWorkout<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     vi: Option<f64>,
     #[serde(skip_serializing_if = "is_empty_slice")]
-    pc: &'a [String],
+    p3: &'a [i32],
     #[serde(skip_serializing_if = "is_empty_slice")]
     c5: &'a [i32],
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -171,7 +171,7 @@ impl<'a> CompactRecentWorkout<'a> {
             rpe: workout.rpe,
             recap: workout.workout_recap.as_deref(),
             vi: workout.variability_index,
-            pc: &workout.compressed_power_levels,
+            p3: &workout.power_values_3s,
             c5: &workout.cadence_values_5s,
             pw: workout
                 .planned_workout

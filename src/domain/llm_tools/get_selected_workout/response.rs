@@ -6,12 +6,11 @@ use crate::domain::{
     completed_workouts::{CompletedWorkout, CompletedWorkoutSeries},
     planned_workouts::PlannedWorkout,
     races::Race,
+    workout_streams::{self, CADENCE_BUCKET_SECONDS, POWER_BUCKET_SECONDS},
     workout_summary::{MessageRole, WorkoutSummary},
 };
 
 use super::parse_date;
-
-const MAX_STREAM_SAMPLES: usize = 256;
 
 #[derive(Serialize)]
 pub(super) struct GetSelectedWorkoutResponse {
@@ -173,11 +172,8 @@ fn map_completed_workout(workout: &CompletedWorkout, summaries: &[WorkoutSummary
             .iter()
             .map(|stream| StreamDto {
                 stream_type: stream.stream_type.clone(),
-                data: series_values(stream.primary_series.as_ref(), MAX_STREAM_SAMPLES),
-                secondary_data: stream
-                    .secondary_series
-                    .as_ref()
-                    .map(|series| series_values(Some(series), MAX_STREAM_SAMPLES)),
+                data: serialize_primary_stream(&stream.stream_type, stream.primary_series.as_ref()),
+                secondary_data: stream.secondary_series.as_ref().map(serialize_full_series),
             })
             .collect(),
         ai_conversation: summary
@@ -206,56 +202,64 @@ fn map_conversation_message(
     }
 }
 
-fn series_values(
+fn serialize_primary_stream(
+    stream_type: &str,
     series: Option<&CompletedWorkoutSeries>,
-    max_samples: usize,
 ) -> Vec<serde_json::Value> {
-    match series {
-        Some(CompletedWorkoutSeries::Integers(v)) => sampled_values(v, max_samples),
-        Some(CompletedWorkoutSeries::Floats(v)) => sampled_float_values(v, max_samples),
-        Some(CompletedWorkoutSeries::Bools(v)) => sampled_values(v, max_samples),
-        Some(CompletedWorkoutSeries::Strings(v)) => sampled_values(v, max_samples),
-        None => Vec::new(),
-    }
-}
-
-fn sampled_values<T>(values: &[T], max_samples: usize) -> Vec<serde_json::Value>
-where
-    T: Serialize,
-{
-    sampled_indices(values.len(), max_samples)
-        .into_iter()
-        .map(|index| json!(&values[index]))
-        .collect()
-}
-
-fn sampled_float_values(values: &[f64], max_samples: usize) -> Vec<serde_json::Value> {
-    sampled_indices(values.len(), max_samples)
-        .into_iter()
-        .map(|index| {
-            let value = values[index];
-            if value.is_finite() {
-                json!(value)
-            } else {
-                serde_json::Value::Null
-            }
-        })
-        .collect()
-}
-
-fn sampled_indices(len: usize, max_samples: usize) -> Vec<usize> {
-    if max_samples == 0 || len == 0 {
+    let Some(series) = series else {
         return Vec::new();
+    };
+
+    if stream_type.eq_ignore_ascii_case("watts") {
+        return serialize_integer_buckets(series, POWER_BUCKET_SECONDS);
     }
 
-    if len <= max_samples || max_samples == 1 {
-        return (0..len.min(max_samples)).collect();
+    if stream_type.eq_ignore_ascii_case("cadence") {
+        return serialize_integer_buckets(series, CADENCE_BUCKET_SECONDS);
     }
 
-    let last_index = len - 1;
-    (0..max_samples)
-        .map(|index| index * last_index / (max_samples - 1))
+    serialize_full_series(series)
+}
+
+fn serialize_integer_buckets(
+    series: &CompletedWorkoutSeries,
+    bucket_seconds: usize,
+) -> Vec<serde_json::Value> {
+    let CompletedWorkoutSeries::Integers(values) = series else {
+        return serialize_full_series(series);
+    };
+
+    let samples: Vec<i32> = values
+        .iter()
+        .map(|&value| i32::try_from(value).unwrap_or(0))
+        .collect();
+
+    workout_streams::average_into_buckets(&samples, bucket_seconds)
+        .into_iter()
+        .map(|value| json!(value))
         .collect()
+}
+
+fn serialize_full_series(series: &CompletedWorkoutSeries) -> Vec<serde_json::Value> {
+    match series {
+        CompletedWorkoutSeries::Integers(values) => {
+            values.iter().map(|&value| json!(value)).collect()
+        }
+        CompletedWorkoutSeries::Floats(values) => values
+            .iter()
+            .map(|&value| {
+                if value.is_finite() {
+                    json!(value)
+                } else {
+                    serde_json::Value::Null
+                }
+            })
+            .collect(),
+        CompletedWorkoutSeries::Bools(values) => values.iter().map(|&value| json!(value)).collect(),
+        CompletedWorkoutSeries::Strings(values) => {
+            values.iter().map(|value| json!(value)).collect()
+        }
+    }
 }
 
 fn map_planned_workout(

@@ -601,7 +601,7 @@ fn scope_specific_tool_guidance(
     if has_selected_workout {
         guidance.push(
             format!(
-                "- For workout-summary execution judgments, `{selected_workout_tool_name}` is the fallback when packed evidence like bl, pc, and c5 is insufficient for a confident call."
+                "- For workout-summary execution judgments, `{selected_workout_tool_name}` is the fallback when packed evidence like bl, p3, and c5 is insufficient. It returns the full workout streams without downsampling."
             ),
         );
     }
@@ -779,7 +779,9 @@ mod tests {
         assert!(selected_workout_by_id_line.contains("currently selected workout"));
         assert!(selected_workout_by_id_line.contains("without guessing the date"));
         assert!(selected_workout_line.contains("fallback"));
-        assert!(selected_workout_line.contains("bl, pc, and c5"));
+        assert!(selected_workout_line.contains("bl, p3, and c5"));
+        assert!(selected_workout_line.contains("full workout streams without downsampling"));
+        assert!(!selected_workout_line.contains("bl, pc, and c5"));
         assert!(selected_workout_line.contains("insufficient"));
         assert!(power_curve_line.contains("supplemental"));
         assert!(power_curve_line.contains("duration-specific power facts"));

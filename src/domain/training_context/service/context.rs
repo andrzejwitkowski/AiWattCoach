@@ -13,6 +13,7 @@ use crate::domain::{
         RecentDayContext, RecentWorkoutContext, SpecialDayContext, UpcomingDayContext,
     },
     training_load::{FtpHistoryEntry, TrainingLoadDailySnapshot},
+    workout_streams,
 };
 
 use super::{
@@ -21,7 +22,7 @@ use super::{
         average_metric, average_recent_tss, build_daily_tss_map, build_load_trend, ewma_latest,
         recent_slice,
     },
-    power::{compress_power_stream, extract_and_average_stream, extract_power_stream},
+    power::{extract_and_average_stream, extract_power_values_3s},
 };
 
 pub(super) fn build_historical_context(
@@ -30,7 +31,7 @@ pub(super) fn build_historical_context(
     activities: &[Activity],
     load_sources: HistoricalLoadSources<'_>,
     workout_sources: HistoricalWorkoutSources<'_>,
-    configured_ftp: Option<i32>,
+    _configured_ftp: Option<i32>,
 ) -> HistoricalTrainingContext {
     let complete_snapshot_coverage =
         has_complete_snapshot_coverage(load_sources.daily_snapshots, start, end);
@@ -38,15 +39,10 @@ pub(super) fn build_historical_context(
     let workouts = activities
         .iter()
         .map(|activity| {
-            let compressed_power_levels = workout_sources
+            let power_values_3s = workout_sources
                 .detailed_activities_by_id
                 .get(&activity.id)
-                .map(|detailed| {
-                    compress_power_stream(
-                        &extract_power_stream(&detailed.details.streams),
-                        detailed.metrics.ftp_watts.or(configured_ftp),
-                    )
-                })
+                .map(|detailed| extract_power_values_3s(&detailed.details.streams))
                 .unwrap_or_default();
 
             HistoricalWorkoutContext {
@@ -67,7 +63,7 @@ pub(super) fn build_historical_context(
                     .get(&activity.id)
                     .cloned(),
                 variability_index: activity.metrics.variability_index,
-                compressed_power_levels,
+                power_values_3s,
                 interval_blocks: workout_sources
                     .recent_interval_blocks_by_activity_id
                     .get(&activity.id)
@@ -411,11 +407,12 @@ fn build_recent_workout(
     configured_ftp: Option<i32>,
 ) -> RecentWorkoutContext {
     let resolved_ftp = activity.metrics.ftp_watts.or(configured_ftp);
-    let compressed_power_levels = compress_power_stream(
-        &extract_power_stream(&activity.details.streams),
-        resolved_ftp,
+    let power_values_3s = extract_power_values_3s(&activity.details.streams);
+    let cadence_values_5s = extract_and_average_stream(
+        &activity.details.streams,
+        "cadence",
+        workout_streams::CADENCE_BUCKET_SECONDS,
     );
-    let cadence_values_5s = extract_and_average_stream(&activity.details.streams, "cadence");
     let planned_workout = matched_event.map(|event| {
         let parsed = parse_workout_doc(event.structured_workout_text(), resolved_ftp);
 
@@ -465,7 +462,7 @@ fn build_recent_workout(
                 .and_then(|id| workout_recaps_by_id.get(id).cloned())
         }),
         variability_index: activity.metrics.variability_index,
-        compressed_power_levels,
+        power_values_3s,
         cadence_values_5s,
         planned_workout,
     }

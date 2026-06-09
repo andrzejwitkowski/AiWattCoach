@@ -55,7 +55,7 @@ fn get_selected_workout_returns_completed_data_and_hides_race() {
     assert_eq!(workout["kind"], "completed");
     assert_eq!(workout["workout_id"], "completed-1");
     assert_eq!(stream["stream_type"], "watts");
-    assert_eq!(stream["data"], serde_json::json!([250, 260, 270]));
+    assert_eq!(stream["data"], serde_json::json!([260]));
     assert_eq!(stream["secondary_data"], serde_json::json!([251, 261, 271]));
     assert_eq!(conversation["role"], "coach");
     assert_eq!(workout["ai_summary"], "Strong threshold execution");
@@ -67,7 +67,7 @@ fn get_selected_workout_returns_completed_data_and_hides_race() {
 }
 
 #[test]
-fn get_selected_workout_downsamples_large_streams() {
+fn get_selected_workout_returns_full_watts_buckets_without_cap() {
     let tool = GetSelectedWorkout;
     let mut workout = sample_completed_workout(None);
     workout.details.streams[0].primary_series = Some(CompletedWorkoutSeries::Integers(
@@ -87,13 +87,36 @@ fn get_selected_workout_downsamples_large_streams() {
         .as_array()
         .expect("stream data should be an array");
 
-    assert!(stream_data.len() <= 256);
+    assert_eq!(stream_data.len(), 334);
 }
 
 #[test]
-fn get_selected_workout_downsampling_keeps_both_ends_for_near_limit_streams() {
+fn get_selected_workout_buckets_watts_to_three_second_averages() {
     let tool = GetSelectedWorkout;
     let mut workout = sample_completed_workout(None);
+    workout.details.streams[0].primary_series = Some(CompletedWorkoutSeries::Integers(vec![
+        200, 220, 240, 260, 280,
+    ]));
+    let context = sample_context(TestDataPort {
+        completed: vec![workout],
+        planned: Vec::new(),
+        races: Vec::new(),
+        summaries: Vec::new(),
+    });
+
+    let response = futures::executor::block_on(tool.execute(r#"{"date":"2026-05-05"}"#, &context));
+    let json: serde_json::Value =
+        serde_json::from_str(&response).expect("response should be valid json");
+    let stream_data = &json["workouts"][0]["streams"][0]["data"];
+
+    assert_eq!(stream_data, &serde_json::json!([220, 270]));
+}
+
+#[test]
+fn get_selected_workout_returns_full_cadence_buckets() {
+    let tool = GetSelectedWorkout;
+    let mut workout = sample_completed_workout(None);
+    workout.details.streams[0].stream_type = "cadence".to_string();
     workout.details.streams[0].primary_series =
         Some(CompletedWorkoutSeries::Integers((0_i64..257_i64).collect()));
     let context = sample_context(TestDataPort {
@@ -110,9 +133,32 @@ fn get_selected_workout_downsampling_keeps_both_ends_for_near_limit_streams() {
         .as_array()
         .expect("stream data should be an array");
 
-    assert_eq!(stream_data.len(), 256);
-    assert_eq!(stream_data.first(), Some(&serde_json::json!(0)));
-    assert_eq!(stream_data.last(), Some(&serde_json::json!(256)));
+    assert_eq!(stream_data.len(), 52);
+}
+
+#[test]
+fn get_selected_workout_returns_full_heartrate_stream() {
+    let tool = GetSelectedWorkout;
+    let mut workout = sample_completed_workout(None);
+    workout.details.streams[0].stream_type = "heartrate".to_string();
+    workout.details.streams[0].primary_series = Some(CompletedWorkoutSeries::Integers(
+        (120_i64..125_i64).collect(),
+    ));
+    let context = sample_context(TestDataPort {
+        completed: vec![workout],
+        planned: Vec::new(),
+        races: Vec::new(),
+        summaries: Vec::new(),
+    });
+
+    let response = futures::executor::block_on(tool.execute(r#"{"date":"2026-05-05"}"#, &context));
+    let json: serde_json::Value =
+        serde_json::from_str(&response).expect("response should be valid json");
+
+    assert_eq!(
+        json["workouts"][0]["streams"][0]["data"],
+        serde_json::json!([120, 121, 122, 123, 124])
+    );
 }
 
 #[test]

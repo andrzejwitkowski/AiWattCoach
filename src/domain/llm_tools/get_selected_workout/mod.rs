@@ -40,7 +40,7 @@ impl LlmTool for GetSelectedWorkout {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Get detailed workout data for a specific date. Returns completed workouts with full statistics, capped raw power/cadence/heart-rate streams, and AI conversation history. Also returns planned workouts (if future or not completed) and basic race info if no completed workout exists for that day.".to_string(),
+            description: "Get detailed workout data for a specific date. Returns completed workouts with full statistics, complete stream data (watts in 3-second buckets, cadence in 5-second buckets, heartrate and other streams at full resolution), and AI conversation history. Also returns planned workouts (if future or not completed) and basic race info if no completed workout exists for that day.".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,
@@ -58,7 +58,7 @@ impl LlmTool for GetSelectedWorkout {
 
     fn prompt_guidance(&self) -> Option<&'static str> {
         Some(
-            "use for questions about a specific date when you need detailed completed, planned, race, or workout-summary data instead of relying only on packed context",
+            "use when packed p3/c5/bl evidence is insufficient; watts in the response are true 3-second average watts",
         )
     }
 

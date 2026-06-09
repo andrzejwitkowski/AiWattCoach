@@ -298,7 +298,7 @@ struct CompactHistoricalWorkout<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     vi: Option<f64>,
     #[serde(skip_serializing_if = "crate::domain::training_context::packing::is_empty_slice")]
-    pc: &'a [String],
+    p3: &'a [i32],
     #[serde(skip_serializing_if = "Vec::is_empty")]
     bl: Vec<CompactPlannedWorkoutBlock>,
 }
@@ -318,7 +318,7 @@ impl<'a> CompactHistoricalWorkout<'a> {
             ftp: workout.ftp_watts,
             recap: workout.workout_recap.as_deref(),
             vi: workout.variability_index,
-            pc: &workout.compressed_power_levels,
+            p3: &workout.power_values_3s,
             bl: workout
                 .interval_blocks
                 .iter()

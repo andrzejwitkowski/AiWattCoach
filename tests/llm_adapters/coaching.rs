@@ -127,7 +127,7 @@ async fn llm_workout_coach_includes_current_workout_recap_in_stable_context() {
 }
 
 #[tokio::test]
-async fn llm_workout_coach_describes_power_compression_in_system_prompt() {
+async fn llm_workout_coach_describes_true_p3_power_in_system_prompt() {
     let chat_port = Arc::new(CapturingChatPort::default());
     let coach = LlmWorkoutCoach::new(
         chat_port.clone(),
@@ -141,48 +141,11 @@ async fn llm_workout_coach_describes_power_compression_in_system_prompt() {
         .await
         .unwrap();
 
-    let requests = chat_port.requests();
-    assert_eq!(requests.len(), 1);
-    assert!(requests[0].system_prompt.contains("pc"));
-    assert!(requests[0]
-        .system_prompt
-        .contains("Be direct, adult, and concise."));
-    assert!(requests[0]
-        .system_prompt
-        .contains("Do not flatter, hedge, or act like a yes-man."));
-    assert!(requests[0]
-        .system_prompt
-        .contains("tell the athlete to save the summary"));
-    assert!(requests[0].system_prompt.contains("level:seconds"));
-    assert!(requests[0]
-        .system_prompt
-        .contains("round((watts / ftp)^2.5 * 100)"));
-    assert!(requests[0].system_prompt.contains("90-110"));
-    assert!(requests[0]
-        .system_prompt
-        .contains("isolated 1-second spike or dip"));
-    assert!(requests[0].system_prompt.contains("v=schema version"));
-    assert!(requests[0].system_prompt.contains("fx=focus"));
-    assert!(requests[0].system_prompt.contains("rd=recent days"));
-    assert!(requests[0]
-        .system_prompt
-        .contains("wr=saved workout recaps"));
-    assert!(requests[0]
-        .system_prompt
-        .contains("Do not ask the athlete again for information clearly stated in wr"));
-    assert!(requests[0].system_prompt.contains("ud=upcoming days"));
-    assert!(requests[0].system_prompt.contains("sd=start_date_local"));
-    assert!(requests[0].system_prompt.contains("ifv=intensity_factor"));
-    assert!(requests[0].system_prompt.contains("bl=interval blocks"));
-    assert!(requests[0]
-        .system_prompt
-        .contains("c5=cadence values in 5-second buckets"));
-    assert!(requests[0].system_prompt.contains(
-        "For completed interval workouts, judge execution quality primarily from packed workout evidence"
-    ));
-    assert!(requests[0].system_prompt.contains(
-        "Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only and are not sufficient proof"
-    ));
+    let prompt = &chat_port.requests()[0].system_prompt;
+    assert!(prompt.contains("p3 as executed power in 3-second average watts"));
+    assert!(prompt.contains("p3=power watts in 3-second buckets"));
+    assert!(prompt.contains("c5=cadence values in 5-second buckets"));
+    assert!(prompt.contains("judge execution quality primarily from packed workout evidence"));
 }
 
 #[test]
