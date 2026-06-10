@@ -98,8 +98,6 @@ pub trait TrainingContextBuilder: Send + Sync {
     ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
 }
 
-const STREAM_BUCKET_SIZE: usize = 5;
-const MAX_CHUNKS_PER_WORKOUT: usize = 48;
 const STABLE_FUTURE_EVENT_DAYS: i64 = 120;
 pub const CALENDAR_OVERVIEW_FOCUS_ID: &str = "calendar-overview";
 pub const ATHLETE_SUMMARY_FOCUS_ID: &str = "athlete-summary";
@@ -651,7 +649,6 @@ where
                 workout_recaps_by_id: &workout_recaps_by_id,
                 recent_interval_blocks_by_activity_id: &recent_interval_blocks_by_activity_id,
             },
-            configured_ftp,
         );
         let recent_days = build_recent_day_contexts(
             recent_start,

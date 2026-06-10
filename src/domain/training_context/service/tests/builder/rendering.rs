@@ -151,16 +151,7 @@ async fn builder_renders_recent_and_historical_context() {
         result.context.recent_workout_recaps[0].recap,
         "Strong sweet spot execution with steady control"
     );
-    assert_eq!(
-        recent_day.workouts[0].compressed_power_levels,
-        vec![
-            "36:1".to_string(),
-            "46:1".to_string(),
-            "57:1".to_string(),
-            "70:1".to_string(),
-            "84:1".to_string(),
-        ]
-    );
+    assert_eq!(recent_day.workouts[0].power_values_3s, vec![220, 270]);
     assert_eq!(recent_day.workouts[0].cadence_values_5s, vec![84]);
     assert_eq!(
         recent_day.workouts[0]
@@ -228,16 +219,14 @@ async fn builder_renders_recent_and_historical_context() {
         .rendered
         .stable_context
         .contains("\"recap\":\"Strong sweet spot execution with steady control\""));
-    assert!(result
-        .rendered
-        .stable_context
-        .contains("\"pc\":[\"36:1\",\"46:1\",\"57:1\",\"70:1\",\"84:1\"]"));
+    assert!(result.rendered.stable_context.contains("\"p3\":[220,270]"));
     assert!(result.rendered.volatile_context.contains("\"ride-1\""));
     assert!(result
         .rendered
         .volatile_context
         .contains("Strong sweet spot execution with steady control"));
-    assert!(result.rendered.volatile_context.contains("\"pc\":["));
+    assert!(result.rendered.volatile_context.contains("\"p3\":["));
+    assert!(!result.rendered.volatile_context.contains("\"pc\":"));
     assert!(result.rendered.volatile_context.contains("\"c5\":[84]"));
     assert!(result.rendered.volatile_context.contains("\"tss\":80"));
     assert!(result.rendered.volatile_context.contains("\"pd\":["));

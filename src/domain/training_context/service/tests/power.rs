@@ -1,78 +1,31 @@
 use crate::domain::intervals::ActivityStream;
 
-use super::super::{
-    power::{compress_power_stream, extract_and_average_stream, extract_power_stream},
-    MAX_CHUNKS_PER_WORKOUT,
-};
+use super::super::power::extract_and_average_stream;
 
 #[test]
-fn compressed_power_merges_identical_levels_into_runs() {
+fn power_3s_averages_watts_into_three_second_buckets() {
     assert_eq!(
-        compress_power_stream(&[300, 300, 300], Some(300)),
-        vec!["100:3"]
+        extract_and_average_stream(&watts_stream(&[200, 220, 240, 260, 280]), "watts", 3,),
+        vec![220, 270],
     );
 }
 
 #[test]
-fn compressed_power_smooths_single_second_spike_outside_ftp_zone() {
+fn power_3s_returns_empty_without_watts_stream() {
+    assert!(extract_and_average_stream(&[], "watts", 3).is_empty());
+}
+
+#[test]
+fn power_3s_returns_full_bucket_count_for_long_streams() {
+    let values: Vec<i32> = (0..1000).collect();
     assert_eq!(
-        compress_power_stream(&[210, 214, 210], Some(300)),
-        vec!["41:3"]
+        extract_and_average_stream(&watts_stream(&values), "watts", 3).len(),
+        334
     );
 }
 
 #[test]
-fn compressed_power_merges_single_second_change_within_same_power_bucket() {
-    assert_eq!(
-        compress_power_stream(&[287, 290, 287], Some(300)),
-        vec!["92:3"]
-    );
-}
-
-#[test]
-fn compressed_power_merges_boundary_change_when_bucketed_level_matches() {
-    assert_eq!(
-        compress_power_stream(&[286, 287, 286], Some(300)),
-        vec!["92:3"]
-    );
-}
-
-#[test]
-fn compressed_power_buckets_watts_to_nearest_ten_before_encoding() {
-    assert_eq!(
-        compress_power_stream(&[284, 286, 289], Some(300)),
-        vec!["84:1", "92:2"]
-    );
-}
-
-#[test]
-fn compressed_power_applies_run_cap_for_noisy_streams() {
-    let noisy = (0..(MAX_CHUNKS_PER_WORKOUT * 2 + 1))
-        .map(|index| if index % 2 == 0 { 300 } else { 0 })
-        .collect::<Vec<_>>();
-
-    assert!(compress_power_stream(&noisy, Some(300)).len() <= MAX_CHUNKS_PER_WORKOUT);
-}
-
-#[test]
-fn compressed_power_run_cap_preserves_total_duration_seconds() {
-    let noisy = (0..(MAX_CHUNKS_PER_WORKOUT * 2 + 1))
-        .map(|index| if index % 2 == 0 { 300 } else { 0 })
-        .collect::<Vec<_>>();
-
-    let encoded = compress_power_stream(&noisy, Some(300));
-
-    assert_eq!(sum_encoded_durations(&encoded), noisy.len());
-}
-
-#[test]
-fn compressed_power_returns_empty_without_valid_ftp() {
-    assert!(compress_power_stream(&[300, 300, 300], None).is_empty());
-    assert!(compress_power_stream(&[300, 300, 300], Some(0)).is_empty());
-}
-
-#[test]
-fn compressed_power_preserves_missing_watts_samples_as_zero_second_runs() {
+fn power_3s_preserves_missing_samples_as_zero_in_bucket_average() {
     let streams = vec![ActivityStream {
         stream_type: "watts".to_string(),
         name: None,
@@ -82,11 +35,7 @@ fn compressed_power_preserves_missing_watts_samples_as_zero_second_runs() {
         custom: false,
         all_null: false,
     }];
-
-    let encoded = compress_power_stream(&extract_power_stream(&streams), Some(300));
-
-    assert_eq!(encoded, vec!["36:1", "0:1", "41:1"]);
-    assert_eq!(sum_encoded_durations(&encoded), 3);
+    assert_eq!(extract_and_average_stream(&streams, "watts", 3), vec![137]);
 }
 
 #[test]
@@ -101,17 +50,17 @@ fn extract_and_average_stream_preserves_missing_samples_for_alignment() {
         all_null: false,
     }];
 
-    assert_eq!(extract_and_average_stream(&streams, "cadence"), vec![55]);
+    assert_eq!(extract_and_average_stream(&streams, "cadence", 5), vec![55]);
 }
 
-fn sum_encoded_durations(runs: &[String]) -> usize {
-    runs.iter()
-        .map(|run| {
-            run.split_once(':')
-                .expect("encoded power run should contain level and duration")
-                .1
-                .parse::<usize>()
-                .expect("encoded power duration should parse as usize")
-        })
-        .sum()
+fn watts_stream(values: &[i32]) -> Vec<ActivityStream> {
+    vec![ActivityStream {
+        stream_type: "watts".to_string(),
+        name: None,
+        data: Some(serde_json::json!(values)),
+        data2: None,
+        value_type_is_array: false,
+        custom: false,
+        all_null: false,
+    }]
 }

@@ -281,7 +281,8 @@ mod tests {
             "For completed interval workouts, judge execution quality primarily from packed workout evidence"
         ));
         assert!(prompt.contains("bl as intended block structure/targets"));
-        assert!(prompt.contains("pc as executed power pattern"));
+        assert!(prompt.contains("p3 as executed power in 3-second average watts"));
+        assert!(prompt.contains("p3=power watts in 3-second buckets"));
         assert!(prompt.contains("c5 as supporting cadence evidence"));
         assert!(prompt.contains(
             "Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only"

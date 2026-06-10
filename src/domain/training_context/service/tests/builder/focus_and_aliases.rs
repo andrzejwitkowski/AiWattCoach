@@ -364,16 +364,7 @@ async fn builder_uses_configured_ftp_when_activity_ftp_is_missing() {
         .find(|day| day.date == "2026-04-03")
         .expect("recent day should exist");
 
-    assert_eq!(
-        recent_day.workouts[0].compressed_power_levels,
-        vec![
-            "36:1".to_string(),
-            "46:1".to_string(),
-            "57:1".to_string(),
-            "70:1".to_string(),
-            "84:1".to_string(),
-        ]
-    );
+    assert_eq!(recent_day.workouts[0].power_values_3s, vec![220, 270]);
     assert_eq!(
         recent_day.workouts[0]
             .planned_workout

@@ -108,7 +108,7 @@ async fn send_message_uses_saved_openrouter_settings_through_live_adapter() {
 
     assert!(message_contains("training_context_stable="));
     assert!(message_contains("training_context_volatile="));
-    assert!(message_contains("\"pc\":"));
+    assert!(message_contains("\"p3\":"));
     assert!(!message_contains("\"p5\":"));
 }
 

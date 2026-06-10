@@ -167,7 +167,7 @@ pub struct HistoricalWorkoutContext {
     pub ftp_watts: Option<i32>,
     pub workout_recap: Option<String>,
     pub variability_index: Option<f64>,
-    pub compressed_power_levels: Vec<String>,
+    pub power_values_3s: Vec<i32>,
     pub interval_blocks: Vec<PlannedWorkoutBlockContext>,
 }
 
@@ -196,7 +196,7 @@ pub struct RecentWorkoutContext {
     pub rpe: Option<u8>,
     pub workout_recap: Option<String>,
     pub variability_index: Option<f64>,
-    pub compressed_power_levels: Vec<String>,
+    pub power_values_3s: Vec<i32>,
     pub cadence_values_5s: Vec<i32>,
     pub planned_workout: Option<PlannedWorkoutReference>,
 }
