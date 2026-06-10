@@ -7,6 +7,7 @@ import { ApiBaseUrlProvider } from '../lib/apiBaseUrl';
 import { CalendarCoachFab } from '../features/calendar/components/CalendarCoachFab';
 import { CalendarCoachModal } from '../features/calendar/components/CalendarCoachModal';
 import { CalendarGrid } from '../features/calendar/components/CalendarGrid';
+import { useCalendarRefreshEpoch } from '../features/calendar/hooks/useCalendarData';
 
 type CalendarPageProps = {
   apiBaseUrl: string;
@@ -15,7 +16,9 @@ type CalendarPageProps = {
 export function CalendarPage({ apiBaseUrl }: CalendarPageProps) {
   const { t } = useTranslation();
   const [isCoachOpen, setIsCoachOpen] = useState(false);
-  const [calendarRefreshVersion, setCalendarRefreshVersion] = useState(0);
+  const [coachRefreshVersion, setCoachRefreshVersion] = useState(0);
+  const cacheRefreshEpoch = useCalendarRefreshEpoch();
+  const calendarRefreshVersion = coachRefreshVersion + cacheRefreshEpoch;
 
   return (
     <ApiBaseUrlProvider value={apiBaseUrl}>
@@ -33,7 +36,7 @@ export function CalendarPage({ apiBaseUrl }: CalendarPageProps) {
       <CalendarCoachModal
         isOpen={isCoachOpen}
         onClose={() => setIsCoachOpen(false)}
-        onPlannedWorkoutUpdated={() => setCalendarRefreshVersion((current) => current + 1)}
+        onPlannedWorkoutUpdated={() => setCoachRefreshVersion((current) => current + 1)}
       />
     </ApiBaseUrlProvider>
   );

@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { buildDayItems, isInteractiveDayItem, type CalendarDayItem, type CalendarDayItemsSelection, selectDayItemDetail } from '../dayItems';
+import { formatPlannedRestLabelSubtitle } from '../plannedRestPresentation';
 import { formatRaceSubtitle } from '../racePresentation';
 import type { CalendarPlannedRestDayLabel, CalendarRaceLabel, CalendarWeek } from '../types';
 import { formatDayLabel, toDateKey } from '../utils/dateUtils';
@@ -90,8 +91,10 @@ export function CalendarMobileList({
                 day.labels.find((label): label is CalendarPlannedRestDayLabel => label.kind === 'planned_rest_day') ?? null;
               const today = day.dateKey === todayKey;
               const count = dayItems.length;
-              const title = primaryItem?.title ?? plannedRestLabel?.title ?? t('calendar.restDay');
-              const subtitle = primaryItem?.subtitle ?? plannedRestLabel?.subtitle ?? describeDayFallback(day, t);
+              const title = primaryItem?.title ?? plannedRestLabel?.title ?? t('calendar.noTraining');
+              const subtitle = primaryItem?.subtitle
+                ?? (plannedRestLabel ? formatPlannedRestLabelSubtitle(plannedRestLabel, locale) : null)
+                ?? describeDayFallback(day, locale, t);
               const label = primaryItem
                 ? itemKindLabel(primaryItem, t)
                 : plannedRestLabel
@@ -190,6 +193,7 @@ function itemKindLabel(item: CalendarDayItem, t: ReturnType<typeof useTranslatio
 
 function describeDayFallback(
   day: CalendarWeek['days'][number],
+  locale: string,
   t: ReturnType<typeof useTranslation>['t'],
 ) {
   const race = day.labels.find((label): label is CalendarRaceLabel => label.kind === 'race');
@@ -199,7 +203,7 @@ function describeDayFallback(
 
   const plannedRest = day.labels.find((label): label is CalendarPlannedRestDayLabel => label.kind === 'planned_rest_day');
   if (plannedRest) {
-    return plannedRest.subtitle ?? t('calendar.plannedRestDay');
+    return formatPlannedRestLabelSubtitle(plannedRest, locale) ?? t('calendar.plannedRestDay');
   }
 
   const plannedEvent = day.events.find((event) => isPlannedWorkoutEvent(event));
@@ -211,7 +215,7 @@ function describeDayFallback(
     return t('calendar.completedWorkout');
   }
 
-  return t('calendar.restDay');
+  return t('calendar.noTraining');
 }
 
 function formatDurationMinutes(durationSeconds: number): string {

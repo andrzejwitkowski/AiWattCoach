@@ -462,12 +462,7 @@ fn planned_workout_projection_prefers_failed_status_over_modified_hash() {
 #[test]
 fn planned_workout_projection_stays_synced_when_stored_hash_matches_intervals_sync_hash() {
     let workout = sample_bridged_planned_workout("plan-op-1", "2026-05-10");
-    let parsed = crate::domain::planned_workouts::to_intervals_planned_workout(&workout).unwrap();
-    let payload_hash = crate::domain::planned_workouts::intervals_planned_workout_payload_hash(
-        &workout.date,
-        &parsed,
-        Some("Threshold builder"),
-    );
+    let payload_hash = crate::domain::planned_workouts::planned_workout_payload_hash(&workout);
     let state = ExternalSyncState::new(
         "user-1".to_string(),
         ExternalProvider::Intervals,

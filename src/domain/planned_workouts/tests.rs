@@ -1,8 +1,8 @@
 use super::{
-    intervals_planned_workout_payload_hash, planned_workout_payload_hash,
-    to_intervals_planned_workout, PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine,
-    PlannedWorkoutRepository, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
-    PlannedWorkoutText,
+    domain_to_intervals_planned_workout, intervals_planned_workout_payload_hash,
+    planned_workout_payload_hash, planned_workout_sync_name, PlannedWorkout, PlannedWorkoutContent,
+    PlannedWorkoutLine, PlannedWorkoutRepository, PlannedWorkoutStep, PlannedWorkoutStepKind,
+    PlannedWorkoutTarget, PlannedWorkoutText,
 };
 
 #[test]
@@ -151,11 +151,15 @@ fn planned_workout_payload_hash_uses_intervals_serialization_not_canonical_text(
             })],
         },
     );
-    let parsed = to_intervals_planned_workout(&workout).unwrap();
+    let parsed = domain_to_intervals_planned_workout(&workout);
 
     assert_eq!(
         planned_workout_payload_hash(&workout),
-        intervals_planned_workout_payload_hash(&workout.date, &parsed, None)
+        intervals_planned_workout_payload_hash(
+            &workout.date,
+            &parsed,
+            planned_workout_sync_name(&workout).as_deref(),
+        )
     );
 }
 

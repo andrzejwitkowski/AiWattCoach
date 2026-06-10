@@ -6,10 +6,10 @@ import { makeActivity, makeCalendarDay, makeEvent } from '../testData';
 import { CalendarDayCell } from './CalendarDayCell';
 
 describe('CalendarDayCell content', () => {
-  it('renders a rest day state when no data is present', () => {
+  it('renders a neutral empty state when no data is present', () => {
     render(<CalendarDayCell day={makeCalendarDay({ date: new Date(2026, 2, 23), dateKey: '2026-03-23' })} isToday={false} />);
 
-    expect(screen.getByText(/rest day/i)).toBeInTheDocument();
+    expect(screen.getByText(/no training/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /rest day/i })).not.toBeInTheDocument();
   });
 

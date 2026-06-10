@@ -1,11 +1,11 @@
 # Graph Report - AiWattCoach  (2026-06-10)
 
 ## Corpus Check
-- 984 files · ~577,058 words
+- 986 files · ~577,628 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 11509 nodes · 15210 edges · 964 communities detected
+- 11523 nodes · 15229 edges · 966 communities detected
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 482 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
@@ -974,6 +974,8 @@
 - [[_COMMUNITY_Community 961|Community 961]]
 - [[_COMMUNITY_Community 962|Community 962]]
 - [[_COMMUNITY_Community 963|Community 963]]
+- [[_COMMUNITY_Community 964|Community 964]]
+- [[_COMMUNITY_Community 965|Community 965]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `Entries` - 221 edges
@@ -1007,39 +1009,39 @@ Nodes (224): 2026-04-19 | CodeRabbit | metrics backfill selection and observabil
 
 ### Community 1 - "Community 1"
 Cohesion: 0.01
-Nodes (76): args(), build_daily_training_load_snapshots_falls_back_to_provider_ftp_after_ftp_is_cleared(), build_daily_training_load_snapshots_falls_back_to_provider_tss_before_app_entry_when_provider_ftp_is_missing(), build_daily_training_load_snapshots_keeps_intervals_if_and_ef_averages(), build_daily_training_load_snapshots_uses_provider_ftp_before_app_entry_and_app_ftp_after(), completed_workout_read_service_accepts_canonical_completed_workout_ids(), completed_workout_read_service_falls_back_to_canonical_completed_workout_id(), completed_workout_repository_finds_by_source_activity_id() (+68 more)
+Nodes (71): args(), build_daily_training_load_snapshots_falls_back_to_provider_ftp_after_ftp_is_cleared(), build_daily_training_load_snapshots_falls_back_to_provider_tss_before_app_entry_when_provider_ftp_is_missing(), build_daily_training_load_snapshots_keeps_intervals_if_and_ef_averages(), build_daily_training_load_snapshots_uses_provider_ftp_before_app_entry_and_app_ftp_after(), completed_workout_read_service_accepts_canonical_completed_workout_ids(), completed_workout_read_service_falls_back_to_canonical_completed_workout_id(), completed_workout_repository_finds_by_source_activity_id() (+63 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.02
 Nodes (71): athlete_summary_generate_task_handler(), AthleteSummaryGenerateTaskExecutor, AthleteSummaryGenerateTaskExecutor<Base>, AthleteSummaryTaskPayload, AthleteSummaryTaskResultHandler, AthleteSummaryTaskResultHandler<Base>, build_completed_checkpoint(), build_force_dedupe_key() (+63 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.01
-Nodes (49): AssertingIntervalsApi, external_import_service(), external_import_service_without_refresh(), FakeIntervalsApi, FakeIntervalsSettings, FixedClock, FixedIdGenerator, InMemoryCompletedWorkoutRepository (+41 more)
+Cohesion: 0.03
+Nodes (121): ErrorResponse, log_calendar_coach_error(), log_connection_error(), log_identity_error(), log_settings_error(), log_workout_summary_error(), map_admin_identity_error(), map_athlete_summary_error() (+113 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.03
-Nodes (122): ErrorResponse, log_calendar_coach_error(), log_connection_error(), log_identity_error(), log_settings_error(), log_workout_summary_error(), map_admin_identity_error(), map_athlete_summary_error() (+114 more)
+Cohesion: 0.04
+Nodes (85): calendar_entry_view_service_lists_mixed_entries_by_date_range(), completed_workout_projection_carries_local_summary(), completed_workout_projection_handles_short_start_date_local_without_panicking(), computes_5s_ad_hoc_when_cache_missing(), computes_ad_hoc_for_non_5s_resolution(), FixedClock, get_selected_workout_buckets_watts_to_three_second_averages(), get_selected_workout_maps_non_finite_float_stream_values_to_null() (+77 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.04
-Nodes (86): calendar_entry_view_service_lists_mixed_entries_by_date_range(), completed_workout_projection_carries_local_summary(), completed_workout_projection_handles_short_start_date_local_without_panicking(), computes_5s_ad_hoc_when_cache_missing(), computes_ad_hoc_for_non_5s_resolution(), FixedClock, get_selected_workout_buckets_watts_to_three_second_averages(), get_selected_workout_maps_non_finite_float_stream_values_to_null() (+78 more)
-
-### Community 6 - "Community 6"
 Cohesion: 0.02
 Nodes (62): built_frontend_fixture_serves_spa_at_root_while_health_stays_json(), health_check_returns_service_status(), readiness_returns_service_unavailable_without_mongo(), root_serves_spa_html(), health_check_with_traceparent_logs_matching_trace_id(), health_check_without_traceparent_logs_generated_trace_id(), not_found_api_route_emits_warn_classification_log(), readiness_check_emits_error_classification_log_for_service_unavailable() (+54 more)
 
+### Community 6 - "Community 6"
+Cohesion: 0.02
+Nodes (28): EmptyHiddenSource, HiddenIdsSource, list_calendar_events_hides_intervals_events_linked_to_labels(), list_calendar_labels_is_scoped_to_authenticated_user(), list_calendar_labels_returns_race_labels_grouped_by_date(), RaceLabelSource, StubRaceService, get_event_hydrates_actual_workout_from_detailed_activity_lookup() (+20 more)
+
 ### Community 7 - "Community 7"
 Cohesion: 0.02
-Nodes (49): IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>, ApiKeyInput(), ChatTypingIndicator(), buildDayItems(), buildGenericEventItem(), formatMinutes(), summarizeCompletedActivity(), summarizePlannedEvent() (+41 more)
+Nodes (39): capture_request(), CapturedRequest, CapturingChatPort, deepseek_handler(), external_import_service(), external_import_service_without_refresh(), FailingReusableCacheRepository, FixedClock (+31 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.05
-Nodes (52): completed_activity_detail_accepts_null_interval_groups(), completed_activity_detail_accepts_stringified_interval_metrics(), completed_activity_detail_does_not_mark_strava_stub_when_streams_fail_transiently(), completed_activity_detail_enrichment_falls_back_to_base_activity_with_intervals_when_dedicated_intervals_returns_422(), completed_activity_detail_enrichment_merges_sparse_base_with_intervals_and_streams(), completed_activity_detail_logs_known_strava_422s_at_info(), completed_activity_detail_marks_strava_stub_when_all_enrichment_paths_are_unavailable(), completed_activity_detail_parse_failure_logs_payload_summary_without_raw_preview() (+44 more)
+Cohesion: 0.02
+Nodes (25): AssertingIntervalsApi, FakeIntervalsApi, FakeIntervalsSettings, FixedIdGenerator, RecordingCalendarRefresh, RecordingImports, RecordingImportService, RecordingIntervalsApi (+17 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.02
-Nodes (24): EmptyHiddenSource, HiddenIdsSource, list_calendar_events_hides_intervals_events_linked_to_labels(), list_calendar_labels_is_scoped_to_authenticated_user(), list_calendar_labels_returns_race_labels_grouped_by_date(), RaceLabelSource, StubRaceService, get_event_is_scoped_to_authenticated_user() (+16 more)
+Cohesion: 0.05
+Nodes (52): completed_activity_detail_accepts_null_interval_groups(), completed_activity_detail_accepts_stringified_interval_metrics(), completed_activity_detail_does_not_mark_strava_stub_when_streams_fail_transiently(), completed_activity_detail_enrichment_falls_back_to_base_activity_with_intervals_when_dedicated_intervals_returns_422(), completed_activity_detail_enrichment_merges_sparse_base_with_intervals_and_streams(), completed_activity_detail_logs_known_strava_422s_at_info(), completed_activity_detail_marks_strava_stub_when_all_enrichment_paths_are_unavailable(), completed_activity_detail_parse_failure_logs_payload_summary_without_raw_preview() (+44 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.03
@@ -1047,187 +1049,187 @@ Nodes (37): EmptyCalendarLabelSource, EmptyPlannedRestDayService, EmptyTrainingP
 
 ### Community 11 - "Community 11"
 Cohesion: 0.05
-Nodes (28): FakeIntervalsService, FakeProjectionRepository, FixedPlannedWorkoutTokenRepository, InMemoryCalendarEntryViewRepository, InMemoryUserSettingsRepository, list_events_hydrates_actual_workout_from_linked_completed_workout(), list_events_reads_from_calendar_entry_view_only(), list_events_skips_completed_entries_even_with_planned_backlink() (+20 more)
+Nodes (30): FakeIntervalsService, FakeProjectionRepository, FixedPlannedWorkoutTokenRepository, InMemoryCalendarEntryViewRepository, InMemoryUserSettingsRepository, list_events_hydrates_actual_workout_from_linked_completed_workout(), list_events_reads_from_calendar_entry_view_only(), list_events_skips_completed_entries_even_with_planned_backlink() (+22 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.04
 Nodes (47): delete_activity_continues_when_pre_read_fails(), delete_activity_removes_local_copy_only_after_upstream_delete_succeeds(), delete_activity_returns_ok_when_local_delete_fails_after_upstream_success(), get_activity_persists_enriched_completed_activity(), get_activity_persists_fetched_activity(), get_activity_returns_upstream_result_when_local_persistence_fails(), list_activities_does_not_clobber_existing_enriched_completed_activity(), list_activities_persists_api_results_and_returns_fresh_api_results() (+39 more)
 
 ### Community 13 - "Community 13"
+Cohesion: 0.04
+Nodes (32): IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>, IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>, IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>, builds_failed_poc_record(), builds_parsed_poc_record(), mongo_fixture_or_skip(), MongoFixture, noop_poc_repository_accepts_records() (+24 more)
+
+### Community 14 - "Community 14"
 Cohesion: 0.07
 Nodes (36): epoch_seconds_to_utc_date(), FailingFtpHistoryRepository, find_settings_does_not_create_defaults_when_missing(), FtpHistoryWritePort, InMemoryProviderPollStateRepository, InMemoryUserSettingsRepository, map_poll_state_error(), map_training_load_error() (+28 more)
 
-### Community 14 - "Community 14"
+### Community 15 - "Community 15"
 Cohesion: 0.05
 Nodes (37): generateAthleteSummary(), loadAthleteSummary(), handleGenerate(), load(), refreshSummary(), claim_next_due_does_not_double_claim_same_task(), leader_only_task_requires_leader_worker(), service() (+29 more)
 
-### Community 15 - "Community 15"
+### Community 16 - "Community 16"
+Cohesion: 0.04
+Nodes (22): create_race_persists_and_syncs_to_intervals(), create_race_retry_after_lost_final_sync_write_updates_existing_remote_event(), create_race_retry_without_external_id_reuses_existing_remote_event(), delete_race_deletes_remote_event_before_local_remove(), delete_race_keeps_sync_state_when_local_delete_fails(), delete_race_refreshes_calendar_view_when_sync_state_delete_fails_after_local_delete(), FailingCalendarRefresh, InMemoryExternalSyncStateRepository (+14 more)
+
+### Community 17 - "Community 17"
 Cohesion: 0.04
 Nodes (42): AuthMeResponse, build_session_cookie(), buildAuthUrl(), buildGoogleLoginUrl(), buildWahooConnectUrl(), clear_session_cookie(), ClientMetadata, current_user() (+34 more)
 
-### Community 16 - "Community 16"
+### Community 18 - "Community 18"
 Cohesion: 0.05
 Nodes (49): AiAgentsDocument, AvailabilityDayDocument, AvailabilityDocument, backfill_wahoo_user_id_updates_only_wahoo_fields(), bootstrap_intervals_updated_at(), build_intervals_poll_bootstrap_filter(), build_intervals_poll_bootstrap_filter_matches_non_empty_credentials_or_existing_users(), build_intervals_poll_bootstrap_filter_omits_user_id_clause_without_existing_users() (+41 more)
 
-### Community 17 - "Community 17"
-Cohesion: 0.05
-Nodes (16): create_race_persists_and_syncs_to_intervals(), create_race_retry_after_lost_final_sync_write_updates_existing_remote_event(), create_race_retry_without_external_id_reuses_existing_remote_event(), delete_race_deletes_remote_event_before_local_remove(), delete_race_keeps_sync_state_when_local_delete_fails(), delete_race_refreshes_calendar_view_when_sync_state_delete_fails_after_local_delete(), InMemoryExternalSyncStateRepository, InMemoryPlannedRestDayRepository (+8 more)
-
-### Community 18 - "Community 18"
+### Community 19 - "Community 19"
 Cohesion: 0.04
 Nodes (11): mark_saved_generates_recap_and_plan_for_latest_completed_activity(), mark_saved_generates_recap_only_for_finished_conversation_on_non_latest_activity(), mark_saved_notifies_requested_alias_after_background_work_completes(), mark_saved_spawns_background_work_when_training_plan_generation_would_fail(), mark_saved_treats_stripped_latest_activity_id_as_latest_for_prefixed_completed_target(), mark_saved_triggers_training_plan_generation_after_persisting_saved_state(), mark_saved_uses_preferred_completed_workout_id_for_side_effects(), RecordingMissingSettingsService (+3 more)
 
-### Community 19 - "Community 19"
+### Community 20 - "Community 20"
 Cohesion: 0.06
 Nodes (34): build_direct_event_matches(), build_local_events(), canonical_event_id(), CompletedWorkoutReadPort, date_key(), dedup_completed_workouts_for_prompt(), dedup_completed_workouts_for_prompt_keeps_preferred_duplicate(), default_special_day_name() (+26 more)
 
-### Community 20 - "Community 20"
+### Community 21 - "Community 21"
 Cohesion: 0.04
 Nodes (16): default_dev_coach(), DevWorkoutCoach, existing_summary(), existing_summary_with_finished_conversation(), PersistCheckingTrainingPlanService, RecordingCompletedWorkoutTargetService, RecordingLatestCompletedActivityService, RecordingTrainingPlanService (+8 more)
 
-### Community 21 - "Community 21"
+### Community 22 - "Community 22"
 Cohesion: 0.07
 Nodes (23): AuthoritativeCompletedWorkoutRepository, AuthoritativeCompletedWorkoutRepository<Workouts, SyncStates>, AuthoritativePlannedWorkoutRepository, AuthoritativePlannedWorkoutRepository<Planned, Completed, Links>, expanded_completed_workout_range(), hides_legacy_externally_imported_planned_workouts(), hides_planned_workout_when_authoritative_completed_links_to_it(), hides_planned_workout_when_authoritative_completed_workout_crosses_date_boundary() (+15 more)
 
-### Community 22 - "Community 22"
+### Community 23 - "Community 23"
 Cohesion: 0.03
 Nodes (60): 2026-05-13 - Verify remote branch before claiming push succeeded, 2026-05-27 - Completed workout alias sets must include provider external ids, 2026-05-27 - LLM JSON envelope parsers must tolerate provider presentation noise, 2026-05-28 - Canonical matching inputs must not silently upgrade link strength, 2026-05-28 - Summary handlers must not pre-check through a narrower completed-workout reader, 2026-05-28 - Visible-range UIs must not batch hidden history summaries, 2026-05-29 - Coach message limits must match realistic athlete feedback, 2026-05-29 - Frontend schemas must match metadata DTO omissions (+52 more)
 
-### Community 23 - "Community 23"
+### Community 24 - "Community 24"
 Cohesion: 0.09
 Nodes (31): assert_event_order(), completed_operation(), completed_operation_at(), ensure_fresh_summary_fails_when_generator_returns_blank_assistant_text(), ensure_fresh_summary_generates_when_missing(), ensure_fresh_summary_reads_repository_once_when_summary_is_fresh(), ensure_fresh_summary_regenerates_when_older_than_monday(), ensure_fresh_summary_reuses_summary_generated_this_week() (+23 more)
 
-### Community 24 - "Community 24"
+### Community 25 - "Community 25"
 Cohesion: 0.05
 Nodes (37): choose_preferred_planned_workout_link(), completed_workout_refresh_dates(), CompletedWorkoutAliasScope, CompletedWorkoutTargetUseCases, existing_link_candidate(), ExternalCompletedWorkoutImport, ExternalImportCommand, ExternalImportError (+29 more)
 
-### Community 25 - "Community 25"
+### Community 26 - "Community 26"
 Cohesion: 0.07
 Nodes (51): blendRgb(), buildCompletedWorkoutBars(), buildCompletedWorkoutPreviewBars(), buildExpandedGroupedPlannedChartSteps(), buildExpandedPlannedSegments(), buildGroupedPlannedWorkoutSections(), buildPlannedTargetLabel(), buildPlannedWorkoutBars() (+43 more)
 
-### Community 26 - "Community 26"
-Cohesion: 0.05
-Nodes (12): configured_settings(), ConfiguredSettingsService, FixedClock, InMemoryConversationRepository, InMemoryMessageRepository, InMemoryReplyOperationRepository, NoopContextCacheRepository, RecordingLlmChatPort (+4 more)
-
 ### Community 27 - "Community 27"
 Cohesion: 0.05
-Nodes (17): get_event_hydrates_actual_workout_from_detailed_activity_lookup(), get_event_hydrates_actual_workout_from_detailed_activity_lookup_without_list_match(), get_event_includes_actual_workout_when_matching_activity_exists(), detect_intervals_from_power_stream(), detected_interval_candidates(), evaluate_activity_match(), extract_float_stream(), extract_integer_stream() (+9 more)
+Nodes (12): configured_settings(), ConfiguredSettingsService, FixedClock, InMemoryConversationRepository, InMemoryMessageRepository, InMemoryReplyOperationRepository, NoopContextCacheRepository, RecordingLlmChatPort (+4 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.04
 Nodes (51): code:rust (#[cfg(test)]), code:bash (cargo test --test training_plan_mongo training_plan_generati), code:rust (assert_eq!(found.raw_plan_description.as_deref(), Some("init), code:rust (raw_plan_description: Option<String>,), code:rust (raw_plan_description: operation.raw_plan_description.clone()), code:rust (raw_plan_description: document.raw_plan_description,), code:bash (cargo test --test training_plan_mongo training_plan_generati), code:rust (assert!(initial_prompt.contains("training_plan_response_sche) (+43 more)
 
 ### Community 29 - "Community 29"
+Cohesion: 0.04
+Nodes (30): ApiKeyInput(), ChatTypingIndicator(), buildDayItems(), buildGenericEventItem(), formatMinutes(), summarizeCompletedActivity(), summarizePlannedEvent(), NoopPestParserPocRepository (+22 more)
+
+### Community 30 - "Community 30"
 Cohesion: 0.09
 Nodes (46): body_hash(), body_hash_returns_short_sha_preview(), BodyLoggingMode, execute_and_log(), execute_and_log_with_body(), execute_and_log_with_body_request(), execute_and_log_without_body(), format_binary_body() (+38 more)
 
-### Community 30 - "Community 30"
+### Community 31 - "Community 31"
 Cohesion: 0.07
 Nodes (47): append_interval_segments(), append_segment(), build_workout_summary(), format_number(), is_exact_date(), mean_target_percent(), mean_target_percent_from_bounds(), normalize_definition() (+39 more)
 
-### Community 31 - "Community 31"
+### Community 32 - "Community 32"
 Cohesion: 0.06
 Nodes (26): BlankAssistantChatPort, EmptyPlanTrainingPlanEnvelopeChatPort, FencedTrainingPlanEnvelopeWithMetadataChatPort, LargeContextTrainingContextBuilder, MissingPlanTrainingPlanEnvelopeChatPort, RepairingBacktickTrainingPlanEnvelopeChatPort, RepairingTrainingPlanEnvelopeChatPort, sample_planning_context() (+18 more)
 
-### Community 32 - "Community 32"
+### Community 33 - "Community 33"
 Cohesion: 0.04
 Nodes (46): ActivityDetailsDto, ActivityDto, ActivityIntervalDto, ActivityIntervalGroupDto, ActivityMetricsDto, ActivityPath, ActivityStreamDto, ActivityZoneTimeDto (+38 more)
 
-### Community 33 - "Community 33"
+### Community 34 - "Community 34"
 Cohesion: 0.07
 Nodes (20): AdminPromptPreviewService, AdminPromptPreviewService<Time, Planned, Special>, has_any_details(), map_completed_workout_error(), MappedPreviewResponse, merge_metrics(), merge_workout_details(), merge_workout_enrichment() (+12 more)
 
-### Community 34 - "Community 34"
+### Community 35 - "Community 35"
 Cohesion: 0.04
 Nodes (10): alias_backed_summary(), AliasSummaryRepository, DirectCompletedWorkoutTargetService, event_id_only_summary(), EventIdOnlySummaryRepository, StaticCompletedWorkoutTargetService, storage_backed_summary(), StorageBackedSummaryRepository (+2 more)
 
-### Community 35 - "Community 35"
+### Community 36 - "Community 36"
 Cohesion: 0.05
 Nodes (11): InMemoryAthleteSummaryOperationRepository, InMemoryAthleteSummaryRepository, InMemoryTaskRepository, InMemoryTaskWorkerRepository, llm_response(), run_test_task(), spawn_test_task_worker(), StubGenerator (+3 more)
 
-### Community 36 - "Community 36"
+### Community 37 - "Community 37"
 Cohesion: 0.06
 Nodes (20): CreateRace, Race, RaceDiscipline, RaceError, RacePriority, RaceResult, UpdateRace, canonical_race_id_marker() (+12 more)
 
-### Community 37 - "Community 37"
+### Community 38 - "Community 38"
 Cohesion: 0.07
 Nodes (27): InMemoryTrainingLoadDailySnapshotRepository, TestIdentityServiceWithSession, training_load_dashboard_rejects_unknown_range(), training_load_dashboard_returns_empty_payload_when_user_has_no_snapshots(), training_load_dashboard_returns_points_for_authenticated_user_only(), build_app(), build_app_with_frontend_dist(), escaped_near_limit_valid_payload_is_still_accepted() (+19 more)
 
-### Community 38 - "Community 38"
+### Community 39 - "Community 39"
 Cohesion: 0.07
 Nodes (32): all_tools(), available_tools_for_scope(), calendar_coach_prompt_guidance_does_not_include_workout_summary_specific_evidence_rules(), CompletedLlmToolLoopResponse, execute_available_tool_call(), find_tool(), LlmTool, LlmToolLoopOutput (+24 more)
 
-### Community 39 - "Community 39"
+### Community 40 - "Community 40"
 Cohesion: 0.08
 Nodes (20): calendar_coach_test_app(), CoachState, FrontendFixture, get_current_conversation_requires_authentication(), get_current_conversation_returns_active_conversation(), get_json(), sample_conversation(), send_message_returns_updated_transcript() (+12 more)
 
-### Community 40 - "Community 40"
+### Community 41 - "Community 41"
 Cohesion: 0.06
 Nodes (24): AlwaysFailingCoach, CapturingAthleteSummaryCoach, CountingCoach, FailingAthleteSummaryService, generate_coach_reply_continues_when_athlete_summary_is_unavailable(), generate_coach_reply_logs_user_id_when_llm_call_fails(), generate_coach_reply_marks_fresh_tool_only_response_as_failed(), generate_coach_reply_marks_tool_only_recovery_as_failed() (+16 more)
 
-### Community 41 - "Community 41"
-Cohesion: 0.07
-Nodes (24): build_response_for_date(), build_unavailable_response(), compute_w_prime_balance(), estimate_cp(), estimate_w_prime(), execute_power_curve(), execute_w_prime_balance(), extract_power_samples() (+16 more)
-
 ### Community 42 - "Community 42"
 Cohesion: 0.07
-Nodes (27): ActivityFileIdentityExtractor, enum_u8_field(), extract_fit_identity(), float_field(), int_field(), map_fit_activity_type(), timestamp_field(), extract_and_average_stream() (+19 more)
+Nodes (28): ActivityFileIdentityExtractor, enum_u8_field(), extract_fit_identity(), float_field(), int_field(), map_fit_activity_type(), timestamp_field(), extract_and_average_stream() (+20 more)
 
 ### Community 43 - "Community 43"
 Cohesion: 0.07
-Nodes (24): build_scheduled_task(), build_scheduled_task_returns_scheduler_validation_errors(), build_scheduled_task_serializes_payload_and_builds_task(), BuildScheduledTaskError, checkpoint_failure_maps_to_failed_outcome(), invalid_payload_returns_non_retryable_failed_outcome(), NewScheduledTaskInput, parse_optional_json_value() (+16 more)
+Nodes (24): build_response_for_date(), build_unavailable_response(), compute_w_prime_balance(), estimate_cp(), estimate_w_prime(), execute_power_curve(), execute_w_prime_balance(), extract_power_samples() (+16 more)
 
 ### Community 44 - "Community 44"
+Cohesion: 0.07
+Nodes (24): build_scheduled_task(), build_scheduled_task_returns_scheduler_validation_errors(), build_scheduled_task_serializes_payload_and_builds_task(), BuildScheduledTaskError, checkpoint_failure_maps_to_failed_outcome(), invalid_payload_returns_non_retryable_failed_outcome(), NewScheduledTaskInput, parse_optional_json_value() (+16 more)
+
+### Community 45 - "Community 45"
 Cohesion: 0.06
 Nodes (12): finish_server_shutdown(), NotFoundWorkoutSummaryService, planning_context_ignores_public_tool_messages(), planning_context_not_found_maps_to_validation_error(), reconcile_intervals_poll_states(), should_reset_poll_state(), shutdown_signal(), StaticWorkoutSummaryService (+4 more)
 
-### Community 45 - "Community 45"
+### Community 46 - "Community 46"
 Cohesion: 0.1
 Nodes (15): build_create_plan_form(), build_update_plan_form(), create_plan_form_uses_data_uri_and_required_fields(), map_file_reference(), map_plan(), map_user(), map_workout(), map_workout_summary() (+7 more)
 
-### Community 46 - "Community 46"
+### Community 47 - "Community 47"
+Cohesion: 0.06
+Nodes (11): comparable_workout_text_for_payload_hash(), domain_to_intervals_planned_workout(), intervals_planned_workout_payload_hash(), intervals_planned_workout_sync_body(), intervals_planned_workout_title(), planned_workout_payload_hash(), planned_workout_payload_hash_parts(), planned_workout_sync_name() (+3 more)
+
+### Community 48 - "Community 48"
 Cohesion: 0.06
 Nodes (28): Activity, ActivityDeduplicationIdentity, ActivityDetails, ActivityFallbackIdentity, ActivityInterval, ActivityIntervalGroup, ActivityMetrics, ActivityStream (+20 more)
 
-### Community 47 - "Community 47"
+### Community 49 - "Community 49"
 Cohesion: 0.07
 Nodes (30): ActivityPath, AthletePath, build_router(), capture_request(), create_event_handler(), delete_activity_handler(), delete_event_handler(), download_fit_handler() (+22 more)
 
-### Community 48 - "Community 48"
+### Community 50 - "Community 50"
 Cohesion: 0.05
 Nodes (8): ExistingMessageSummaryRepository, FixedIds, materialize_public_tool_messages_appends_only_missing_calls_in_order(), materialize_public_tool_messages_records_existing_message_without_duplicate_append(), NonRepositoryFailingReplyOperations, RecordingReplyOperations, StubReplyOperations, StubSummaryRepository
 
-### Community 49 - "Community 49"
+### Community 51 - "Community 51"
 Cohesion: 0.09
 Nodes (17): advance_calendar_cursor(), advance_completed_workout_cursor(), default_wahoo_cursor_page(), default_wahoo_cursor_resume_per_page(), epoch_seconds_to_date(), format_date(), format_wahoo_resume_cursor(), parse_date_cursor() (+9 more)
 
-### Community 50 - "Community 50"
-Cohesion: 0.06
-Nodes (9): comparable_workout_text_for_payload_hash(), intervals_planned_workout_payload_hash(), intervals_planned_workout_sync_body(), intervals_planned_workout_title(), planned_workout_payload_hash(), planned_workout_payload_hash_parts(), serialize_canonical_planned_workout(), to_intervals_planned_workout() (+1 more)
-
-### Community 51 - "Community 51"
+### Community 52 - "Community 52"
 Cohesion: 0.09
 Nodes (16): IntervalsIcuClient, ApiError, getJsonResponse(), IntervalsIcuClient, api_error_returns_502(), is_known_strava_activity_details_unavailable(), map_connection_error(), map_error_response_from_logged_response() (+8 more)
 
-### Community 52 - "Community 52"
+### Community 53 - "Community 53"
 Cohesion: 0.07
 Nodes (23): completed_workout_document_round_trip_preserves_fields(), CompletedWorkoutDetailsDocument, CompletedWorkoutDocument, CompletedWorkoutIntervalDocument, CompletedWorkoutIntervalGroupDocument, CompletedWorkoutMetricsDocument, CompletedWorkoutPowerCurveDocument, CompletedWorkoutStreamDocument (+15 more)
 
-### Community 53 - "Community 53"
+### Community 54 - "Community 54"
 Cohesion: 0.05
 Nodes (34): AiAgentsDto, AvailabilityDayDto, AvailabilityDayRequest, AvailabilityDto, CalendarActivityLabelDto, CalendarCustomLabelDto, CalendarEventDto, CalendarHealthLabelDto (+26 more)
 
-### Community 54 - "Community 54"
+### Community 55 - "Community 55"
 Cohesion: 0.05
 Nodes (39): 1. Direct canonical id match, 1. Marker-based lookup, 2. Dedup-key match, 2. Single same-day planned workout fallback, 3. Persisted link shape, Calendar API Behavior, Calendar collapse only handles the 1:1 linked case, Calendar Read Model (+31 more)
 
-### Community 55 - "Community 55"
-Cohesion: 0.07
-Nodes (10): ctrl_c_registration_error_logs_and_finishes_shutdown_future(), FixedClock, park_wahoo_poll_states_disables_legacy_wahoo_completed_polling(), reconcile_intervals_poll_states_seeds_missing_states_for_existing_connected_users(), reconcile_wahoo_user_ids_backfills_missing_ids_for_connected_users(), RecordingWahooService, SharedLogBuffer, sigterm_registration_error_logs_and_finishes_shutdown_future() (+2 more)
-
 ### Community 56 - "Community 56"
 Cohesion: 0.07
-Nodes (15): capture_request(), CapturedRequest, CapturingChatPort, deepseek_handler(), FailingReusableCacheRepository, FixedGeminiConfigProvider, FixedOpenAiConfigProvider, gemini_cache_handler() (+7 more)
+Nodes (10): ctrl_c_registration_error_logs_and_finishes_shutdown_future(), FixedClock, park_wahoo_poll_states_disables_legacy_wahoo_completed_polling(), reconcile_intervals_poll_states_seeds_missing_states_for_existing_connected_users(), reconcile_wahoo_user_ids_backfills_missing_ids_for_connected_users(), RecordingWahooService, SharedLogBuffer, sigterm_registration_error_logs_and_finishes_shutdown_future() (+2 more)
 
 ### Community 57 - "Community 57"
 Cohesion: 0.07
@@ -1456,22 +1458,26 @@ Cohesion: 0.08
 Nodes (24): code:rust (pub struct ProviderTranscriptSnapshot {), code:rust (src/domain/coach_conversation/service/use_cases.rs), code:bash (cargo test --test calendar_coach_service calendar_coach_retr), code:bash (cargo fmt --all --check), code:bash (cargo clippy --all-targets --all-features -- -D warnings), code:bash (bun run verify:arch), code:bash (./scripts/rebuild_graphify.sh), code:bash (git diff -- src/domain/llm/persistence.rs \) (+16 more)
 
 ### Community 109 - "Community 109"
+Cohesion: 0.09
+Nodes (6): buildCalendarWeek(), fetchEventsWithCache(), fetchLabelsWithCache(), isStale(), roundMetric(), sumMetric()
+
+### Community 110 - "Community 110"
 Cohesion: 0.17
 Nodes (13): CompletedWorkoutTargetAdapter, CompletedWorkoutTargetAdapter<Repo>, equivalent_workout_ids_for_workout(), equivalent_workout_ids_for_workout_with_siblings(), load_alias_scope_siblings(), push_unique_workout_id(), resolve_completed_workout(), resolve_completed_workout_from_siblings() (+5 more)
 
-### Community 110 - "Community 110"
+### Community 111 - "Community 111"
 Cohesion: 0.08
 Nodes (14): ActivityIdResponse, ActivityIntervalGroupResponse, ActivityIntervalResponse, ActivityIntervalsResponse, ActivityResponse, ActivityStreamResponse, CreateEventRequest, EventResponse (+6 more)
 
-### Community 111 - "Community 111"
+### Community 112 - "Community 112"
 Cohesion: 0.15
 Nodes (23): ArrayTimestampField, backfill_array_field(), backfill_collection(), backfill_mongo_readable_dates(), backfill_root_field(), boxed_backfill_error(), build_compare_and_set_filter(), build_projection() (+15 more)
 
-### Community 112 - "Community 112"
+### Community 113 - "Community 113"
 Cohesion: 0.1
 Nodes (10): CompletedLlmReply, deserialize_llm_error(), LlmReplyClaimResult, LlmReplyOperation, LlmReplyOperationFailureKind, LlmReplyOperationStatus, PendingLlmReplyCheckpoint, serialize_llm_error() (+2 more)
 
-### Community 113 - "Community 113"
+### Community 114 - "Community 114"
 Cohesion: 0.17
 Nodes (18): build_create_event(), build_update_event(), CalendarService<
         Intervals,
@@ -1487,35 +1493,35 @@ Nodes (18): build_create_event(), build_update_event(), CalendarService<
         Completed,
     >, clear_stale_wahoo_workout_id(), ensure_sync_window(), find_existing_remote_event(), intervals_event_id(), map_planned_workout_override() (+10 more)
 
-### Community 114 - "Community 114"
+### Community 115 - "Community 115"
 Cohesion: 0.1
 Nodes (6): infer_legacy_generated_workout_text(), map_planned_workout_to_syncable(), planned_workout_name(), preserve_event_description(), strip_generated_workout_text(), SyncablePlannedWorkout
 
-### Community 115 - "Community 115"
+### Community 116 - "Community 116"
 Cohesion: 0.12
 Nodes (18): classify_training_plan_llm_json_error(), extract_balanced_json_payload(), extract_json_payload(), parse_training_plan_llm_envelope(), parse_training_plan_llm_envelope_accepts_json_code_fence(), parse_training_plan_llm_envelope_accepts_plain_code_fence(), parse_training_plan_llm_envelope_detailed(), parse_training_plan_llm_envelope_extracts_json_object_from_surrounding_text() (+10 more)
 
-### Community 116 - "Community 116"
+### Community 117 - "Community 117"
 Cohesion: 0.08
 Nodes (24): Anti-Goals For PR1, Boundary Rule, code:bash (git add docs/plans/2026-04-12-domain-source-of-truth-pr1-can), code:bash (cargo fmt --all --check), code:bash (cargo clippy --all-targets --all-features -- -D warnings), code:bash (cargo test planned_workouts completed_workouts special_days ), code:bash (cargo test), code:bash (git add .) (+16 more)
 
-### Community 117 - "Community 117"
+### Community 118 - "Community 118"
 Cohesion: 0.08
 Nodes (24): code:bash (cargo test planned_workouts completed_workouts special_days ), code:bash (cargo clippy --all-targets --all-features -- -D warnings), code:bash (cargo test calendar_view planned_workouts completed_workouts), code:bash (cargo test), code:bash (python3 -c "from graphify.watch import _rebuild_code; from p), code:bash (cargo test planned_workouts completed_workouts -- --nocaptur), code:bash (cargo test special_days -- --nocapture), code:bash (cargo test calendar_view -- --nocapture) (+16 more)
 
-### Community 118 - "Community 118"
+### Community 119 - "Community 119"
 Cohesion: 0.26
 Nodes (23): addDays(), buildDashboard(), createCadenceValues(), createHeartRateValues(), createPowerValues(), createPreset(), createSpeedValues(), makeActivity() (+15 more)
 
-### Community 119 - "Community 119"
+### Community 120 - "Community 120"
 Cohesion: 0.12
 Nodes (15): AttemptRecordDocument, map_attempt_to_document(), map_document_to_attempt(), map_document_to_failure(), map_document_to_operation(), map_document_to_phase(), map_document_to_status(), map_failure_to_document() (+7 more)
 
-### Community 120 - "Community 120"
+### Community 121 - "Community 121"
 Cohesion: 0.16
 Nodes (12): activity_detail_richness(), ActivityDocument, build_activity_document(), infer_event_id_hint(), merge_activity_details(), merge_activity_for_storage(), merge_activity_metrics(), MongoActivityRepository (+4 more)
 
-### Community 121 - "Community 121"
+### Community 122 - "Community 122"
 Cohesion: 0.14
 Nodes (8): description_log_metadata(), description_log_metadata_trims_and_bounds_preview(), description_log_metadata_uses_empty_preview_for_blank_text(), ParsedPlanWindow, TrainingPlanGenerationService, TrainingPlanGenerationService<
         Snapshots,
@@ -1534,31 +1540,31 @@ Nodes (8): description_log_metadata(), description_log_metadata_trims_and_bounds
         Refresh,
     >, TrainingPlanUseCases
 
-### Community 122 - "Community 122"
+### Community 123 - "Community 123"
 Cohesion: 0.08
 Nodes (23): AiWattCoach, CI, code:bash (docker compose up --build), code:env (APP_NAME=AiWattCoach), code:bash (docker compose -f docker-compose.logging.yml up -d), code:bash (bun install), code:bash (bun install --cwd frontend), code:bash (pipx install graphifyy) (+15 more)
 
-### Community 123 - "Community 123"
+### Community 124 - "Community 124"
 Cohesion: 0.08
 Nodes (22): Body limits, Choosing the logging mode, Client checklist, Client example, code:rust (.route("/api/example", post(handler))), code:rust (use axum::{extract::DefaultBodyLimit, routing::post, Router}), code:text (ENABLE_LLM_FULL_DEBUG_LOGGING=true), code:rust (let request = client) (+14 more)
 
-### Community 124 - "Community 124"
+### Community 125 - "Community 125"
 Cohesion: 0.3
 Nodes (19): mongo_fixture_or_skip(), MongoFixture, sample_operation(), sample_projected_days(), sample_snapshot(), sample_snapshot_for_user(), training_plan_generation_operation_repository_reads_legacy_document_without_new_fields(), training_plan_generation_operation_repository_round_trips_and_reclaims_failed_operations() (+11 more)
 
-### Community 125 - "Community 125"
+### Community 126 - "Community 126"
 Cohesion: 0.11
 Nodes (5): get_activity_returns_requested_seeded_activity(), InMemoryIntervalsService, list_and_get_activity_scope_results_by_user_id(), sample_activity(), sample_activity_uses_current_date_for_recent_window()
 
-### Community 126 - "Community 126"
+### Community 127 - "Community 127"
 Cohesion: 0.13
 Nodes (10): body_logging_enabled(), default_config_disables_body_logging(), EndpointLogConfig, full_config_enables_both(), insert_log_config_service_overrides_existing_config(), InsertLogConfigLayer, InsertLogConfigService, InsertLogConfigService<S> (+2 more)
 
-### Community 127 - "Community 127"
+### Community 128 - "Community 128"
 Cohesion: 0.11
 Nodes (10): CalendarError, CalendarEvent, CalendarEventCategory, CalendarEventSource, CalendarProjectedWorkout, PlannedWorkoutRemoteState, PlannedWorkoutSyncProvider, PlannedWorkoutSyncRecord (+2 more)
 
-### Community 128 - "Community 128"
+### Community 129 - "Community 129"
 Cohesion: 0.12
 Nodes (11): plan_filename(), PlannedWorkoutUpdateService, PlannedWorkoutUpdateService<
         Planned,
@@ -1571,25 +1577,21 @@ Nodes (11): plan_filename(), PlannedWorkoutUpdateService, PlannedWorkoutUpdateSe
         Time,
     >, projected_workout_start_at(), provider_updated_at(), ProviderSyncFailure, refresh_planned_workout_day(), UpdatePlannedWorkoutCommand (+3 more)
 
-### Community 129 - "Community 129"
+### Community 130 - "Community 130"
 Cohesion: 0.09
 Nodes (10): activity_date(), ActivityFileIdentityExtractorPort, ActivityRepositoryPort, ActivityUploadOperationRepositoryPort, EnrichedEvent, IntervalsApiPort, IntervalsSettingsPort, NoopActivityFileIdentityExtractor (+2 more)
 
-### Community 130 - "Community 130"
+### Community 131 - "Community 131"
 Cohesion: 0.09
 Nodes (10): PlannedWorkout, PlannedWorkoutDay, PlannedWorkoutDays, PlannedWorkoutLine, PlannedWorkoutParseError, PlannedWorkoutRepeat, PlannedWorkoutStep, PlannedWorkoutStepKind (+2 more)
 
-### Community 131 - "Community 131"
+### Community 132 - "Community 132"
 Cohesion: 0.09
 Nodes (6): ExternalObservationRepository, ExternalSyncStateRepository, NoopExternalObservationRepository, NoopExternalSyncStateRepository, NoopProviderPollStateRepository, ProviderPollStateRepository
 
-### Community 132 - "Community 132"
+### Community 133 - "Community 133"
 Cohesion: 0.09
 Nodes (22): code:bash (cargo test reclaim_reuses_completed_initial_tool_loop_state_), code:bash (bun run verify:arch), code:bash (git add -A), code:bash (git add tests/training_plan_service/recovery.rs), code:bash (cargo test training_plan_generator_checkpoints_final_no_tool), code:bash (git add src/domain/llm_tools/mod.rs tests/llm_adapters/train), code:bash (cargo test --test training_plan_service recovery -- --nocapt), code:bash (git add src/adapters/llm/training_plan_generator.rs src/doma) (+14 more)
-
-### Community 133 - "Community 133"
-Cohesion: 0.11
-Nodes (6): buildCalendarWeek(), fetchEventsWithCache(), fetchLabelsWithCache(), isStale(), roundMetric(), sumMetric()
 
 ### Community 134 - "Community 134"
 Cohesion: 0.14
@@ -1656,12 +1658,12 @@ Cohesion: 0.16
 Nodes (1): WorkoutSummaryService<Repo, Ops, Time, Ids>
 
 ### Community 150 - "Community 150"
-Cohesion: 0.12
-Nodes (12): build_calendar_conversation(), build_calendar_conversation_prefixes_message_timestamps(), build_calendar_volatile_context(), build_calendar_volatile_context_includes_conversation_timing(), final_assistant_text(), merge_provider_transcript_entries(), merge_provider_transcript_entries_preserves_repeated_identical_messages(), provider_tool_messages_for_assistant() (+4 more)
-
-### Community 151 - "Community 151"
 Cohesion: 0.2
 Nodes (17): average_metric(), build_daily_training_load_snapshots(), compute_tss_from_ftp(), date_range_inclusive(), effective_history_entry_for_date(), ewma_at_index(), format_date(), parse_date() (+9 more)
+
+### Community 151 - "Community 151"
+Cohesion: 0.12
+Nodes (12): build_calendar_conversation(), build_calendar_conversation_prefixes_message_timestamps(), build_calendar_volatile_context(), build_calendar_volatile_context_includes_conversation_timing(), final_assistant_text(), merge_provider_transcript_entries(), merge_provider_transcript_entries_preserves_repeated_identical_messages(), provider_tool_messages_for_assistant() (+4 more)
 
 ### Community 152 - "Community 152"
 Cohesion: 0.1
@@ -1984,16 +1986,16 @@ Cohesion: 0.17
 Nodes (2): ApiFailure, IntervalsIcuClient
 
 ### Community 232 - "Community 232"
+Cohesion: 0.14
+Nodes (7): database_needs_bootstrap(), ensure_database_exists(), MongoConnectionError, verify_connection(), HealthResponse, readiness_check(), ReadinessResponse
+
+### Community 233 - "Community 233"
 Cohesion: 0.16
 Nodes (6): map_discipline(), map_document_to_race(), map_priority(), map_race_to_document(), MongoRaceRepository, RaceDocument
 
-### Community 233 - "Community 233"
+### Community 234 - "Community 234"
 Cohesion: 0.13
 Nodes (0): 
-
-### Community 234 - "Community 234"
-Cohesion: 0.14
-Nodes (7): database_needs_bootstrap(), ensure_database_exists(), MongoConnectionError, verify_connection(), HealthResponse, readiness_check(), ReadinessResponse
 
 ### Community 235 - "Community 235"
 Cohesion: 0.14
@@ -3393,8 +3395,8 @@ Cohesion: 0.67
 Nodes (0): 
 
 ### Community 572 - "Community 572"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 1.0
+Nodes (2): formatPlannedRestLabelSubtitle(), plannedRestLabelToEntry()
 
 ### Community 573 - "Community 573"
 Cohesion: 0.67
@@ -3425,12 +3427,12 @@ Cohesion: 0.67
 Nodes (0): 
 
 ### Community 580 - "Community 580"
-Cohesion: 1.0
-Nodes (2): isPlannedRestDayDraftValid(), resolveDraftEndDate()
-
-### Community 581 - "Community 581"
 Cohesion: 0.67
 Nodes (0): 
+
+### Community 581 - "Community 581"
+Cohesion: 1.0
+Nodes (2): isPlannedRestDayDraftValid(), resolveDraftEndDate()
 
 ### Community 582 - "Community 582"
 Cohesion: 0.67
@@ -3449,12 +3451,12 @@ Cohesion: 0.67
 Nodes (0): 
 
 ### Community 586 - "Community 586"
-Cohesion: 1.0
-Nodes (2): handleSave(), handleSaveClick()
-
-### Community 587 - "Community 587"
 Cohesion: 0.67
 Nodes (0): 
+
+### Community 587 - "Community 587"
+Cohesion: 1.0
+Nodes (2): handleSave(), handleSaveClick()
 
 ### Community 588 - "Community 588"
 Cohesion: 0.67
@@ -3473,12 +3475,12 @@ Cohesion: 0.67
 Nodes (0): 
 
 ### Community 592 - "Community 592"
-Cohesion: 1.0
-Nodes (2): packedContextLabel(), StableContextSection()
-
-### Community 593 - "Community 593"
 Cohesion: 0.67
 Nodes (0): 
+
+### Community 593 - "Community 593"
+Cohesion: 1.0
+Nodes (2): packedContextLabel(), StableContextSection()
 
 ### Community 594 - "Community 594"
 Cohesion: 0.67
@@ -3522,127 +3524,127 @@ Nodes (0):
 
 ### Community 604 - "Community 604"
 Cohesion: 0.67
-Nodes (1): FakePestParserPocRepository
+Nodes (0): 
 
 ### Community 605 - "Community 605"
-Cohesion: 1.0
-Nodes (2): spawn_test_workout_summary_task_worker(), test_workout_summary_task_worker_config()
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 606 - "Community 606"
 Cohesion: 0.67
-Nodes (2): GoogleTokenResponse, GoogleUserInfoResponse
+Nodes (1): FakePestParserPocRepository
 
 ### Community 607 - "Community 607"
-Cohesion: 0.67
-Nodes (1): DevLlmCoachAdapter
+Cohesion: 1.0
+Nodes (2): spawn_test_workout_summary_task_worker(), test_workout_summary_task_worker_config()
 
 ### Community 608 - "Community 608"
 Cohesion: 0.67
-Nodes (1): AthleteSummaryLlmGenerator
+Nodes (2): GoogleTokenResponse, GoogleUserInfoResponse
 
 ### Community 609 - "Community 609"
 Cohesion: 0.67
-Nodes (1): AthleteSummaryLlmGenerator<Time>
+Nodes (1): DevLlmCoachAdapter
 
 ### Community 610 - "Community 610"
 Cohesion: 0.67
-Nodes (2): UpdatePlannedWorkoutDataAdapter, UpdatePlannedWorkoutUseCases
+Nodes (1): AthleteSummaryLlmGenerator
 
 ### Community 611 - "Community 611"
 Cohesion: 0.67
-Nodes (1): DevIntervalsSettingsProvider
+Nodes (1): AthleteSummaryLlmGenerator<Time>
 
 ### Community 612 - "Community 612"
 Cohesion: 0.67
-Nodes (1): MongoPlannedRestDayCalendarLabelSource
+Nodes (2): UpdatePlannedWorkoutDataAdapter, UpdatePlannedWorkoutUseCases
 
 ### Community 613 - "Community 613"
-Cohesion: 1.0
-Nodes (1): MongoPlannedRestDayCalendarLabelSource<Repository>
+Cohesion: 0.67
+Nodes (1): DevIntervalsSettingsProvider
 
 ### Community 614 - "Community 614"
 Cohesion: 0.67
-Nodes (2): RetryStrategyDocument, TaskDocument
+Nodes (1): MongoPlannedRestDayCalendarLabelSource
 
 ### Community 615 - "Community 615"
 Cohesion: 1.0
-Nodes (2): pseudonymize_user_id(), resolve_user_id()
+Nodes (1): MongoPlannedRestDayCalendarLabelSource<Repository>
 
 ### Community 616 - "Community 616"
+Cohesion: 0.67
+Nodes (2): RetryStrategyDocument, TaskDocument
+
+### Community 617 - "Community 617"
+Cohesion: 1.0
+Nodes (2): pseudonymize_user_id(), resolve_user_id()
+
+### Community 618 - "Community 618"
 Cohesion: 1.0
 Nodes (2): log_planned_rest_day_error(), map_planned_rest_day_error()
 
-### Community 617 - "Community 617"
+### Community 619 - "Community 619"
 Cohesion: 0.67
 Nodes (1): WahooWebhookResponse
 
-### Community 618 - "Community 618"
+### Community 620 - "Community 620"
 Cohesion: 0.67
 Nodes (1): ErrorBody
 
-### Community 619 - "Community 619"
+### Community 621 - "Community 621"
 Cohesion: 1.0
 Nodes (2): log_intervals_error(), map_intervals_error()
 
-### Community 620 - "Community 620"
+### Community 622 - "Community 622"
 Cohesion: 1.0
 Nodes (2): log_race_error(), map_race_error()
 
-### Community 621 - "Community 621"
+### Community 623 - "Community 623"
 Cohesion: 0.67
 Nodes (2): UserSettingsRepository, WahooUserIdBackfillCandidate
 
-### Community 622 - "Community 622"
+### Community 624 - "Community 624"
 Cohesion: 0.67
 Nodes (2): PlannedRestDayRepository, PlannedRestDayUseCases
 
-### Community 623 - "Community 623"
+### Community 625 - "Community 625"
 Cohesion: 0.67
 Nodes (2): CalendarLabelSource, CalendarLabelsUseCases
 
-### Community 624 - "Community 624"
+### Community 626 - "Community 626"
 Cohesion: 0.67
 Nodes (1): CompositeCalendarLabelSource<A, B>
 
-### Community 625 - "Community 625"
+### Community 627 - "Community 627"
 Cohesion: 0.67
 Nodes (2): TaskRepository, TaskWorkerRepository
 
-### Community 626 - "Community 626"
+### Community 628 - "Community 628"
 Cohesion: 0.67
 Nodes (2): CoachReplyOperationRepository, WorkoutSummaryRepository
 
-### Community 627 - "Community 627"
-Cohesion: 0.67
-Nodes (0): 
-
-### Community 628 - "Community 628"
-Cohesion: 0.67
-Nodes (2): MesoCycleService, MesoCycleUseCases
-
 ### Community 629 - "Community 629"
 Cohesion: 0.67
-Nodes (1): FixedClock
+Nodes (0): 
 
 ### Community 630 - "Community 630"
 Cohesion: 0.67
-Nodes (1): AdminPromptPreviewError
+Nodes (2): MesoCycleService, MesoCycleUseCases
 
 ### Community 631 - "Community 631"
 Cohesion: 0.67
-Nodes (1): CalendarCoachPromptInput
+Nodes (1): FixedClock
 
 ### Community 632 - "Community 632"
 Cohesion: 0.67
-Nodes (2): CoachConversationUseCases, SharedCoachConversationService
+Nodes (1): AdminPromptPreviewError
 
 ### Community 633 - "Community 633"
 Cohesion: 0.67
-Nodes (0): 
+Nodes (1): CalendarCoachPromptInput
 
 ### Community 634 - "Community 634"
 Cohesion: 0.67
-Nodes (2): CalendarCoachUseCases, SharedCalendarCoachService
+Nodes (2): CoachConversationUseCases, SharedCoachConversationService
 
 ### Community 635 - "Community 635"
 Cohesion: 0.67
@@ -3650,7 +3652,7 @@ Nodes (0):
 
 ### Community 636 - "Community 636"
 Cohesion: 0.67
-Nodes (2): RaceRepository, RaceUseCases
+Nodes (2): CalendarCoachUseCases, SharedCalendarCoachService
 
 ### Community 637 - "Community 637"
 Cohesion: 0.67
@@ -3658,19 +3660,19 @@ Nodes (0):
 
 ### Community 638 - "Community 638"
 Cohesion: 0.67
-Nodes (0): 
+Nodes (2): RaceRepository, RaceUseCases
 
 ### Community 639 - "Community 639"
 Cohesion: 0.67
-Nodes (2): Calendar Entry Integrity Issues, Why Type Mismatch Produces Two Issues
+Nodes (0): 
 
 ### Community 640 - "Community 640"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 641 - "Community 641"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.67
+Nodes (2): Calendar Entry Integrity Issues, Why Type Mismatch Produces Two Issues
 
 ### Community 642 - "Community 642"
 Cohesion: 1.0
@@ -3962,7 +3964,7 @@ Nodes (0):
 
 ### Community 714 - "Community 714"
 Cohesion: 1.0
-Nodes (1): LatestCompletedActivityAdapter
+Nodes (0): 
 
 ### Community 715 - "Community 715"
 Cohesion: 1.0
@@ -3970,49 +3972,57 @@ Nodes (0):
 
 ### Community 716 - "Community 716"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): LatestCompletedActivityAdapter
 
 ### Community 717 - "Community 717"
 Cohesion: 1.0
-Nodes (1): IntervalsIcuClient
+Nodes (0): 
 
 ### Community 718 - "Community 718"
 Cohesion: 1.0
-Nodes (1): LlmReplyOperationDocument
+Nodes (0): 
 
 ### Community 719 - "Community 719"
 Cohesion: 1.0
-Nodes (1): CreatePlannedRestDay
+Nodes (1): IntervalsIcuClient
 
 ### Community 720 - "Community 720"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): LlmReplyOperationDocument
 
 ### Community 721 - "Community 721"
 Cohesion: 1.0
-Nodes (1): AthleteSummaryDto
+Nodes (1): CreatePlannedRestDay
 
 ### Community 722 - "Community 722"
 Cohesion: 1.0
-Nodes (1): CreateRace
+Nodes (0): 
 
 ### Community 723 - "Community 723"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): AthleteSummaryDto
 
 ### Community 724 - "Community 724"
 Cohesion: 1.0
-Nodes (1): CalendarLabelsService
+Nodes (1): CreateRace
 
 ### Community 725 - "Community 725"
 Cohesion: 1.0
-Nodes (1): CompositeCalendarLabelSource
+Nodes (0): 
 
 ### Community 726 - "Community 726"
 Cohesion: 1.0
-Nodes (1): TrainingPlanBackedMesoWindowPort
+Nodes (1): CalendarLabelsService
 
 ### Community 727 - "Community 727"
+Cohesion: 1.0
+Nodes (1): CompositeCalendarLabelSource
+
+### Community 728 - "Community 728"
+Cohesion: 1.0
+Nodes (1): TrainingPlanBackedMesoWindowPort
+
+### Community 729 - "Community 729"
 Cohesion: 1.0
 Nodes (1): CalendarService<
         Intervals,
@@ -4028,51 +4038,51 @@ Nodes (1): CalendarService<
         (),
     >
 
-### Community 728 - "Community 728"
+### Community 730 - "Community 730"
 Cohesion: 1.0
 Nodes (1): planned_workouts::PlannedWorkoutStepKind
 
-### Community 729 - "Community 729"
+### Community 731 - "Community 731"
 Cohesion: 1.0
 Nodes (1): planned_workouts::PlannedWorkoutTarget
 
-### Community 730 - "Community 730"
+### Community 732 - "Community 732"
 Cohesion: 1.0
 Nodes (1): planned_workouts::PlannedWorkoutStep
 
-### Community 731 - "Community 731"
+### Community 733 - "Community 733"
 Cohesion: 1.0
 Nodes (1): PlannedWorkoutLine
 
-### Community 732 - "Community 732"
+### Community 734 - "Community 734"
 Cohesion: 1.0
 Nodes (1): AdminPromptPreviewUseCases
 
-### Community 733 - "Community 733"
+### Community 735 - "Community 735"
 Cohesion: 1.0
 Nodes (1): SpecialDayService
 
-### Community 734 - "Community 734"
+### Community 736 - "Community 736"
 Cohesion: 1.0
 Nodes (1): SpecialDayService<Repository>
 
-### Community 735 - "Community 735"
-Cohesion: 1.0
-Nodes (1): GetSelectedWorkoutDataPort
-
-### Community 736 - "Community 736"
-Cohesion: 1.0
-Nodes (0): 
-
 ### Community 737 - "Community 737"
 Cohesion: 1.0
-Nodes (1): PreparedCalendarLlmRequest
+Nodes (1): GetSelectedWorkoutDataPort
 
 ### Community 738 - "Community 738"
 Cohesion: 1.0
 Nodes (0): 
 
 ### Community 739 - "Community 739"
+Cohesion: 1.0
+Nodes (1): PreparedCalendarLlmRequest
+
+### Community 740 - "Community 740"
+Cohesion: 1.0
+Nodes (0): 
+
+### Community 741 - "Community 741"
 Cohesion: 1.0
 Nodes (1): IntervalsService<
         Api,
@@ -4085,121 +4095,113 @@ Nodes (1): IntervalsService<
         NoopCalendarEntryViewRefresh,
     >
 
-### Community 740 - "Community 740"
-Cohesion: 1.0
-Nodes (0): 
-
-### Community 741 - "Community 741"
-Cohesion: 1.0
-Nodes (1): PowerCurveCompletedWorkoutRepository
-
 ### Community 742 - "Community 742"
 Cohesion: 1.0
-Nodes (1): PlannedCompletedWorkoutLinkRepository
+Nodes (0): 
 
 ### Community 743 - "Community 743"
 Cohesion: 1.0
-Nodes (1): VolatilePayload<'a>
+Nodes (1): PowerCurveCompletedWorkoutRepository
 
 ### Community 744 - "Community 744"
 Cohesion: 1.0
-Nodes (1): CompactWorkoutRecap<'a>
+Nodes (1): PlannedCompletedWorkoutLinkRepository
 
 ### Community 745 - "Community 745"
 Cohesion: 1.0
-Nodes (1): CompactRecentDay<'a>
+Nodes (1): VolatilePayload<'a>
 
 ### Community 746 - "Community 746"
 Cohesion: 1.0
-Nodes (1): CompactRecentWorkout<'a>
+Nodes (1): CompactWorkoutRecap<'a>
 
 ### Community 747 - "Community 747"
 Cohesion: 1.0
-Nodes (1): CompactPlannedWorkoutRef<'a>
+Nodes (1): CompactRecentDay<'a>
 
 ### Community 748 - "Community 748"
 Cohesion: 1.0
-Nodes (1): CompactPlannedWorkout<'a>
+Nodes (1): CompactRecentWorkout<'a>
 
 ### Community 749 - "Community 749"
 Cohesion: 1.0
-Nodes (1): CompactSpecialDay<'a>
+Nodes (1): CompactPlannedWorkoutRef<'a>
 
 ### Community 750 - "Community 750"
 Cohesion: 1.0
-Nodes (1): CompactUpcomingDay<'a>
+Nodes (1): CompactPlannedWorkout<'a>
 
 ### Community 751 - "Community 751"
 Cohesion: 1.0
-Nodes (1): CompactProjectedDay<'a>
+Nodes (1): CompactSpecialDay<'a>
 
 ### Community 752 - "Community 752"
 Cohesion: 1.0
-Nodes (1): CompactProjectedWorkout<'a>
+Nodes (1): CompactUpcomingDay<'a>
 
 ### Community 753 - "Community 753"
 Cohesion: 1.0
-Nodes (1): CompactRace<'a>
+Nodes (1): CompactProjectedDay<'a>
 
 ### Community 754 - "Community 754"
 Cohesion: 1.0
-Nodes (1): CompactPlannedRestDay<'a>
+Nodes (1): CompactProjectedWorkout<'a>
 
 ### Community 755 - "Community 755"
 Cohesion: 1.0
-Nodes (1): CompactFuturePlannedEvent<'a>
+Nodes (1): CompactRace<'a>
 
 ### Community 756 - "Community 756"
 Cohesion: 1.0
-Nodes (1): CompactAvailabilityDay<'a>
+Nodes (1): CompactPlannedRestDay<'a>
 
 ### Community 757 - "Community 757"
 Cohesion: 1.0
-Nodes (1): CompactHistoricalLoadTrend<'a>
+Nodes (1): CompactFuturePlannedEvent<'a>
 
 ### Community 758 - "Community 758"
 Cohesion: 1.0
-Nodes (1): CompactHistoricalWorkout<'a>
+Nodes (1): CompactAvailabilityDay<'a>
 
 ### Community 759 - "Community 759"
 Cohesion: 1.0
-Nodes (1): WahooFitFileRepository
+Nodes (1): CompactHistoricalLoadTrend<'a>
 
 ### Community 760 - "Community 760"
 Cohesion: 1.0
-Nodes (1): Workout Summary Full Request Logging Design
+Nodes (1): CompactHistoricalWorkout<'a>
 
 ### Community 761 - "Community 761"
 Cohesion: 1.0
-Nodes (1): Workout Detail Auto-Scroll Removal Design
+Nodes (1): WahooFitFileRepository
 
 ### Community 762 - "Community 762"
 Cohesion: 1.0
-Nodes (1): Health Check Log Noise Design
+Nodes (1): Workout Summary Full Request Logging Design
 
 ### Community 763 - "Community 763"
 Cohesion: 1.0
-Nodes (1): Model Suggestion Refresh Design
+Nodes (1): Workout Detail Auto-Scroll Removal Design
 
 ### Community 764 - "Community 764"
 Cohesion: 1.0
-Nodes (1): Provider Logging Rollout Design
+Nodes (1): Health Check Log Noise Design
 
 ### Community 765 - "Community 765"
 Cohesion: 1.0
-Nodes (1): OpenRouter Logging Design
+Nodes (1): Model Suggestion Refresh Design
 
 ### Community 766 - "Community 766"
 Cohesion: 1.0
-Nodes (1): Mongo Log Noise Design
+Nodes (1): Provider Logging Rollout Design
 
 ### Community 767 - "Community 767"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): OpenRouter Logging Design
 
 ### Community 768 - "Community 768"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): Mongo Log Noise Design
 
 ### Community 769 - "Community 769"
 Cohesion: 1.0
@@ -4981,184 +4983,192 @@ Nodes (0):
 Cohesion: 1.0
 Nodes (0): 
 
+### Community 964 - "Community 964"
+Cohesion: 1.0
+Nodes (0): 
+
+### Community 965 - "Community 965"
+Cohesion: 1.0
+Nodes (0): 
+
 ## Knowledge Gaps
 - **1992 isolated node(s):** `StoredConversation`, `DetailBackfillCall`, `MetricsBackfillRange`, `MetricsBackfillCall`, `ManualWahooSyncCall` (+1987 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 640`** (2 nodes): `jsonResponse()`, `App.test.tsx`
+- **Thin community `Community 642`** (2 nodes): `jsonResponse()`, `App.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 641`** (2 nodes): `PublicLayout.tsx`, `PublicLayout()`
+- **Thin community `Community 643`** (2 nodes): `PublicLayout.tsx`, `PublicLayout()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 642`** (2 nodes): `isMobile()`, `AuthenticatedLayout.tsx`
+- **Thin community `Community 644`** (2 nodes): `isMobile()`, `AuthenticatedLayout.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 643`** (2 nodes): `setScreenWidth()`, `setScreenWidth.ts`
+- **Thin community `Community 645`** (2 nodes): `setScreenWidth()`, `setScreenWidth.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 644`** (2 nodes): `calendarTranslationMock()`, `calendarTranslationMock.ts`
+- **Thin community `Community 646`** (2 nodes): `calendarTranslationMock()`, `calendarTranslationMock.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 645`** (2 nodes): `mockFetch()`, `mockFetch.ts`
+- **Thin community `Community 647`** (2 nodes): `mockFetch()`, `mockFetch.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 646`** (2 nodes): `buildSettings()`, `AvailabilityCard.test.tsx`
+- **Thin community `Community 648`** (2 nodes): `buildSettings()`, `AvailabilityCard.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 647`** (2 nodes): `OptionsCard.tsx`, `handleToggle()`
+- **Thin community `Community 649`** (2 nodes): `OptionsCard.tsx`, `handleToggle()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 648`** (2 nodes): `buildSettings()`, `IntervalsCard.test.tsx`
+- **Thin community `Community 650`** (2 nodes): `buildSettings()`, `IntervalsCard.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 649`** (2 nodes): `WahooCard.test.tsx`, `buildSettings()`
+- **Thin community `Community 651`** (2 nodes): `WahooCard.test.tsx`, `buildSettings()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 650`** (2 nodes): `connectionErrorStatus()`, `settingsCardFlow.ts`
+- **Thin community `Community 652`** (2 nodes): `connectionErrorStatus()`, `settingsCardFlow.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 651`** (2 nodes): `buildSettings()`, `AthleteSummaryCard.test.tsx`
+- **Thin community `Community 653`** (2 nodes): `buildSettings()`, `AthleteSummaryCard.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 652`** (2 nodes): `handleRefresh()`, `CalendarRefreshCard.tsx`
+- **Thin community `Community 654`** (2 nodes): `handleRefresh()`, `CalendarRefreshCard.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 653`** (2 nodes): `normalizeAiAgentsPayload()`, `normalizeAiAgentsPayload.ts`
+- **Thin community `Community 655`** (2 nodes): `normalizeAiAgentsPayload()`, `normalizeAiAgentsPayload.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 654`** (2 nodes): `BackgroundGlow()`, `BackgroundGlow.tsx`
+- **Thin community `Community 656`** (2 nodes): `BackgroundGlow()`, `BackgroundGlow.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 655`** (2 nodes): `CalendarWeekDayHeader()`, `CalendarWeekDayHeader.tsx`
+- **Thin community `Community 657`** (2 nodes): `makePlannedRestLabel()`, `plannedRestPresentation.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 656`** (2 nodes): `trapFocus()`, `CalendarCoachModal.tsx`
+- **Thin community `Community 658`** (2 nodes): `CalendarWeekDayHeader()`, `CalendarWeekDayHeader.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 657`** (2 nodes): `WorkoutDetailModal.interaction.test.tsx`, `renderActivityModal()`
+- **Thin community `Community 659`** (2 nodes): `trapFocus()`, `CalendarCoachModal.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 658`** (2 nodes): `WorkoutDetailModal.actions.test.tsx`, `dateKeyFromUtcOffset()`
+- **Thin community `Community 660`** (2 nodes): `WorkoutDetailModal.interaction.test.tsx`, `renderActivityModal()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 659`** (2 nodes): `CalendarLoadingRow()`, `CalendarLoadingRow.tsx`
+- **Thin community `Community 661`** (2 nodes): `WorkoutDetailModal.actions.test.tsx`, `dateKeyFromUtcOffset()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 660`** (2 nodes): `handleToggleSelectedInterval()`, `CompletedWorkoutDetailModal.tsx`
+- **Thin community `Community 662`** (2 nodes): `CalendarLoadingRow()`, `CalendarLoadingRow.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 661`** (2 nodes): `buildBars()`, `calendarDayBars.ts`
+- **Thin community `Community 663`** (2 nodes): `handleToggleSelectedInterval()`, `CompletedWorkoutDetailModal.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 662`** (2 nodes): `compressMiniChartWidth()`, `CalendarMiniChart.tsx`
+- **Thin community `Community 664`** (2 nodes): `buildBars()`, `calendarDayBars.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 663`** (2 nodes): `useCompletedWorkoutSummary()`, `useCompletedWorkoutSummary.ts`
+- **Thin community `Community 665`** (2 nodes): `compressMiniChartWidth()`, `CalendarMiniChart.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 664`** (2 nodes): `wrapper()`, `calendar.test.tsx`
+- **Thin community `Community 666`** (2 nodes): `useCompletedWorkoutSummary()`, `useCompletedWorkoutSummary.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 665`** (2 nodes): `AuthProbe()`, `AuthProvider.test.tsx`
+- **Thin community `Community 667`** (2 nodes): `wrapper()`, `calendar.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 666`** (2 nodes): `AuthProvider()`, `AuthProvider.tsx`
+- **Thin community `Community 668`** (2 nodes): `AuthProbe()`, `AuthProvider.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 667`** (2 nodes): `UserMenu()`, `UserMenu.tsx`
+- **Thin community `Community 669`** (2 nodes): `AuthProvider()`, `AuthProvider.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 668`** (2 nodes): `RequireRole.tsx`, `RequireRole()`
+- **Thin community `Community 670`** (2 nodes): `UserMenu()`, `UserMenu.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 669`** (2 nodes): `RequireAuth.tsx`, `RequireAuth()`
+- **Thin community `Community 671`** (2 nodes): `RequireRole.tsx`, `RequireRole()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 670`** (2 nodes): `PlannedRestDayFormDialog()`, `PlannedRestDayFormDialog.tsx`
+- **Thin community `Community 672`** (2 nodes): `RequireAuth.tsx`, `RequireAuth()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 671`** (2 nodes): `PlannedRestDayForm()`, `PlannedRestDayForm.tsx`
+- **Thin community `Community 673`** (2 nodes): `PlannedRestDayFormDialog()`, `PlannedRestDayFormDialog.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 672`** (2 nodes): `handleSaved()`, `PlannedRestDaysPageLayout.tsx`
+- **Thin community `Community 674`** (2 nodes): `PlannedRestDayForm()`, `PlannedRestDayForm.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 673`** (2 nodes): `buildSettings()`, `useMesoCycleCalendar.test.ts`
+- **Thin community `Community 675`** (2 nodes): `handleSaved()`, `PlannedRestDaysPageLayout.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 674`** (2 nodes): `WorkoutActionButtons.tsx`, `WorkoutActionButtons()`
+- **Thin community `Community 676`** (2 nodes): `buildSettings()`, `useMesoCycleCalendar.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 675`** (2 nodes): `WorkoutCategoryTag.tsx`, `WorkoutCategoryTag()`
+- **Thin community `Community 677`** (2 nodes): `WorkoutActionButtons.tsx`, `WorkoutActionButtons()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 676`** (2 nodes): `ChatMessageList()`, `ChatMessageList.tsx`
+- **Thin community `Community 678`** (2 nodes): `WorkoutCategoryTag.tsx`, `WorkoutCategoryTag()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 677`** (2 nodes): `formatTimestamp()`, `ChatMessage.tsx`
+- **Thin community `Community 679`** (2 nodes): `ChatMessageList()`, `ChatMessageList.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 678`** (2 nodes): `handleSend()`, `ChatInput.tsx`
+- **Thin community `Community 680`** (2 nodes): `formatTimestamp()`, `ChatMessage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 679`** (2 nodes): `RpeButton.tsx`, `RpeButton()`
+- **Thin community `Community 681`** (2 nodes): `handleSend()`, `ChatInput.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 680`** (2 nodes): `handleKeyDown()`, `ConfirmWithoutChatModal.tsx`
+- **Thin community `Community 682`** (2 nodes): `RpeButton.tsx`, `RpeButton()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 681`** (2 nodes): `loadTrainingLoadDashboard()`, `dashboard.ts`
+- **Thin community `Community 683`** (2 nodes): `handleKeyDown()`, `ConfirmWithoutChatModal.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 682`** (2 nodes): `SystemStatusHero.tsx`, `SystemStatusHero()`
+- **Thin community `Community 684`** (2 nodes): `loadTrainingLoadDashboard()`, `dashboard.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 683`** (2 nodes): `ProtectedSystemInfoCard.tsx`, `ProtectedSystemInfoCard()`
+- **Thin community `Community 685`** (2 nodes): `SystemStatusHero.tsx`, `SystemStatusHero()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 684`** (2 nodes): `SectionCard()`, `SectionCard.tsx`
+- **Thin community `Community 686`** (2 nodes): `ProtectedSystemInfoCard.tsx`, `ProtectedSystemInfoCard()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 685`** (2 nodes): `ConversationSection()`, `ConversationSection.tsx`
+- **Thin community `Community 687`** (2 nodes): `SectionCard()`, `SectionCard.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 686`** (2 nodes): `SystemPromptSection()`, `SystemPromptSection.tsx`
+- **Thin community `Community 688`** (2 nodes): `ConversationSection()`, `ConversationSection.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 687`** (2 nodes): `ToolsSection()`, `ToolsSection.tsx`
+- **Thin community `Community 689`** (2 nodes): `SystemPromptSection()`, `SystemPromptSection.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 688`** (2 nodes): `ProviderMessagesSection()`, `ProviderMessagesSection.tsx`
+- **Thin community `Community 690`** (2 nodes): `ToolsSection()`, `ToolsSection.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 689`** (2 nodes): `RacesPageLayout.test.tsx`, `makeRace()`
+- **Thin community `Community 691`** (2 nodes): `ProviderMessagesSection()`, `ProviderMessagesSection.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 690`** (2 nodes): `RaceCard.tsx`, `switch()`
+- **Thin community `Community 692`** (2 nodes): `RacesPageLayout.test.tsx`, `makeRace()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 691`** (2 nodes): `useApiBaseUrl()`, `apiBaseUrl.tsx`
+- **Thin community `Community 693`** (2 nodes): `RaceCard.tsx`, `switch()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 692`** (2 nodes): `MarkdownContent()`, `MarkdownContent.tsx`
+- **Thin community `Community 694`** (2 nodes): `useApiBaseUrl()`, `apiBaseUrl.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 693`** (2 nodes): `SummaryTextContent()`, `SummaryTextContent.tsx`
+- **Thin community `Community 695`** (2 nodes): `MarkdownContent()`, `MarkdownContent.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 694`** (2 nodes): `looksLikeMarkdown()`, `looksLikeMarkdown.ts`
+- **Thin community `Community 696`** (2 nodes): `SummaryTextContent()`, `SummaryTextContent.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 695`** (2 nodes): `AdminSystemInfoPage()`, `AdminSystemInfoPage.tsx`
+- **Thin community `Community 697`** (2 nodes): `looksLikeMarkdown()`, `looksLikeMarkdown.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 696`** (2 nodes): `buildResponse()`, `AppHomePage.test.tsx`
+- **Thin community `Community 698`** (2 nodes): `AdminSystemInfoPage()`, `AdminSystemInfoPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 697`** (2 nodes): `LandingPage()`, `LandingPage.tsx`
+- **Thin community `Community 699`** (2 nodes): `buildResponse()`, `AppHomePage.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 698`** (2 nodes): `RacesPage.tsx`, `RacesPage()`
+- **Thin community `Community 700`** (2 nodes): `LandingPage()`, `LandingPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 699`** (2 nodes): `PlannedRestDaysPage()`, `PlannedRestDaysPage.tsx`
+- **Thin community `Community 701`** (2 nodes): `RacesPage.tsx`, `RacesPage()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 700`** (2 nodes): `renderCalendarPage()`, `CalendarPage.test.tsx`
+- **Thin community `Community 702`** (2 nodes): `PlannedRestDaysPage()`, `PlannedRestDaysPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 701`** (2 nodes): `AICoachPage()`, `AICoachPage.tsx`
+- **Thin community `Community 703`** (2 nodes): `renderCalendarPage()`, `CalendarPage.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 702`** (2 nodes): `calendar_coach_retries_provider_transcript_write_after_compare_and_set_conflict()`, `transcript_persistence.rs`
+- **Thin community `Community 704`** (2 nodes): `AICoachPage()`, `AICoachPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 703`** (2 nodes): `assert_log_entry_contains()`, `mod.rs`
+- **Thin community `Community 705`** (2 nodes): `calendar_coach_retries_provider_transcript_write_after_compare_and_set_conflict()`, `transcript_persistence.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 704`** (2 nodes): `assert_log_entry_contains()`, `test_support.rs`
+- **Thin community `Community 706`** (2 nodes): `assert_log_entry_contains()`, `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 705`** (2 nodes): `list_calendar_labels_returns_planned_rest_day_labels_for_each_day()`, `calendar_labels.rs`
+- **Thin community `Community 707`** (2 nodes): `assert_log_entry_contains()`, `test_support.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 706`** (2 nodes): `sample_planned_rest_day()`, `fixtures.rs`
+- **Thin community `Community 708`** (2 nodes): `sample_planned_rest_day()`, `fixtures.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 707`** (2 nodes): `create_list_get_update_delete_planned_rest_day_for_authenticated_user()`, `crud.rs`
+- **Thin community `Community 709`** (2 nodes): `create_list_get_update_delete_planned_rest_day_for_authenticated_user()`, `crud.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 708`** (2 nodes): `assert_event_order()`, `assertions.rs`
+- **Thin community `Community 710`** (2 nodes): `assert_event_order()`, `assertions.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 709`** (2 nodes): `ttl_validation.rs`, `validate_session_ttl_against_current_time_rejects_bson_overflowing_ttl()`
+- **Thin community `Community 711`** (2 nodes): `ttl_validation.rs`, `validate_session_ttl_against_current_time_rejects_bson_overflowing_ttl()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 710`** (2 nodes): `settings_request_logs_authenticated_user_id_on_request_span()`, `observability.rs`
+- **Thin community `Community 712`** (2 nodes): `settings_request_logs_authenticated_user_id_on_request_span()`, `observability.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 711`** (2 nodes): `main()`, `main.rs`
+- **Thin community `Community 713`** (2 nodes): `main()`, `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 712`** (2 nodes): `wait_for_notify()`, `notify.rs`
+- **Thin community `Community 714`** (2 nodes): `wait_for_notify()`, `notify.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 713`** (2 nodes): `poll_due_once_persists_attempt_before_calling_intervals()`, `persistence.rs`
+- **Thin community `Community 715`** (2 nodes): `poll_due_once_persists_attempt_before_calling_intervals()`, `persistence.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 714`** (2 nodes): `workout_summary_latest_activity.rs`, `LatestCompletedActivityAdapter`
+- **Thin community `Community 716`** (2 nodes): `workout_summary_latest_activity.rs`, `LatestCompletedActivityAdapter`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 715`** (2 nodes): `non_empty_context_parts()`, `context_prelude.rs`
+- **Thin community `Community 717`** (2 nodes): `non_empty_context_parts()`, `context_prelude.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 716`** (2 nodes): `context_hash()`, `cache.rs`
+- **Thin community `Community 718`** (2 nodes): `context_hash()`, `cache.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 717`** (2 nodes): `IntervalsIcuClient`, `.test_connection()`
+- **Thin community `Community 719`** (2 nodes): `IntervalsIcuClient`, `.test_connection()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 718`** (2 nodes): `LlmReplyOperationDocument`, `document.rs`
+- **Thin community `Community 720`** (2 nodes): `LlmReplyOperationDocument`, `document.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 719`** (2 nodes): `CreatePlannedRestDay`, `.from()`
+- **Thin community `Community 721`** (2 nodes): `CreatePlannedRestDay`, `.from()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 720`** (2 nodes): `map_planned_rest_day_to_dto()`, `mapping.rs`
+- **Thin community `Community 722`** (2 nodes): `map_planned_rest_day_to_dto()`, `mapping.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 721`** (2 nodes): `AthleteSummaryDto`, `dto.rs`
+- **Thin community `Community 723`** (2 nodes): `AthleteSummaryDto`, `dto.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 722`** (2 nodes): `CreateRace`, `.from()`
+- **Thin community `Community 724`** (2 nodes): `CreateRace`, `.from()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 723`** (2 nodes): `status_class.rs`, `status_class()`
+- **Thin community `Community 725`** (2 nodes): `status_class.rs`, `status_class()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 724`** (2 nodes): `CalendarLabelsService`, `service.rs`
+- **Thin community `Community 726`** (2 nodes): `CalendarLabelsService`, `service.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 725`** (2 nodes): `CompositeCalendarLabelSource`, `composite.rs`
+- **Thin community `Community 727`** (2 nodes): `CompositeCalendarLabelSource`, `composite.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 726`** (2 nodes): `window_port.rs`, `TrainingPlanBackedMesoWindowPort`
+- **Thin community `Community 728`** (2 nodes): `window_port.rs`, `TrainingPlanBackedMesoWindowPort`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 727`** (2 nodes): `CalendarService<
+- **Thin community `Community 729`** (2 nodes): `CalendarService<
         Intervals,
         Entries,
         Projections,
@@ -5172,29 +5182,29 @@ Nodes (0):
         (),
     >`, `.new()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 728`** (2 nodes): `planned_workouts::PlannedWorkoutStepKind`, `.from()`
+- **Thin community `Community 730`** (2 nodes): `planned_workouts::PlannedWorkoutStepKind`, `.from()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 729`** (2 nodes): `planned_workouts::PlannedWorkoutTarget`, `.from()`
+- **Thin community `Community 731`** (2 nodes): `planned_workouts::PlannedWorkoutTarget`, `.from()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 730`** (2 nodes): `planned_workouts::PlannedWorkoutStep`, `.from()`
+- **Thin community `Community 732`** (2 nodes): `planned_workouts::PlannedWorkoutStep`, `.from()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 731`** (2 nodes): `PlannedWorkoutLine`, `.from()`
+- **Thin community `Community 733`** (2 nodes): `PlannedWorkoutLine`, `.from()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 732`** (2 nodes): `AdminPromptPreviewUseCases`, `ports.rs`
+- **Thin community `Community 734`** (2 nodes): `AdminPromptPreviewUseCases`, `ports.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 733`** (2 nodes): `SpecialDayService`, `service.rs`
+- **Thin community `Community 735`** (2 nodes): `SpecialDayService`, `service.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 734`** (2 nodes): `SpecialDayService<Repository>`, `.new()`
+- **Thin community `Community 736`** (2 nodes): `SpecialDayService<Repository>`, `.new()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 735`** (2 nodes): `GetSelectedWorkoutDataPort`, `port.rs`
+- **Thin community `Community 737`** (2 nodes): `GetSelectedWorkoutDataPort`, `port.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 736`** (2 nodes): `build_power_curve_response()`, `response.rs`
+- **Thin community `Community 738`** (2 nodes): `build_power_curve_response()`, `response.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 737`** (2 nodes): `PreparedCalendarLlmRequest`, `request.rs`
+- **Thin community `Community 739`** (2 nodes): `PreparedCalendarLlmRequest`, `request.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 738`** (2 nodes): `refresh_completed_workout_day()`, `refresh.rs`
+- **Thin community `Community 740`** (2 nodes): `refresh_completed_workout_day()`, `refresh.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 739`** (2 nodes): `IntervalsService<
+- **Thin community `Community 741`** (2 nodes): `IntervalsService<
         Api,
         Settings,
         Activities,
@@ -5205,285 +5215,281 @@ Nodes (0):
         NoopCalendarEntryViewRefresh,
     >`, `.new()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 740`** (2 nodes): `average_into_buckets()`, `mod.rs`
+- **Thin community `Community 742`** (2 nodes): `average_into_buckets()`, `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 741`** (2 nodes): `PowerCurveCompletedWorkoutRepository`, `power_curve_repo.rs`
+- **Thin community `Community 743`** (2 nodes): `PowerCurveCompletedWorkoutRepository`, `power_curve_repo.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 742`** (2 nodes): `PlannedCompletedWorkoutLinkRepository`, `ports.rs`
+- **Thin community `Community 744`** (2 nodes): `PlannedCompletedWorkoutLinkRepository`, `ports.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 743`** (2 nodes): `VolatilePayload<'a>`, `.from_context()`
+- **Thin community `Community 745`** (2 nodes): `VolatilePayload<'a>`, `.from_context()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 744`** (2 nodes): `CompactWorkoutRecap<'a>`, `.from_recap()`
+- **Thin community `Community 746`** (2 nodes): `CompactWorkoutRecap<'a>`, `.from_recap()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 745`** (2 nodes): `CompactRecentDay<'a>`, `.from_recent_day()`
+- **Thin community `Community 747`** (2 nodes): `CompactRecentDay<'a>`, `.from_recent_day()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 746`** (2 nodes): `CompactRecentWorkout<'a>`, `.from_workout()`
+- **Thin community `Community 748`** (2 nodes): `CompactRecentWorkout<'a>`, `.from_workout()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 747`** (2 nodes): `CompactPlannedWorkoutRef<'a>`, `.from_reference()`
+- **Thin community `Community 749`** (2 nodes): `CompactPlannedWorkoutRef<'a>`, `.from_reference()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 748`** (2 nodes): `CompactPlannedWorkout<'a>`, `.from_planned()`
+- **Thin community `Community 750`** (2 nodes): `CompactPlannedWorkout<'a>`, `.from_planned()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 749`** (2 nodes): `CompactSpecialDay<'a>`, `.from_special()`
+- **Thin community `Community 751`** (2 nodes): `CompactSpecialDay<'a>`, `.from_special()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 750`** (2 nodes): `CompactUpcomingDay<'a>`, `.from_upcoming_day()`
+- **Thin community `Community 752`** (2 nodes): `CompactUpcomingDay<'a>`, `.from_upcoming_day()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 751`** (2 nodes): `CompactProjectedDay<'a>`, `.from_projected_day()`
+- **Thin community `Community 753`** (2 nodes): `CompactProjectedDay<'a>`, `.from_projected_day()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 752`** (2 nodes): `CompactProjectedWorkout<'a>`, `.from_projected_workout()`
+- **Thin community `Community 754`** (2 nodes): `CompactProjectedWorkout<'a>`, `.from_projected_workout()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 753`** (2 nodes): `CompactRace<'a>`, `.from_race()`
+- **Thin community `Community 755`** (2 nodes): `CompactRace<'a>`, `.from_race()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 754`** (2 nodes): `CompactPlannedRestDay<'a>`, `.from_entry()`
+- **Thin community `Community 756`** (2 nodes): `CompactPlannedRestDay<'a>`, `.from_entry()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 755`** (2 nodes): `CompactFuturePlannedEvent<'a>`, `.from_event()`
+- **Thin community `Community 757`** (2 nodes): `CompactFuturePlannedEvent<'a>`, `.from_event()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 756`** (2 nodes): `CompactAvailabilityDay<'a>`, `.from_day()`
+- **Thin community `Community 758`** (2 nodes): `CompactAvailabilityDay<'a>`, `.from_day()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 757`** (2 nodes): `CompactHistoricalLoadTrend<'a>`, `.from_point()`
+- **Thin community `Community 759`** (2 nodes): `CompactHistoricalLoadTrend<'a>`, `.from_point()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 758`** (2 nodes): `CompactHistoricalWorkout<'a>`, `.from_workout()`
+- **Thin community `Community 760`** (2 nodes): `CompactHistoricalWorkout<'a>`, `.from_workout()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 759`** (2 nodes): `WahooFitFileRepository`, `ports.rs`
+- **Thin community `Community 761`** (2 nodes): `WahooFitFileRepository`, `ports.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 760`** (2 nodes): `2026-04-03-workout-summary-full-request-logging-design.md`, `Workout Summary Full Request Logging Design`
+- **Thin community `Community 762`** (2 nodes): `2026-04-03-workout-summary-full-request-logging-design.md`, `Workout Summary Full Request Logging Design`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 761`** (2 nodes): `2026-03-30-workout-detail-auto-scroll-removal-design.md`, `Workout Detail Auto-Scroll Removal Design`
+- **Thin community `Community 763`** (2 nodes): `2026-03-30-workout-detail-auto-scroll-removal-design.md`, `Workout Detail Auto-Scroll Removal Design`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 762`** (2 nodes): `2026-04-02-health-check-log-noise-design.md`, `Health Check Log Noise Design`
+- **Thin community `Community 764`** (2 nodes): `2026-04-02-health-check-log-noise-design.md`, `Health Check Log Noise Design`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 763`** (2 nodes): `2026-04-02-model-suggestion-refresh-design.md`, `Model Suggestion Refresh Design`
+- **Thin community `Community 765`** (2 nodes): `2026-04-02-model-suggestion-refresh-design.md`, `Model Suggestion Refresh Design`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 764`** (2 nodes): `2026-04-02-provider-logging-rollout-design.md`, `Provider Logging Rollout Design`
+- **Thin community `Community 766`** (2 nodes): `2026-04-02-provider-logging-rollout-design.md`, `Provider Logging Rollout Design`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 765`** (2 nodes): `2026-04-02-openrouter-logging-design.md`, `OpenRouter Logging Design`
+- **Thin community `Community 767`** (2 nodes): `2026-04-02-openrouter-logging-design.md`, `OpenRouter Logging Design`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 766`** (2 nodes): `2026-04-02-mongo-log-noise-design.md`, `Mongo Log Noise Design`
+- **Thin community `Community 768`** (2 nodes): `2026-04-02-mongo-log-noise-design.md`, `Mongo Log Noise Design`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 767`** (1 nodes): `vite.config.ts`
+- **Thin community `Community 769`** (1 nodes): `vite.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 768`** (1 nodes): `App.tsx`
+- **Thin community `Community 770`** (1 nodes): `App.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 769`** (1 nodes): `main.tsx`
+- **Thin community `Community 771`** (1 nodes): `main.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 770`** (1 nodes): `i18n.ts`
+- **Thin community `Community 772`** (1 nodes): `i18n.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 771`** (1 nodes): `vite-env.d.ts`
+- **Thin community `Community 773`** (1 nodes): `vite-env.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 772`** (1 nodes): `setup.ts`
+- **Thin community `Community 774`** (1 nodes): `setup.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 773`** (1 nodes): `env.test.ts`
+- **Thin community `Community 775`** (1 nodes): `env.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 774`** (1 nodes): `AiAgentsCard.tsx`
+- **Thin community `Community 776`** (1 nodes): `AiAgentsCard.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 775`** (1 nodes): `MesoCycleCoachFields.tsx`
+- **Thin community `Community 777`** (1 nodes): `MesoCycleCoachFields.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 776`** (1 nodes): `AiAgentsCard.test.tsx`
+- **Thin community `Community 778`** (1 nodes): `AiAgentsCard.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 777`** (1 nodes): `ProviderModelFields.tsx`
+- **Thin community `Community 779`** (1 nodes): `ProviderModelFields.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 778`** (1 nodes): `IntervalsCard.tsx`
+- **Thin community `Community 780`** (1 nodes): `IntervalsCard.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 779`** (1 nodes): `AiAgentsApiKeyFields.tsx`
+- **Thin community `Community 781`** (1 nodes): `AiAgentsApiKeyFields.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 780`** (1 nodes): `CalendarRefreshCard.test.tsx`
+- **Thin community `Community 782`** (1 nodes): `CalendarRefreshCard.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 781`** (1 nodes): `settings.test.ts`
+- **Thin community `Community 783`** (1 nodes): `settings.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 782`** (1 nodes): `workoutDetails.test.ts`
+- **Thin community `Community 784`** (1 nodes): `workoutDetails.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 783`** (1 nodes): `types.ts`
+- **Thin community `Community 785`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 784`** (1 nodes): `constants.ts`
+- **Thin community `Community 786`** (1 nodes): `constants.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 785`** (1 nodes): `dateUtils.test.ts`
+- **Thin community `Community 787`** (1 nodes): `dateUtils.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 786`** (1 nodes): `WorkoutDetailPanelPrimitives.tsx`
+- **Thin community `Community 788`** (1 nodes): `WorkoutDetailPanelPrimitives.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 787`** (1 nodes): `DayItemsModal.test.tsx`
+- **Thin community `Community 789`** (1 nodes): `DayItemsModal.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 788`** (1 nodes): `CalendarDayCell.tsx`
+- **Thin community `Community 790`** (1 nodes): `CalendarDayCell.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 789`** (1 nodes): `WorkoutDetailModal.intervals.test.tsx`
+- **Thin community `Community 791`** (1 nodes): `WorkoutDetailModal.intervals.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 790`** (1 nodes): `CalendarWeekSection.tsx`
+- **Thin community `Community 792`** (1 nodes): `CalendarWeekSection.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 791`** (1 nodes): `RaceDayDetailModal.test.tsx`
+- **Thin community `Community 793`** (1 nodes): `RaceDayDetailModal.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 792`** (1 nodes): `CalendarCoachFab.tsx`
+- **Thin community `Community 794`** (1 nodes): `CalendarCoachFab.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 793`** (1 nodes): `CalendarPerformanceCards.test.tsx`
+- **Thin community `Community 795`** (1 nodes): `CalendarPerformanceCards.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 794`** (1 nodes): `WorkoutDetailSummarySection.test.tsx`
+- **Thin community `Community 796`** (1 nodes): `WorkoutDetailSummarySection.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 795`** (1 nodes): `WorkoutDetailModal.completed.test.tsx`
+- **Thin community `Community 797`** (1 nodes): `WorkoutDetailModal.completed.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 796`** (1 nodes): `CalendarGrid.tsx`
+- **Thin community `Community 798`** (1 nodes): `CalendarGrid.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 797`** (1 nodes): `WorkoutDetailSummarySection.tsx`
+- **Thin community `Community 799`** (1 nodes): `WorkoutDetailSummarySection.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 798`** (1 nodes): `CalendarDayCell.charts.test.tsx`
+- **Thin community `Community 800`** (1 nodes): `CalendarDayCell.charts.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 799`** (1 nodes): `CalendarErrorRow.tsx`
+- **Thin community `Community 801`** (1 nodes): `CalendarErrorRow.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 800`** (1 nodes): `CalendarPerformanceCards.tsx`
+- **Thin community `Community 802`** (1 nodes): `CalendarPerformanceCards.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 801`** (1 nodes): `CalendarLoadingRow.test.tsx`
+- **Thin community `Community 803`** (1 nodes): `CalendarLoadingRow.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 802`** (1 nodes): `WorkoutDetailModalPanels.tsx`
+- **Thin community `Community 804`** (1 nodes): `WorkoutDetailModalPanels.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 803`** (1 nodes): `CalendarDayCell.content.test.tsx`
+- **Thin community `Community 805`** (1 nodes): `CalendarDayCell.content.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 804`** (1 nodes): `WorkoutDetailModal.planned.test.tsx`
+- **Thin community `Community 806`** (1 nodes): `WorkoutDetailModal.planned.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 805`** (1 nodes): `CalendarWeekSummary.tsx`
+- **Thin community `Community 807`** (1 nodes): `CalendarWeekSummary.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 806`** (1 nodes): `WorkoutDetailModal.charts.test.tsx`
+- **Thin community `Community 808`** (1 nodes): `WorkoutDetailModal.charts.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 807`** (1 nodes): `CalendarErrorRow.test.tsx`
+- **Thin community `Community 809`** (1 nodes): `CalendarErrorRow.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 808`** (1 nodes): `types.ts`
+- **Thin community `Community 810`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 809`** (1 nodes): `types.ts`
+- **Thin community `Community 811`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 810`** (1 nodes): `auth.test.ts`
+- **Thin community `Community 812`** (1 nodes): `auth.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 811`** (1 nodes): `RequireRole.test.tsx`
+- **Thin community `Community 813`** (1 nodes): `RequireRole.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 812`** (1 nodes): `RequireAuth.test.tsx`
+- **Thin community `Community 814`** (1 nodes): `RequireAuth.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 813`** (1 nodes): `types.ts`
+- **Thin community `Community 815`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 814`** (1 nodes): `PlannedRestDayFormFields.tsx`
+- **Thin community `Community 816`** (1 nodes): `PlannedRestDayFormFields.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 815`** (1 nodes): `PlannedRestDayCard.tsx`
+- **Thin community `Community 817`** (1 nodes): `PlannedRestDayCard.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 816`** (1 nodes): `PlannedRestDayFormActions.tsx`
+- **Thin community `Community 818`** (1 nodes): `PlannedRestDayFormActions.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 817`** (1 nodes): `plannedRestDays.test.ts`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 818`** (1 nodes): `types.ts`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 819`** (1 nodes): `mesoCycle.test.ts`
+- **Thin community `Community 819`** (1 nodes): `plannedRestDays.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 820`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 821`** (1 nodes): `index.ts`
+- **Thin community `Community 821`** (1 nodes): `mesoCycle.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 822`** (1 nodes): `intervals.activities.test.ts`
+- **Thin community `Community 822`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 823`** (1 nodes): `intervals.events.test.ts`
+- **Thin community `Community 823`** (1 nodes): `index.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 824`** (1 nodes): `types.ts`
+- **Thin community `Community 824`** (1 nodes): `intervals.activities.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 825`** (1 nodes): `RpeSelector.tsx`
+- **Thin community `Community 825`** (1 nodes): `intervals.events.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 826`** (1 nodes): `WorkoutHistorySidebar.tsx`
+- **Thin community `Community 826`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 827`** (1 nodes): `WorkoutActionButtons.test.tsx`
+- **Thin community `Community 827`** (1 nodes): `RpeSelector.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 828`** (1 nodes): `RpeScaleLabels.tsx`
+- **Thin community `Community 828`** (1 nodes): `WorkoutHistorySidebar.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 829`** (1 nodes): `EmptyWorkoutState.tsx`
+- **Thin community `Community 829`** (1 nodes): `WorkoutActionButtons.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 830`** (1 nodes): `ChatWindow.tsx`
+- **Thin community `Community 830`** (1 nodes): `RpeScaleLabels.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 831`** (1 nodes): `ChatHeader.tsx`
+- **Thin community `Community 831`** (1 nodes): `EmptyWorkoutState.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 832`** (1 nodes): `ChatWindow.test.tsx`
+- **Thin community `Community 832`** (1 nodes): `ChatWindow.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 833`** (1 nodes): `ConfirmWithoutChatModal.test.tsx`
+- **Thin community `Community 833`** (1 nodes): `ChatHeader.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 834`** (1 nodes): `WorkoutHistorySidebar.test.tsx`
+- **Thin community `Community 834`** (1 nodes): `ChatWindow.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 835`** (1 nodes): `WorkoutHistoryPagination.tsx`
+- **Thin community `Community 835`** (1 nodes): `ConfirmWithoutChatModal.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 836`** (1 nodes): `RpeSelector.test.tsx`
+- **Thin community `Community 836`** (1 nodes): `WorkoutHistorySidebar.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 837`** (1 nodes): `useCoachChat.connection.test.tsx`
+- **Thin community `Community 837`** (1 nodes): `WorkoutHistoryPagination.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 838`** (1 nodes): `useCoachChat.sendMessage.test.tsx`
+- **Thin community `Community 838`** (1 nodes): `RpeSelector.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 839`** (1 nodes): `useCoachChat.saveWorkflow.test.tsx`
+- **Thin community `Community 839`** (1 nodes): `useCoachChat.connection.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 840`** (1 nodes): `useCoachChat.staleSelection.test.tsx`
+- **Thin community `Community 840`** (1 nodes): `useCoachChat.sendMessage.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 841`** (1 nodes): `workoutSummary.test.ts`
+- **Thin community `Community 841`** (1 nodes): `useCoachChat.saveWorkflow.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 842`** (1 nodes): `types.ts`
+- **Thin community `Community 842`** (1 nodes): `useCoachChat.staleSelection.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 843`** (1 nodes): `TrainingLoadReport.tsx`
+- **Thin community `Community 843`** (1 nodes): `workoutSummary.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 844`** (1 nodes): `TrainingLoadEmptyState.tsx`
+- **Thin community `Community 844`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 845`** (1 nodes): `TrainingLoadLoadChart.tsx`
+- **Thin community `Community 845`** (1 nodes): `TrainingLoadReport.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 846`** (1 nodes): `TrainingLoadTsbChart.tsx`
+- **Thin community `Community 846`** (1 nodes): `TrainingLoadEmptyState.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 847`** (1 nodes): `TrainingLoadRangeSwitch.tsx`
+- **Thin community `Community 847`** (1 nodes): `TrainingLoadLoadChart.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 848`** (1 nodes): `TrainingLoadInsightCard.tsx`
+- **Thin community `Community 848`** (1 nodes): `TrainingLoadTsbChart.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 849`** (1 nodes): `dashboard.test.ts`
+- **Thin community `Community 849`** (1 nodes): `TrainingLoadRangeSwitch.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 850`** (1 nodes): `types.ts`
+- **Thin community `Community 850`** (1 nodes): `TrainingLoadInsightCard.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 851`** (1 nodes): `api.test.ts`
+- **Thin community `Community 851`** (1 nodes): `dashboard.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 852`** (1 nodes): `decodePackedContext.test.ts`
+- **Thin community `Community 852`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 853`** (1 nodes): `parseContextLines.test.ts`
+- **Thin community `Community 853`** (1 nodes): `api.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 854`** (1 nodes): `contextSections.test.ts`
+- **Thin community `Community 854`** (1 nodes): `decodePackedContext.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 855`** (1 nodes): `DecodedPackedContext.test.tsx`
+- **Thin community `Community 855`** (1 nodes): `parseContextLines.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 856`** (1 nodes): `MetaBar.tsx`
+- **Thin community `Community 856`** (1 nodes): `contextSections.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 857`** (1 nodes): `PackedContextPanel.tsx`
+- **Thin community `Community 857`** (1 nodes): `DecodedPackedContext.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 858`** (1 nodes): `StableContextBody.test.tsx`
+- **Thin community `Community 858`** (1 nodes): `MetaBar.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 859`** (1 nodes): `types.ts`
+- **Thin community `Community 859`** (1 nodes): `PackedContextPanel.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 860`** (1 nodes): `RacesPageLayout.tsx`
+- **Thin community `Community 860`** (1 nodes): `StableContextBody.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 861`** (1 nodes): `useRaces.test.tsx`
+- **Thin community `Community 861`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 862`** (1 nodes): `races.test.ts`
+- **Thin community `Community 862`** (1 nodes): `RacesPageLayout.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 863`** (1 nodes): `httpClient.test.ts`
+- **Thin community `Community 863`** (1 nodes): `useRaces.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 864`** (1 nodes): `useMediaQuery.test.tsx`
+- **Thin community `Community 864`** (1 nodes): `races.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 865`** (1 nodes): `statusUi.test.ts`
+- **Thin community `Community 865`** (1 nodes): `httpClient.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 866`** (1 nodes): `looksLikeMarkdown.test.ts`
+- **Thin community `Community 866`** (1 nodes): `useMediaQuery.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 867`** (1 nodes): `system.test.ts`
+- **Thin community `Community 867`** (1 nodes): `statusUi.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 868`** (1 nodes): `CalendarPage.tsx`
+- **Thin community `Community 868`** (1 nodes): `looksLikeMarkdown.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 869`** (1 nodes): `AppHomePage.tsx`
+- **Thin community `Community 869`** (1 nodes): `system.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 870`** (1 nodes): `AdminSystemInfoPage.test.tsx`
+- **Thin community `Community 870`** (1 nodes): `CalendarPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 871`** (1 nodes): `MesoCycleCalendarPage.tsx`
+- **Thin community `Community 871`** (1 nodes): `AppHomePage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 872`** (1 nodes): `SettingsPage.test.tsx`
+- **Thin community `Community 872`** (1 nodes): `AdminSystemInfoPage.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 873`** (1 nodes): `LandingPage.test.tsx`
+- **Thin community `Community 873`** (1 nodes): `MesoCycleCalendarPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 874`** (1 nodes): `main.rs`
+- **Thin community `Community 874`** (1 nodes): `SettingsPage.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 875`** (1 nodes): `mod.rs`
+- **Thin community `Community 875`** (1 nodes): `LandingPage.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 876`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 877`** (1 nodes): `main.rs`
+- **Thin community `Community 877`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 878`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 879`** (1 nodes): `mod.rs`
+- **Thin community `Community 879`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 880`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -5497,39 +5503,39 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 885`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 886`** (1 nodes): `planned_rest_days.rs`
+- **Thin community `Community 886`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 887`** (1 nodes): `intervals_fakes.rs`
+- **Thin community `Community 887`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 888`** (1 nodes): `main.rs`
+- **Thin community `Community 888`** (1 nodes): `planned_rest_days.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 889`** (1 nodes): `event_queries.rs`
+- **Thin community `Community 889`** (1 nodes): `intervals_fakes.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 890`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 891`** (1 nodes): `mod.rs`
+- **Thin community `Community 891`** (1 nodes): `event_queries.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 892`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 893`** (1 nodes): `constants.rs`
+- **Thin community `Community 893`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 894`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 895`** (1 nodes): `main.rs`
+- **Thin community `Community 895`** (1 nodes): `constants.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 896`** (1 nodes): `mod.rs`
+- **Thin community `Community 896`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 897`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 898`** (1 nodes): `main.rs`
+- **Thin community `Community 898`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 899`** (1 nodes): `mongo-backfill-readable-dates.js`
+- **Thin community `Community 899`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 900`** (1 nodes): `lib.rs`
+- **Thin community `Community 900`** (1 nodes): `main.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 901`** (1 nodes): `mod.rs`
+- **Thin community `Community 901`** (1 nodes): `mongo-backfill-readable-dates.js`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 902`** (1 nodes): `mod.rs`
+- **Thin community `Community 902`** (1 nodes): `lib.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 903`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -5537,11 +5543,11 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 905`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 906`** (1 nodes): `import_mapping.rs`
+- **Thin community `Community 906`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 907`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 908`** (1 nodes): `mod.rs`
+- **Thin community `Community 908`** (1 nodes): `import_mapping.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 909`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -5555,35 +5561,35 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 914`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 915`** (1 nodes): `connection.rs`
+- **Thin community `Community 915`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 916`** (1 nodes): `api.rs`
+- **Thin community `Community 916`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 917`** (1 nodes): `details.rs`
+- **Thin community `Community 917`** (1 nodes): `connection.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 918`** (1 nodes): `mod.rs`
+- **Thin community `Community 918`** (1 nodes): `api.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 919`** (1 nodes): `repository.rs`
+- **Thin community `Community 919`** (1 nodes): `details.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 920`** (1 nodes): `intervals.rs`
+- **Thin community `Community 920`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 921`** (1 nodes): `planned_rest_days.rs`
+- **Thin community `Community 921`** (1 nodes): `repository.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 922`** (1 nodes): `wahoo.rs`
+- **Thin community `Community 922`** (1 nodes): `intervals.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 923`** (1 nodes): `completed_workouts.rs`
+- **Thin community `Community 923`** (1 nodes): `planned_rest_days.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 924`** (1 nodes): `races.rs`
+- **Thin community `Community 924`** (1 nodes): `wahoo.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 925`** (1 nodes): `calendar.rs`
+- **Thin community `Community 925`** (1 nodes): `completed_workouts.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 926`** (1 nodes): `dashboard.rs`
+- **Thin community `Community 926`** (1 nodes): `races.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 927`** (1 nodes): `calendar_coach.rs`
+- **Thin community `Community 927`** (1 nodes): `calendar.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 928`** (1 nodes): `mod.rs`
+- **Thin community `Community 928`** (1 nodes): `dashboard.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 929`** (1 nodes): `mod.rs`
+- **Thin community `Community 929`** (1 nodes): `calendar_coach.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 930`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -5593,73 +5599,77 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 933`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 934`** (1 nodes): `updates.rs`
+- **Thin community `Community 934`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 935`** (1 nodes): `requests.rs`
+- **Thin community `Community 935`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 936`** (1 nodes): `mod.rs`
+- **Thin community `Community 936`** (1 nodes): `updates.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 937`** (1 nodes): `mod.rs`
+- **Thin community `Community 937`** (1 nodes): `requests.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 938`** (1 nodes): `support.rs`
+- **Thin community `Community 938`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 939`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 940`** (1 nodes): `presentation.rs`
+- **Thin community `Community 940`** (1 nodes): `support.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 941`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 942`** (1 nodes): `read.rs`
+- **Thin community `Community 942`** (1 nodes): `presentation.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 943`** (1 nodes): `chat.rs`
+- **Thin community `Community 943`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 944`** (1 nodes): `context_prelude.rs`
+- **Thin community `Community 944`** (1 nodes): `read.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 945`** (1 nodes): `mod.rs`
+- **Thin community `Community 945`** (1 nodes): `chat.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 946`** (1 nodes): `mod.rs`
+- **Thin community `Community 946`** (1 nodes): `context_prelude.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 947`** (1 nodes): `use_cases.rs`
+- **Thin community `Community 947`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 948`** (1 nodes): `persistence.rs`
+- **Thin community `Community 948`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 949`** (1 nodes): `conversations.rs`
+- **Thin community `Community 949`** (1 nodes): `use_cases.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 950`** (1 nodes): `mod.rs`
+- **Thin community `Community 950`** (1 nodes): `persistence.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 951`** (1 nodes): `mod.rs`
+- **Thin community `Community 951`** (1 nodes): `conversations.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 952`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 953`** (1 nodes): `events.rs`
+- **Thin community `Community 953`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 954`** (1 nodes): `upload.rs`
+- **Thin community `Community 954`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 955`** (1 nodes): `activities.rs`
+- **Thin community `Community 955`** (1 nodes): `events.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 956`** (1 nodes): `enriched.rs`
+- **Thin community `Community 956`** (1 nodes): `upload.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 957`** (1 nodes): `mod.rs`
+- **Thin community `Community 957`** (1 nodes): `activities.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 958`** (1 nodes): `snapshot.rs`
+- **Thin community `Community 958`** (1 nodes): `enriched.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 959`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 960`** (1 nodes): `support.rs`
+- **Thin community `Community 960`** (1 nodes): `snapshot.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 961`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 962`** (1 nodes): `mod.rs`
+- **Thin community `Community 962`** (1 nodes): `support.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 963`** (1 nodes): `mod.rs`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 964`** (1 nodes): `mod.rs`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 965`** (1 nodes): `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>` connect `Community 7` to `Community 12`?**
+- **Why does `IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>` connect `Community 13` to `Community 12`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **Why does `FixedClock` connect `Community 5` to `Community 48`, `Community 1`, `Community 11`?**
+- **Why does `FixedClock` connect `Community 4` to `Community 1`, `Community 50`, `Community 11`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **Are the 35 inferred relationships involving `test_credentials()` (e.g. with `intervals_client_gets_activity_with_intervals_and_streams()` and `intervals_client_ignores_time_streams_when_fetching_activity_details()`) actually correct?**
   _`test_credentials()` has 35 INFERRED edges - model-reasoned connections that need verification._

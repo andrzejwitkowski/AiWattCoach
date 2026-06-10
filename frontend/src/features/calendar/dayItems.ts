@@ -1,4 +1,5 @@
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
+import { formatPlannedRestLabelSubtitle } from './plannedRestPresentation';
 import type { CalendarDay, CalendarPlannedRestDayLabel, CalendarRaceLabel } from './types';
 import { formatRaceSubtitle } from './racePresentation';
 import type { WorkoutDetailSelection } from './workoutDetails';
@@ -93,7 +94,7 @@ export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): 
         kind: 'planned_rest_day',
         id: `planned-rest-day:${label.payload.plannedRestDayId}`,
         title: label.title,
-        subtitle: label.subtitle,
+        subtitle: formatPlannedRestLabelSubtitle(label, options.locale),
         dateKey: day.dateKey,
         label,
         priorityRank: 0,

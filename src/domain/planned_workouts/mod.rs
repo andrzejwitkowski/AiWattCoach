@@ -57,15 +57,45 @@ pub fn intervals_planned_workout_payload_hash(
     planned_workout_payload_hash_parts(date, resolved_name.as_deref(), body.as_deref())
 }
 
+pub fn domain_to_intervals_planned_workout(
+    workout: &PlannedWorkout,
+) -> crate::domain::intervals::PlannedWorkout {
+    crate::domain::intervals::PlannedWorkout {
+        lines: workout
+            .workout
+            .lines
+            .iter()
+            .cloned()
+            .map(map_canonical_line_to_intervals_line)
+            .collect(),
+    }
+}
+
+pub fn planned_workout_sync_name(workout: &PlannedWorkout) -> Option<String> {
+    if workout.rest_day {
+        return Some("Rest Day".to_string());
+    }
+
+    workout
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| intervals_planned_workout_title(&domain_to_intervals_planned_workout(workout)))
+}
+
 pub fn planned_workout_payload_hash(workout: &PlannedWorkout) -> String {
     if workout.rest_day {
         return planned_workout_payload_hash_parts(&workout.date, Some("Rest Day"), None);
     }
 
-    match to_intervals_planned_workout(workout) {
-        Ok(parsed) => intervals_planned_workout_payload_hash(&workout.date, &parsed, None),
-        Err(_) => planned_workout_payload_hash_parts(&workout.date, None, None),
-    }
+    let parsed = domain_to_intervals_planned_workout(workout);
+    intervals_planned_workout_payload_hash(
+        &workout.date,
+        &parsed,
+        planned_workout_sync_name(workout).as_deref(),
+    )
 }
 
 pub fn planned_workout_payload_hash_parts(

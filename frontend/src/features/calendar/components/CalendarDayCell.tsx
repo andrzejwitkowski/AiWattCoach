@@ -2,6 +2,7 @@ import { BedDouble, Bike, Dumbbell, Flag, Footprints, Link2, Link2Off, Trophy, W
 import { useTranslation } from 'react-i18next';
 
 import { buildDayItems, isInteractiveDayItem } from '../dayItems';
+import { formatPlannedRestLabelSubtitle } from '../plannedRestPresentation';
 import { formatRaceSubtitle, mapRaceDisciplineLabel } from '../racePresentation';
 import type { CalendarDay, CalendarPlannedRestDayLabel, CalendarRaceLabel } from '../types';
 import { formatDayLabel } from '../utils/dateUtils';
@@ -119,8 +120,9 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
         : t('calendar.restDay'));
   const subtitle = hasCompactRacePrep
     ? buildCompactPlannedSubtitle(compactPlannedEvent, locale)
-    : plannedRestLabel?.subtitle
-      ?? (raceLabel
+    : plannedRestLabel
+      ? formatPlannedRestLabelSubtitle(plannedRestLabel, locale)
+      : (raceLabel
       ? formatRaceSubtitle(raceLabel.payload, t)
       : (hasTraining
         ? buildSubtitle(visibleActivity, isPlannedOnly ? primaryPlannedWorkoutEvent : null, locale, {
@@ -272,8 +274,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <BedDouble className="mb-2 text-slate-600" size={30} />
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{t('calendar.restDay')}</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">{t('calendar.noTraining')}</p>
         </div>
       )}
     </>
