@@ -21,6 +21,8 @@ pub mod meso_cycle_generation_operations;
 pub mod meso_cycle_projections;
 pub mod pest_parser_poc_workouts;
 pub mod planned_completed_links;
+pub mod planned_rest_days;
+pub mod planned_rest_days_calendar;
 pub mod planned_workout_syncs;
 pub mod planned_workout_tokens;
 pub mod planned_workout_wahoo_syncs;

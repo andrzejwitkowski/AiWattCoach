@@ -3,7 +3,7 @@ use serde::Serialize;
 use crate::domain::training_context::model::{
     AthleteProfileContext, FuturePlannedEventContext, HistoricalLoadTrendPoint,
     HistoricalTrainingContext, HistoricalWorkoutContext, IntervalsStatusContext,
-    PlannedWorkoutBlockContext, RaceContext, TrainingContext,
+    PlannedRestDayContext, PlannedWorkoutBlockContext, RaceContext, TrainingContext,
 };
 
 #[derive(Serialize)]
@@ -15,6 +15,8 @@ pub(crate) struct StablePayload<'a> {
     rc: Vec<CompactRace<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     fe: Vec<CompactFuturePlannedEvent<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    prd: Vec<CompactPlannedRestDay<'a>>,
     h: CompactHistory<'a>,
 }
 
@@ -29,6 +31,11 @@ impl<'a> StablePayload<'a> {
                 .future_events
                 .iter()
                 .map(CompactFuturePlannedEvent::from_event)
+                .collect(),
+            prd: context
+                .planned_rest_days
+                .iter()
+                .map(CompactPlannedRestDay::from_entry)
                 .collect(),
             h: CompactHistory::from_history(&context.history),
         }
@@ -54,6 +61,29 @@ impl<'a> CompactRace<'a> {
             km: race.distance_meters as f64 / 1000.0,
             disc: &race.discipline,
             pri: &race.priority,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct CompactPlannedRestDay<'a> {
+    id: &'a str,
+    sd: &'a str,
+    ed: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    n: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nt: Option<&'a str>,
+}
+
+impl<'a> CompactPlannedRestDay<'a> {
+    fn from_entry(entry: &'a PlannedRestDayContext) -> Self {
+        Self {
+            id: &entry.planned_rest_day_id,
+            sd: &entry.start_date,
+            ed: &entry.end_date,
+            n: entry.title.as_deref(),
+            nt: entry.note.as_deref(),
         }
     }
 }

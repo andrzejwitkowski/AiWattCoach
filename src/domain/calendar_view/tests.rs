@@ -460,6 +460,36 @@ fn planned_workout_projection_prefers_failed_status_over_modified_hash() {
 }
 
 #[test]
+fn planned_workout_projection_stays_synced_when_stored_hash_matches_intervals_sync_hash() {
+    let workout = sample_bridged_planned_workout("plan-op-1", "2026-05-10");
+    let parsed = crate::domain::planned_workouts::to_intervals_planned_workout(&workout).unwrap();
+    let payload_hash = crate::domain::planned_workouts::intervals_planned_workout_payload_hash(
+        &workout.date,
+        &parsed,
+        Some("Threshold builder"),
+    );
+    let state = ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(
+            CanonicalEntityKind::PlannedWorkout,
+            "plan-op-1:2026-05-10".to_string(),
+        ),
+    )
+    .mark_synced("77".to_string(), payload_hash, 1_700_000_000);
+
+    let entry = project_planned_workout_entry(&workout, &[state]);
+
+    assert_eq!(
+        entry
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.sync_status.as_deref()),
+        Some("synced")
+    );
+}
+
+#[test]
 fn planned_workout_projection_marks_synced_when_hash_matches_update_service_hash() {
     let workout = sample_planned_workout();
     let payload_hash = crate::domain::planned_workouts::planned_workout_payload_hash(&workout);

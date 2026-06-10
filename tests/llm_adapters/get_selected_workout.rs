@@ -348,6 +348,7 @@ fn empty_training_context() -> TrainingContext {
         intervals_status: Default::default(),
         profile: Default::default(),
         races: Vec::new(),
+        planned_rest_days: Vec::new(),
         future_events: Vec::new(),
         history: Default::default(),
         recent_days: Vec::new(),

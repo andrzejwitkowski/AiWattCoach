@@ -1,9 +1,9 @@
-import { Bike, Flag, Trophy, X } from 'lucide-react';
+import { BedDouble, Bike, Flag, Trophy, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDialogFocusTrap } from '../../../lib/useDialogFocusTrap';
-import type { CalendarDayItemsSelection, CalendarDayItem } from '../dayItems';
+import { isInteractiveDayItem, type CalendarDayItemsSelection, type CalendarDayItem } from '../dayItems';
 
 type DayItemsModalProps = {
   selection: CalendarDayItemsSelection | null;
@@ -73,8 +73,8 @@ export function DayItemsModal({ selection, onClose, onSelectItem }: DayItemsModa
             <button
               key={item.id}
               type="button"
-              onClick={item.kind === 'event' ? undefined : () => onSelectItem(item)}
-              disabled={item.kind === 'event'}
+              onClick={isInteractiveDayItem(item) ? () => onSelectItem(item) : undefined}
+              disabled={!isInteractiveDayItem(item)}
               className="flex w-full flex-col items-start justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4 text-left transition hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-75 sm:flex-row sm:items-center sm:gap-4"
             >
               <div className="flex min-w-0 items-center gap-3">
@@ -101,6 +101,8 @@ function ItemIcon({ item }: { item: CalendarDayItem }) {
   switch (item.kind) {
     case 'race':
       return <Trophy size={16} />;
+    case 'planned_rest_day':
+      return <BedDouble size={16} />;
     case 'planned':
       return <Flag size={16} />;
     case 'completed':
@@ -114,6 +116,8 @@ function itemLabel(item: CalendarDayItem, t: ReturnType<typeof useTranslation>['
   switch (item.kind) {
     case 'race':
       return t('calendar.raceDay');
+    case 'planned_rest_day':
+      return t('calendar.plannedRestDay');
     case 'planned':
       return t('calendar.plannedWorkout');
     case 'completed':

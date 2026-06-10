@@ -116,10 +116,24 @@ pub(super) fn projected_day_sync_status(
 }
 
 pub(super) fn projected_day_payload_hash(day: &TrainingPlanProjectedDay) -> String {
-    projected_event_payload_hash(
+    if day.rest_day {
+        return crate::domain::planned_workouts::planned_workout_payload_hash_parts(
+            &day.date,
+            Some("Rest Day"),
+            None,
+        );
+    }
+
+    let Some(workout) = day.workout.as_ref() else {
+        return crate::domain::planned_workouts::planned_workout_payload_hash_parts(
+            &day.date, None, None,
+        );
+    };
+
+    crate::domain::planned_workouts::intervals_planned_workout_payload_hash(
         &day.date,
+        workout,
         projected_workout_name(day).as_deref(),
-        projected_workout_sync_body(day).as_deref(),
     )
 }
 

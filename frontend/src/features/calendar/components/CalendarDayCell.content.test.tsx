@@ -835,4 +835,33 @@ describe('CalendarDayCell content', () => {
 
     expect(screen.getByRole('button', { name: /selectable ride/i })).toBeInTheDocument();
   });
+
+  it('renders user planned rest day labels with violet styling distinct from rest days', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 11, 24),
+      dateKey: '2026-12-24',
+      labels: [
+        {
+          kind: 'planned_rest_day',
+          title: 'Holiday',
+          subtitle: 'Family trip',
+          payload: {
+            plannedRestDayId: 'prd-1',
+            startDate: '2026-12-24',
+            endDate: '2026-12-26',
+            title: 'Holiday',
+            note: 'Family trip',
+          },
+        },
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('Holiday')).toBeInTheDocument();
+    expect(within(dayCell).getByText(/planned rest/i)).toBeInTheDocument();
+    expect(dayCell.className).toContain('border-violet-400/50');
+    expect(within(dayCell).queryByRole('button')).not.toBeInTheDocument();
+  });
 });

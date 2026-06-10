@@ -48,6 +48,8 @@ use aiwattcoach::{
             meso_cycle_generation_operations::MongoMesoCycleGenerationOperationRepository,
             meso_cycle_projections::MongoMesoCycleProjectionRepository,
             planned_completed_links::MongoPlannedCompletedWorkoutLinkRepository,
+            planned_rest_days::MongoPlannedRestDayRepository,
+            planned_rest_days_calendar::MongoPlannedRestDayCalendarLabelSource,
             planned_workout_tokens::MongoPlannedWorkoutTokenRepository,
             planned_workouts::MongoPlannedWorkoutRepository,
             provider_poll_states::MongoProviderPollStateRepository,
@@ -90,7 +92,7 @@ use aiwattcoach::{
     },
     domain::calendar::CalendarService,
     domain::calendar_coach::SharedCalendarCoachService,
-    domain::calendar_labels::CalendarLabelsService,
+    domain::calendar_labels::{CalendarLabelsService, CompositeCalendarLabelSource},
     domain::calendar_view::{CalendarEntryViewRefreshService, ManualCalendarRefreshService},
     domain::coach_conversation::{
         coach_conversation_reply_task_handler, SchedulerBackedCoachConversationService,
@@ -110,6 +112,7 @@ use aiwattcoach::{
         meso_cycle_generate_task_handler, MesoCycleService, MesoCycleWindowPort,
         SchedulerBackedMesoCycleService, TrainingPlanBackedMesoWindowPort,
     },
+    domain::planned_rest_days::PlannedRestDayService,
     domain::planned_workouts::AuthoritativePlannedWorkoutRepository,
     domain::races::{AuthoritativeRaceRepository, RaceService},
     domain::settings::UserSettingsService,
@@ -323,6 +326,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     park_wahoo_poll_states(&provider_poll_state_repository).await?;
     let race_repository = MongoRaceRepository::new(mongo_client.clone(), &mongo_database);
     race_repository.ensure_indexes().await?;
+    let planned_rest_day_repository =
+        MongoPlannedRestDayRepository::new(mongo_client.clone(), &mongo_database);
+    planned_rest_day_repository.ensure_indexes().await?;
     let planned_workout_repository =
         MongoPlannedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
     planned_workout_repository.ensure_indexes().await?;
@@ -589,6 +595,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             training_load_daily_snapshot_repository.clone(),
         )
         .with_race_repository(Arc::new(authoritative_race_repository.clone()))
+        .with_planned_rest_day_repository(Arc::new(planned_rest_day_repository.clone()))
         .with_training_plan_projection_repository(Arc::new(
             training_plan_projection_repository.clone(),
         )),
@@ -683,8 +690,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     );
     let race_calendar_source =
         MongoCalendarEntryViewCalendarSource::new(mongo_client.clone(), &mongo_database);
-    let calendar_labels_service =
-        Arc::new(CalendarLabelsService::new(race_calendar_source.clone()));
+    let planned_rest_day_calendar_source =
+        MongoPlannedRestDayCalendarLabelSource::new(planned_rest_day_repository.clone());
+    let calendar_labels_service = Arc::new(CalendarLabelsService::new(
+        CompositeCalendarLabelSource::new(
+            race_calendar_source.clone(),
+            planned_rest_day_calendar_source,
+        ),
+    ));
+    let planned_rest_day_service = Arc::new(PlannedRestDayService::new(
+        planned_rest_day_repository.clone(),
+        SystemClock,
+        UuidIdGenerator,
+    ));
     let completed_workout_service = Arc::new(CompletedWorkoutReadService::new(
         authoritative_completed_workout_repository.clone(),
     ));
@@ -839,6 +857,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_workout_summary_save_notifier((*save_notifier).clone())
         .with_intervals_service(intervals_service)
         .with_race_service(race_service)
+        .with_planned_rest_day_service(planned_rest_day_service)
         .with_intervals_connection_tester(Arc::new(intervals_connection_tester));
     let app_state = if let Some(wahoo_service) = wahoo_service {
         let app_state = app_state.with_wahoo_service(wahoo_service);

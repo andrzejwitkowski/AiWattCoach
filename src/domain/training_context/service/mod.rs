@@ -4,6 +4,7 @@ use std::{
 };
 
 use chrono::{Duration, NaiveDate};
+use tracing::warn;
 
 use crate::domain::{
     completed_workouts::{
@@ -17,6 +18,7 @@ use crate::domain::{
         ActivityStream, ActivityZoneTime, DateRange, Event, EventCategory,
     },
     llm::LlmError,
+    planned_rest_days::PlannedRestDayRepository,
     planned_workouts::{
         serialize_canonical_planned_workout, BoxFuture as PlannedWorkoutBoxFuture, PlannedWorkout,
         PlannedWorkoutError, PlannedWorkoutRepository,
@@ -265,6 +267,7 @@ where
     ftp_history_repository: Option<Arc<dyn FtpHistoryReadPort>>,
     training_load_daily_snapshot_repository: Option<Arc<dyn TrainingLoadDailySnapshotReadPort>>,
     race_repository: Option<Arc<dyn RaceRepository>>,
+    planned_rest_day_repository: Option<Arc<dyn PlannedRestDayRepository>>,
     training_plan_projection_repository: Option<Arc<dyn TrainingPlanProjectionRepository>>,
     clock: Time,
 }
@@ -289,6 +292,7 @@ where
             ftp_history_repository: None,
             training_load_daily_snapshot_repository: None,
             race_repository: None,
+            planned_rest_day_repository: None,
             training_plan_projection_repository: None,
             clock,
         }
@@ -339,6 +343,14 @@ where
 
     pub fn with_race_repository(mut self, race_repository: Arc<dyn RaceRepository>) -> Self {
         self.race_repository = Some(race_repository);
+        self
+    }
+
+    pub fn with_planned_rest_day_repository(
+        mut self,
+        planned_rest_day_repository: Arc<dyn PlannedRestDayRepository>,
+    ) -> Self {
+        self.planned_rest_day_repository = Some(planned_rest_day_repository);
         self
     }
 
@@ -577,6 +589,10 @@ where
         let recent_workout_recaps = summary_fields.recent_workout_recaps;
         let projected_days = self.load_projected_day_contexts(user_id, focus_date).await;
         let races = self.load_race_contexts(user_id).await;
+        let planned_rest_horizon_end = upcoming_end.max(stable_future_events_end);
+        let planned_rest_days = self
+            .load_planned_rest_day_contexts(user_id, focus_date, planned_rest_horizon_end)
+            .await;
         let future_events =
             build_future_planned_event_contexts(&stable_future_events, configured_ftp);
         let detailed_recent_activities_by_id = detailed_recent_activities
@@ -686,6 +702,7 @@ where
             },
             profile,
             races,
+            planned_rest_days,
             future_events,
             history,
             recent_days,
@@ -757,6 +774,50 @@ where
             .into_iter()
             .map(|(date, workouts)| ProjectedDayContext { date, workouts })
             .collect()
+    }
+
+    async fn load_planned_rest_day_contexts(
+        &self,
+        user_id: &str,
+        focus_date: NaiveDate,
+        horizon_end: NaiveDate,
+    ) -> Vec<PlannedRestDayContext> {
+        let Some(repository) = &self.planned_rest_day_repository else {
+            return Vec::new();
+        };
+
+        let query_start = focus_date.format("%Y-%m-%d").to_string();
+        let query_end = horizon_end.format("%Y-%m-%d").to_string();
+        let range = DateRange {
+            oldest: query_start,
+            newest: query_end,
+        };
+
+        match repository.list_intersecting_range(user_id, &range).await {
+            Ok(entries) => {
+                let mut contexts = entries
+                    .into_iter()
+                    .map(|entry| PlannedRestDayContext {
+                        planned_rest_day_id: entry.planned_rest_day_id,
+                        start_date: entry.start_date,
+                        end_date: entry.end_date,
+                        title: entry.title,
+                        note: entry.note,
+                    })
+                    .collect::<Vec<_>>();
+                contexts.sort_by(|left, right| {
+                    left.start_date
+                        .cmp(&right.start_date)
+                        .then_with(|| left.end_date.cmp(&right.end_date))
+                        .then_with(|| left.planned_rest_day_id.cmp(&right.planned_rest_day_id))
+                });
+                contexts
+            }
+            Err(error) => {
+                warn!(%user_id, %error, "failed to load planned rest day contexts");
+                Vec::new()
+            }
+        }
     }
 
     async fn load_race_contexts(&self, user_id: &str) -> Vec<RaceContext> {

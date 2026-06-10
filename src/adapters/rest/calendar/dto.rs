@@ -39,9 +39,22 @@ pub(super) struct CalendarLabelDto {
 #[serde(untagged)]
 pub(super) enum CalendarLabelPayloadDto {
     Race(CalendarRaceLabelDto),
+    PlannedRestDay(CalendarPlannedRestDayLabelDto),
     Activity(CalendarActivityLabelDto),
     Health(CalendarHealthLabelDto),
     Custom(CalendarCustomLabelDto),
+}
+
+#[derive(Serialize)]
+pub(super) struct CalendarPlannedRestDayLabelDto {
+    #[serde(rename = "plannedRestDayId")]
+    pub planned_rest_day_id: String,
+    #[serde(rename = "startDate")]
+    pub start_date: String,
+    #[serde(rename = "endDate")]
+    pub end_date: String,
+    pub title: Option<String>,
+    pub note: Option<String>,
 }
 
 #[derive(Serialize)]

@@ -316,6 +316,7 @@ pub(crate) fn sample_context(data_port: TestDataPort) -> ToolExecutionContext {
             intervals_status: Default::default(),
             profile: Default::default(),
             races: Vec::new(),
+            planned_rest_days: Vec::new(),
             future_events: Vec::new(),
             history: Default::default(),
             recent_days: Vec::new(),

@@ -25,6 +25,7 @@ import {
   resolvePublicLandingReturnTo,
   WHITELIST_REQUESTED_MESSAGE,
 } from './pages/publicLandingRoute';
+import { PlannedRestDaysPage } from './pages/PlannedRestDaysPage';
 import { RacesPage } from './pages/RacesPage';
 import { SettingsPage } from './pages/SettingsPage';
 
@@ -140,6 +141,10 @@ export function App() {
                 path="/calendar/meso"
               />
               <Route element={<RacesPage apiBaseUrl={API_BASE_URL} />} path="/races" />
+              <Route
+                element={<PlannedRestDaysPage apiBaseUrl={API_BASE_URL} />}
+                path="/planned-rest-days"
+              />
               <Route element={<AICoachPage apiBaseUrl={API_BASE_URL} />} path="/ai-coach" />
               <Route element={<RequireRole role="admin" />}>
                 <Route
