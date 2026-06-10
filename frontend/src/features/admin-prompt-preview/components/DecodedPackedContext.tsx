@@ -114,6 +114,9 @@ function buildSections(data: Record<string, unknown>): React.ReactNode[] {
   if (data.rc && Array.isArray(data.rc)) {
     sections.push(buildRaceTable(data.rc));
   }
+  if (data.prd && Array.isArray(data.prd)) {
+    sections.push(buildPlannedRestDaysTable(data.prd));
+  }
   if (data.h && isObject(data.h)) {
     sections.push(buildHistorySummary(data.h));
   }
@@ -126,7 +129,7 @@ function buildSections(data: Record<string, unknown>): React.ReactNode[] {
 
   const rest: Record<string, unknown> = {};
   for (const key of Object.keys(data)) {
-    if (!['p', 'rc', 'h', 'rd', 'wr', 'ud', 'pd', 'fe', 'v', 'g', 'fx', 'i'].includes(key)) {
+    if (!['p', 'rc', 'prd', 'h', 'rd', 'wr', 'ud', 'pd', 'fe', 'v', 'g', 'fx', 'i'].includes(key)) {
       rest[key] = data[key];
     }
   }
@@ -161,6 +164,93 @@ function buildProfileTable(p: Record<string, unknown>) {
       </div>
     </div>
   );
+}
+
+function buildPlannedRestDaysTable(entries: unknown[]) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-violet-300">
+        Planned Rest Days ({entries.length})
+      </div>
+      <div className="space-y-2">
+        {entries.map((item, i) => {
+          const entry = item as Record<string, unknown>;
+          const startDate = String(entry.sd ?? '');
+          const endDate = String(entry.ed ?? startDate);
+          const title = typeof entry.n === 'string' && entry.n.trim() ? entry.n : 'Planned rest';
+          const note = typeof entry.nt === 'string' && entry.nt.trim() ? entry.nt : null;
+          const isRange = startDate !== endDate;
+
+          return (
+            <div
+              key={String(entry.id ?? i)}
+              className="rounded-lg border border-violet-400/20 bg-violet-500/5 px-3 py-2"
+            >
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-sm font-medium text-violet-100">{title}</span>
+                <span className="rounded-full border border-violet-300/25 bg-violet-300/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-violet-200">
+                  {isRange ? 'Range' : 'Single day'}
+                </span>
+              </div>
+              <div className="mt-1 text-sm text-slate-300">{formatPlannedRestPreviewRange(startDate, endDate)}</div>
+              {note ? (
+                <p className="prompt-preview-text mt-2 text-xs leading-5 text-slate-400">{note}</p>
+              ) : (
+                <p className="mt-2 text-xs text-slate-500">No note</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function formatPlannedRestPreviewRange(startDate: string, endDate: string): string {
+  if (startDate === endDate) {
+    return startDate;
+  }
+
+  const dayCount = countInclusiveCalendarDays(startDate, endDate);
+  return `${startDate} – ${endDate} (${dayCount} days)`;
+}
+
+function countInclusiveCalendarDays(startDate: string, endDate: string): number {
+  const start = parsePreviewDate(startDate);
+  const end = parsePreviewDate(endDate);
+  if (!start || !end || end < start) {
+    return 1;
+  }
+
+  let count = 0;
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    count += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return count;
+}
+
+function parsePreviewDate(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  if (
+    parsed.getFullYear() !== year
+    || parsed.getMonth() !== month - 1
+    || parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
 }
 
 function buildRaceTable(races: unknown[]) {
