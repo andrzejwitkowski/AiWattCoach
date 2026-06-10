@@ -53,7 +53,7 @@ const KEY_LABEL: Record<string, string> = {
   rpe: 'RPE',
   recap: 'Recap',
   bl: 'Interval Blocks',
-  pc: 'Power Curve',
+  p3: 'Power 3s (watts)',
   c5: 'Cadence 5s',
   minp: 'Min %FTP',
   maxp: 'Max %FTP',

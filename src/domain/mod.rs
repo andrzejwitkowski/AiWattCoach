@@ -30,4 +30,5 @@ pub mod training_plan;
 pub mod wahoo;
 pub mod wahoo_fit_enrichment;
 pub mod wahoo_fit_files;
+pub mod workout_streams;
 pub mod workout_summary;

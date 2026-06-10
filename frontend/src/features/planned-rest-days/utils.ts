@@ -29,8 +29,15 @@ export function formatPlannedRestRange(entry: PlannedRestDay, locale: string): s
 export function countPlannedRestDays(entry: PlannedRestDay): number {
   const start = parsePlannedRestDate(entry.startDate);
   const end = parsePlannedRestDate(entry.endDate);
-  const diffMs = end.getTime() - start.getTime();
-  return Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1;
+  let count = 0;
+  const cursor = new Date(start);
+
+  while (cursor <= end) {
+    count += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return count;
 }
 
 export function countUniquePlannedRestCalendarDays(entries: PlannedRestDay[]): number {

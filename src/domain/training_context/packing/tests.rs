@@ -83,7 +83,7 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
                 activity_id: "ride-1".to_string(),
                 start_date_local: "2026-04-01T08:00:00".to_string(),
                 workout_recap: Some("Held power well and finished controlled".to_string()),
-                compressed_power_levels: vec!["36:1".to_string(), "46:1".to_string()],
+                power_values_3s: vec![220, 270],
                 cadence_values_5s: vec![85, 88],
                 planned_workout: Some(PlannedWorkoutReference {
                     event_id: 101,
@@ -155,9 +155,8 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
     assert!(rendered
         .volatile_context
         .contains("\"sickn\":\"felt unwell\""));
-    assert!(rendered
-        .volatile_context
-        .contains("\"pc\":[\"36:1\",\"46:1\"]"));
+    assert!(rendered.volatile_context.contains("\"p3\":[220,270]"));
+    assert!(!rendered.volatile_context.contains("\"pc\":"));
     assert!(rendered
         .volatile_context
         .contains("\"recap\":\"Held power well and finished controlled\""));

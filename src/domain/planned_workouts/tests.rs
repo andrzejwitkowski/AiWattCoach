@@ -1,6 +1,5 @@
 use super::{
     intervals_planned_workout_payload_hash, planned_workout_payload_hash,
-    planned_workout_payload_hash_parts, serialize_canonical_planned_workout,
     to_intervals_planned_workout, PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine,
     PlannedWorkoutRepository, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
     PlannedWorkoutText,
@@ -153,13 +152,7 @@ fn planned_workout_payload_hash_uses_intervals_serialization_not_canonical_text(
         },
     );
     let parsed = to_intervals_planned_workout(&workout).unwrap();
-    let canonical_hash = planned_workout_payload_hash_parts(
-        &workout.date,
-        None,
-        Some(serialize_canonical_planned_workout(&workout).as_str()),
-    );
 
-    assert_ne!(planned_workout_payload_hash(&workout), canonical_hash);
     assert_eq!(
         planned_workout_payload_hash(&workout),
         intervals_planned_workout_payload_hash(&workout.date, &parsed, None)

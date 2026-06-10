@@ -150,6 +150,7 @@ pub(in crate::adapters::rest) async fn delete_planned_rest_day(
 fn map_request(body: UpsertPlannedRestDayRequest) -> Result<UpdatePlannedRestDay, StatusCode> {
     if !super::super::intervals::is_valid_date(&body.start_date)
         || !super::super::intervals::is_valid_date(&body.end_date)
+        || body.end_date < body.start_date
     {
         return Err(StatusCode::BAD_REQUEST);
     }

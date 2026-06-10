@@ -279,11 +279,8 @@ async fn training_plan_generator_describes_packed_context_legend_in_system_promp
     assert!(prompt.contains("rd=recent days"));
     assert!(prompt.contains("ud=upcoming days"));
     assert!(prompt.contains("pd=projected days"));
-    assert!(prompt.contains("pc"));
-    assert!(prompt.contains("level:seconds"));
-    assert!(prompt.contains("rounded to the nearest 10W bucket"));
-    assert!(prompt.contains("round((watts / ftp)^2.5 * 100)"));
-    assert!(prompt.contains("same encoded level are run-length encoded"));
+    assert!(prompt.contains("p3=power watts in 3-second buckets"));
+    assert!(prompt.contains("p3 is the full average-watts series in 3-second buckets"));
 }
 
 #[tokio::test]
