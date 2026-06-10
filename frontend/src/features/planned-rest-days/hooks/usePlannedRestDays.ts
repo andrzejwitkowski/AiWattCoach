@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { listPlannedRestDays } from '../api/plannedRestDays';
+import { usePlannedRestDaysApi } from '../api/plannedRestDays';
 import type { PlannedRestDay } from '../types';
 import { splitPlannedRestDaysByDate, toDateKey } from '../utils';
-
-type UsePlannedRestDaysOptions = {
-  apiBaseUrl: string;
-};
 
 type UsePlannedRestDaysResult = {
   entries: PlannedRestDay[];
@@ -26,7 +22,8 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
-export function usePlannedRestDays({ apiBaseUrl }: UsePlannedRestDaysOptions): UsePlannedRestDaysResult {
+export function usePlannedRestDays(): UsePlannedRestDaysResult {
+  const { listPlannedRestDays } = usePlannedRestDaysApi();
   const [entries, setEntries] = useState<PlannedRestDay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +45,7 @@ export function usePlannedRestDays({ apiBaseUrl }: UsePlannedRestDaysOptions): U
     } finally {
       setIsLoading(false);
     }
-  }, [apiBaseUrl]);
+  }, [listPlannedRestDays]);
 
   useEffect(() => {
     void refresh();

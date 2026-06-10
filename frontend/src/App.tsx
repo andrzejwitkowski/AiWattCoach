@@ -142,7 +142,11 @@ export function App() {
               />
               <Route element={<RacesPage apiBaseUrl={API_BASE_URL} />} path="/races" />
               <Route
-                element={<PlannedRestDaysPage apiBaseUrl={API_BASE_URL} />}
+                element={
+                  <ApiBaseUrlProvider value={API_BASE_URL}>
+                    <PlannedRestDaysPage />
+                  </ApiBaseUrlProvider>
+                }
                 path="/planned-rest-days"
               />
               <Route element={<AICoachPage apiBaseUrl={API_BASE_URL} />} path="/ai-coach" />

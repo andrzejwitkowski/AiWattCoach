@@ -10,14 +10,10 @@ import { countUniquePlannedRestCalendarDays, formatPlannedRestRange } from '../u
 import { PlannedRestDayCard } from './PlannedRestDayCard';
 import { PlannedRestDayForm } from './PlannedRestDayForm';
 
-type PlannedRestDaysPageLayoutProps = {
-  apiBaseUrl: string;
-};
-
-export function PlannedRestDaysPageLayout({ apiBaseUrl }: PlannedRestDaysPageLayoutProps) {
+export function PlannedRestDaysPageLayout() {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
-  const { upcomingEntries, pastEntries, isLoading, error, refresh } = usePlannedRestDays({ apiBaseUrl });
+  const { upcomingEntries, pastEntries, isLoading, error, refresh } = usePlannedRestDays();
   const [editingEntry, setEditingEntry] = useState<PlannedRestDay | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -105,7 +101,6 @@ export function PlannedRestDaysPageLayout({ apiBaseUrl }: PlannedRestDaysPageLay
 
       {isEditorOpen ? (
         <PlannedRestDayForm
-          apiBaseUrl={apiBaseUrl}
           entry={activeEntry}
           onCancel={() => {
             setEditingEntry(null);

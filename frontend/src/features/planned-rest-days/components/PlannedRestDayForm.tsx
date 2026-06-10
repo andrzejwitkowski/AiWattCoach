@@ -2,11 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDialogFocusTrap } from '../../../lib/useDialogFocusTrap';
-import {
-  createPlannedRestDay,
-  deletePlannedRestDay,
-  updatePlannedRestDay,
-} from '../api/plannedRestDays';
+import { usePlannedRestDaysApi } from '../api/plannedRestDays';
 import type { PlannedRestDay } from '../types';
 import { PlannedRestDayFormActions } from './PlannedRestDayFormActions';
 import { PlannedRestDayFormDialog } from './PlannedRestDayFormDialog';
@@ -19,13 +15,13 @@ import {
 } from './plannedRestDayFormTypes';
 
 type PlannedRestDayFormProps = {
-  apiBaseUrl: string;
   entry: PlannedRestDay | null;
   onCancel: () => void;
   onSaved: () => void;
 };
 
-export function PlannedRestDayForm({ apiBaseUrl, entry, onCancel, onSaved }: PlannedRestDayFormProps) {
+export function PlannedRestDayForm({ entry, onCancel, onSaved }: PlannedRestDayFormProps) {
+  const { createPlannedRestDay, deletePlannedRestDay, updatePlannedRestDay } = usePlannedRestDaysApi();
   const { t } = useTranslation();
   const [draft, setDraft] = useState<PlannedRestDayDraft>(defaultPlannedRestDayDraft);
   const [isSaving, setIsSaving] = useState(false);
@@ -95,9 +91,9 @@ export function PlannedRestDayForm({ apiBaseUrl, entry, onCancel, onSaved }: Pla
       };
 
       if (entry) {
-        await updatePlannedRestDay(apiBaseUrl, entry.plannedRestDayId, payload);
+        await updatePlannedRestDay(entry.plannedRestDayId, payload);
       } else {
-        await createPlannedRestDay(apiBaseUrl, payload);
+        await createPlannedRestDay(payload);
       }
 
       onSaved();
@@ -117,7 +113,7 @@ export function PlannedRestDayForm({ apiBaseUrl, entry, onCancel, onSaved }: Pla
     setError(null);
 
     try {
-      await deletePlannedRestDay(apiBaseUrl, entry.plannedRestDayId);
+      await deletePlannedRestDay(entry.plannedRestDayId);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('plannedRestDays.form.deleteError'));

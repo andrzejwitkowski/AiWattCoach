@@ -1,3 +1,6 @@
+import { useCallback, useMemo } from 'react';
+
+import { useApiBaseUrl } from '../../../lib/apiBaseUrl';
 import { del, get, post, put } from '../../../lib/httpClient';
 import {
   listPlannedRestDaysQuerySchema,
@@ -40,4 +43,45 @@ export async function updatePlannedRestDay(apiBaseUrl: string, plannedRestDayId:
 
 export async function deletePlannedRestDay(apiBaseUrl: string, plannedRestDayId: string) {
   return del<void>(apiBaseUrl, `/api/planned-rest-days/${encodeURIComponent(plannedRestDayId)}`);
+}
+
+export function usePlannedRestDaysApi() {
+  const apiBaseUrl = useApiBaseUrl();
+
+  const list = useCallback(
+    (query: unknown) => listPlannedRestDays(apiBaseUrl, query),
+    [apiBaseUrl],
+  );
+
+  const create = useCallback(
+    (body: unknown) => createPlannedRestDay(apiBaseUrl, body),
+    [apiBaseUrl],
+  );
+
+  const getById = useCallback(
+    (plannedRestDayId: string) => getPlannedRestDay(apiBaseUrl, plannedRestDayId),
+    [apiBaseUrl],
+  );
+
+  const update = useCallback(
+    (plannedRestDayId: string, body: unknown) =>
+      updatePlannedRestDay(apiBaseUrl, plannedRestDayId, body),
+    [apiBaseUrl],
+  );
+
+  const remove = useCallback(
+    (plannedRestDayId: string) => deletePlannedRestDay(apiBaseUrl, plannedRestDayId),
+    [apiBaseUrl],
+  );
+
+  return useMemo(
+    () => ({
+      listPlannedRestDays: list,
+      createPlannedRestDay: create,
+      getPlannedRestDay: getById,
+      updatePlannedRestDay: update,
+      deletePlannedRestDay: remove,
+    }),
+    [create, getById, list, remove, update],
+  );
 }
