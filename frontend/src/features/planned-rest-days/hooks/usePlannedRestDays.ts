@@ -35,7 +35,7 @@ export function usePlannedRestDays(): UsePlannedRestDaysResult {
 
     try {
       const today = new Date();
-      const data = await listPlannedRestDays(apiBaseUrl, {
+      const data = await listPlannedRestDays({
         oldest: toDateKey(addDays(today, -PAST_DAYS)),
         newest: toDateKey(addDays(today, FUTURE_DAYS)),
       });
