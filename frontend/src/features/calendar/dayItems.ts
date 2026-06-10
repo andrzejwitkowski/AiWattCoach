@@ -1,5 +1,6 @@
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
-import type { CalendarDay, CalendarRaceLabel } from './types';
+import { formatPlannedRestLabelSubtitle } from './plannedRestPresentation';
+import type { CalendarDay, CalendarPlannedRestDayLabel, CalendarRaceLabel } from './types';
 import { formatRaceSubtitle } from './racePresentation';
 import type { WorkoutDetailSelection } from './workoutDetails';
 import { isPlannedWorkoutEvent } from './workoutDetails';
@@ -21,6 +22,16 @@ export type CalendarDayItem =
     subtitle: string | null;
     dateKey: string;
     race: CalendarRaceLabel;
+    priorityRank: number;
+    tss: number | null;
+  }
+  | {
+    kind: 'planned_rest_day';
+    id: string;
+    title: string;
+    subtitle: string | null;
+    dateKey: string;
+    label: CalendarPlannedRestDayLabel;
     priorityRank: number;
     tss: number | null;
   }
@@ -63,7 +74,9 @@ export type CalendarDayItemsSelection = {
 };
 
 export function isInteractiveDayItem(item: CalendarDayItem): boolean {
-  return item.kind !== 'event' && !(item.kind === 'planned' && item.event.restDay);
+  return item.kind !== 'event'
+    && item.kind !== 'planned_rest_day'
+    && !(item.kind === 'planned' && item.event.restDay);
 }
 
 export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): CalendarDayItem[] {
@@ -76,6 +89,20 @@ export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): 
   );
 
   for (const label of day.labels) {
+    if (label.kind === 'planned_rest_day') {
+      items.push({
+        kind: 'planned_rest_day',
+        id: `planned-rest-day:${label.payload.plannedRestDayId}`,
+        title: label.title,
+        subtitle: formatPlannedRestLabelSubtitle(label, options.locale),
+        dateKey: day.dateKey,
+        label,
+        priorityRank: 0,
+        tss: null,
+      });
+      continue;
+    }
+
     if (label.kind !== 'race') {
       continue;
     }
@@ -160,6 +187,7 @@ export function selectDayItemDetail(item: CalendarDayItem): WorkoutDetailSelecti
       };
     case 'event':
     case 'race':
+    case 'planned_rest_day':
       return null;
   }
 }

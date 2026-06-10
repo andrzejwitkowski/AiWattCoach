@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
 import { listCalendarLabels } from '../api/calendar';
 import { listCalendarEvents } from '../../intervals/api/intervals';
@@ -39,6 +39,23 @@ const eventsCacheRef: Map<string, CachedRange<IntervalEvent[]>> = new Map();
 const labelsCacheRef: Map<string, CachedRange<LabelsResponse>> = new Map();
 let eventsCacheEpoch = 0;
 let labelsCacheEpoch = 0;
+let calendarRefreshEpoch = 0;
+const calendarRefreshListeners = new Set<() => void>();
+
+function subscribeCalendarRefresh(listener: () => void): () => void {
+  calendarRefreshListeners.add(listener);
+  return () => {
+    calendarRefreshListeners.delete(listener);
+  };
+}
+
+function getCalendarRefreshEpoch(): number {
+  return calendarRefreshEpoch;
+}
+
+export function useCalendarRefreshEpoch(): number {
+  return useSyncExternalStore(subscribeCalendarRefresh, getCalendarRefreshEpoch, getCalendarRefreshEpoch);
+}
 
 const isStale = (loadedAt: number) => Date.now() - loadedAt > CACHE_TTL_MS;
 
@@ -548,6 +565,10 @@ export function invalidateCalendarCache() {
   labelsCacheRef.clear();
   eventsCacheEpoch += 1;
   labelsCacheEpoch += 1;
+  calendarRefreshEpoch += 1;
+  for (const listener of calendarRefreshListeners) {
+    listener();
+  }
 }
 
 function invalidateCalendarEventCache(dateKey: string) {

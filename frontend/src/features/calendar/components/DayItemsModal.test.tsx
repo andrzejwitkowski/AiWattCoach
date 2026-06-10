@@ -77,4 +77,46 @@ describe('DayItemsModal', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('does not treat planned rest day items as selectable', () => {
+    const onSelectItem = vi.fn();
+
+    render(
+      <DayItemsModal
+        selection={{
+          dateKey: '2026-12-24',
+          items: [
+            {
+              kind: 'planned_rest_day',
+              id: 'planned-rest-day:prd-1',
+              title: 'Holiday',
+              subtitle: 'Family trip',
+              dateKey: '2026-12-24',
+              priorityRank: 0,
+              tss: null,
+              label: {
+                kind: 'planned_rest_day',
+                title: 'Holiday',
+                subtitle: 'Family trip',
+                payload: {
+                  plannedRestDayId: 'prd-1',
+                  startDate: '2026-12-24',
+                  endDate: '2026-12-26',
+                  title: 'Holiday',
+                  note: 'Family trip',
+                },
+              },
+            },
+          ],
+        }}
+        onClose={vi.fn()}
+        onSelectItem={onSelectItem}
+      />,
+    );
+
+    const itemButton = screen.getByRole('button', { name: /planned rest holiday/i });
+    expect(itemButton).toBeDisabled();
+    fireEvent.click(itemButton);
+    expect(onSelectItem).not.toHaveBeenCalled();
+  });
 });

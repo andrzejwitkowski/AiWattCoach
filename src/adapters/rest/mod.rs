@@ -13,6 +13,7 @@ mod intervals;
 mod logging;
 mod logs;
 mod meso_cycle;
+mod planned_rest_days;
 mod races;
 mod same_origin;
 mod settings;
@@ -227,6 +228,17 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                     get(races::get_race)
                         .put(races::update_race)
                         .delete(races::delete_race),
+                )
+                .route(
+                    "/api/planned-rest-days",
+                    get(planned_rest_days::list_planned_rest_days)
+                        .post(planned_rest_days::create_planned_rest_day),
+                )
+                .route(
+                    "/api/planned-rest-days/{planned_rest_day_id}",
+                    get(planned_rest_days::get_planned_rest_day)
+                        .put(planned_rest_days::update_planned_rest_day)
+                        .delete(planned_rest_days::delete_planned_rest_day),
                 )
                 .route(
                     "/api/workout-summaries",

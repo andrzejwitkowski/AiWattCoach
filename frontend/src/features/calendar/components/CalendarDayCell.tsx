@@ -2,8 +2,9 @@ import { BedDouble, Bike, Dumbbell, Flag, Footprints, Link2, Link2Off, Trophy, W
 import { useTranslation } from 'react-i18next';
 
 import { buildDayItems, isInteractiveDayItem } from '../dayItems';
+import { formatPlannedRestLabelSubtitle } from '../plannedRestPresentation';
 import { formatRaceSubtitle, mapRaceDisciplineLabel } from '../racePresentation';
-import type { CalendarDay, CalendarRaceLabel } from '../types';
+import type { CalendarDay, CalendarPlannedRestDayLabel, CalendarRaceLabel } from '../types';
 import { formatDayLabel } from '../utils/dateUtils';
 import { buildPlannedWorkoutBars, isPlannedWorkoutEvent, type WorkoutBar } from '../workoutDetails';
 import { CalendarMiniChart } from './CalendarMiniChart';
@@ -37,6 +38,8 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
   const isPastDay = !isToday && day.date.getTime() < startOfDay(new Date()).getTime();
   const raceLabel = day.labels.find((label): label is CalendarRaceLabel => label.kind === 'race') ?? null;
+  const plannedRestLabel =
+    day.labels.find((label): label is CalendarPlannedRestDayLabel => label.kind === 'planned_rest_day') ?? null;
   const raceLabels = day.labels.filter((label): label is CalendarRaceLabel => label.kind === 'race');
   const linkedRaceEventIds = new Set(
     raceLabels
@@ -88,7 +91,10 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   // Only accessed inside hasCompactRacePrep branches where primaryPlannedWorkoutEvent is guaranteed non-null.
   const compactPlannedEvent = primaryPlannedWorkoutEvent!;
   const plannedSyncStatus = primaryPlannedWorkoutEvent?.syncStatus ?? null;
-  const hasTraining = Boolean(visibleActivity || primaryEvent || raceLabel);
+  const hasUserPlannedRestOnly = Boolean(
+    plannedRestLabel && !visibleActivity && !primaryPlannedWorkoutEvent && !raceLabel,
+  );
+  const hasTraining = Boolean(visibleActivity || primaryEvent || raceLabel || plannedRestLabel);
   const pickerVisibleItemCount = dayItems.length;
   const visibleItemCount = visibleActivity
     ? 1
@@ -100,7 +106,8 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const extraItemCount = Math.max(0, pickerVisibleItemCount - visibleItemCount);
   const title = hasCompactRacePrep
     ? buildCompactPlannedTitle(compactPlannedEvent, t)
-    : raceLabel?.payload.name
+    : plannedRestLabel?.title
+      ?? raceLabel?.payload.name
       ?? (hasTraining
         ? buildTitle(visibleActivity, primaryEvent, {
           workout: t('calendar.workout'),
@@ -113,7 +120,9 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
         : t('calendar.restDay'));
   const subtitle = hasCompactRacePrep
     ? buildCompactPlannedSubtitle(compactPlannedEvent, locale)
-    : raceLabel
+    : plannedRestLabel
+      ? formatPlannedRestLabelSubtitle(plannedRestLabel, locale)
+      : (raceLabel
       ? formatRaceSubtitle(raceLabel.payload, t)
       : (hasTraining
         ? buildSubtitle(visibleActivity, isPlannedOnly ? primaryPlannedWorkoutEvent : null, locale, {
@@ -124,7 +133,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
           swim: t('calendar.eventSwim'),
           unknown: t('calendar.eventOther'),
         })
-        : t('calendar.restDay'));
+        : t('calendar.restDay')));
   const tone: Tone = raceLabel
     ? 'race'
     : hasTraining
@@ -137,9 +146,11 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
       : buildBars(visibleActivity, primaryPlannedWorkoutEvent);
   const Icon = raceLabel
     ? getRaceIcon(raceLabel.payload.discipline)
-    : hasTraining
-      ? getIcon(visibleActivity, primaryEvent)
-      : BedDouble;
+    : hasUserPlannedRestOnly || plannedRestLabel
+      ? BedDouble
+      : hasTraining
+        ? getIcon(visibleActivity, primaryEvent)
+        : BedDouble;
   const isSelectable = hasTraining && Boolean(onSelect);
   const plannedSyncVisual = isPredictedPlannedOnly ? getPlannedSyncVisual(plannedSyncStatus, t) : null;
   const racePriorityVisual = raceLabel ? getRacePriorityVisual(raceLabel.payload.priority) : null;
@@ -150,6 +161,8 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
     hasTraining
       ? raceLabel
         ? 'bg-[linear-gradient(180deg,rgba(34,24,16,0.96),rgba(18,14,10,0.94))] border-[#cda56b]/30 shadow-[0_0_0_1px_rgba(205,165,107,0.08)]'
+        : hasUserPlannedRestOnly
+          ? 'bg-[#171320] border-violet-400/50 shadow-[0_0_0_1px_rgba(167,139,250,0.12)]'
         : isPlannedRestDay
           ? 'bg-[#20181a] border-[#ff7351]/60 shadow-[0_0_0_1px_rgba(255,115,81,0.1)]'
         : isMissedPlannedOnly
@@ -192,7 +205,10 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
               <plannedSyncVisual.icon className={plannedSyncVisual.iconClass} size={12} />
             </span>
           ) : null}
-          <Icon className={iconColorClass(tone)} size={14} />
+          <Icon
+            className={hasUserPlannedRestOnly || plannedRestLabel ? 'text-violet-300' : iconColorClass(tone)}
+            size={14}
+          />
         </div>
       </div>
 
@@ -218,6 +234,12 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
                   {matchedPlanBadgeLabel}
                 </p>
               ) : null}
+            </div>
+          ) : plannedRestLabel ? (
+            <div className="mb-2 flex flex-wrap gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-200">
+                {t('calendar.plannedRestDay')}
+              </p>
             </div>
           ) : isPlannedRestDay ? (
             <div className="mb-2 flex flex-wrap gap-2">
@@ -252,8 +274,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <BedDouble className="mb-2 text-slate-600" size={30} />
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{t('calendar.restDay')}</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">{t('calendar.noTraining')}</p>
         </div>
       )}
     </>

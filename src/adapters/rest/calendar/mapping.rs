@@ -6,7 +6,8 @@ use crate::{
     domain::{
         calendar::{CalendarEvent, CalendarEventCategory},
         calendar_labels::{
-            CalendarLabel, CalendarLabelPayload, CalendarLabelsResponse, CalendarRaceLabel,
+            CalendarLabel, CalendarLabelPayload, CalendarLabelsResponse,
+            CalendarPlannedRestDayLabel, CalendarRaceLabel,
         },
         intervals::parse_workout_doc,
     },
@@ -14,8 +15,8 @@ use crate::{
 
 use super::dto::{
     CalendarActivityLabelDto, CalendarCustomLabelDto, CalendarEventDto, CalendarHealthLabelDto,
-    CalendarLabelDto, CalendarLabelPayloadDto, CalendarLabelsResponseDto, CalendarRaceLabelDto,
-    ProjectedWorkoutDto,
+    CalendarLabelDto, CalendarLabelPayloadDto, CalendarLabelsResponseDto,
+    CalendarPlannedRestDayLabelDto, CalendarRaceLabelDto, ProjectedWorkoutDto,
 };
 
 pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDto {
@@ -187,6 +188,11 @@ fn map_calendar_label_payload_to_dto(payload: CalendarLabelPayload) -> CalendarL
         CalendarLabelPayload::Race(race) => {
             CalendarLabelPayloadDto::Race(map_race_label_to_dto(race))
         }
+        CalendarLabelPayload::PlannedRestDay(planned_rest_day) => {
+            CalendarLabelPayloadDto::PlannedRestDay(map_planned_rest_day_label_to_dto(
+                planned_rest_day,
+            ))
+        }
         CalendarLabelPayload::Activity(activity) => {
             CalendarLabelPayloadDto::Activity(CalendarActivityLabelDto {
                 label_id: activity.label_id,
@@ -207,6 +213,18 @@ fn map_calendar_label_payload_to_dto(payload: CalendarLabelPayload) -> CalendarL
                 value: custom.value,
             })
         }
+    }
+}
+
+fn map_planned_rest_day_label_to_dto(
+    label: CalendarPlannedRestDayLabel,
+) -> CalendarPlannedRestDayLabelDto {
+    CalendarPlannedRestDayLabelDto {
+        planned_rest_day_id: label.planned_rest_day_id,
+        start_date: label.start_date,
+        end_date: label.end_date,
+        title: label.title,
+        note: label.note,
     }
 }
 

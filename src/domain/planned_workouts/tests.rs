@@ -1,6 +1,8 @@
 use super::{
-    PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine, PlannedWorkoutRepository,
-    PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
+    domain_to_intervals_planned_workout, intervals_planned_workout_payload_hash,
+    planned_workout_payload_hash, planned_workout_sync_name, PlannedWorkout, PlannedWorkoutContent,
+    PlannedWorkoutLine, PlannedWorkoutRepository, PlannedWorkoutStep, PlannedWorkoutStepKind,
+    PlannedWorkoutTarget, PlannedWorkoutText,
 };
 
 #[test]
@@ -133,6 +135,32 @@ async fn planned_workout_repository_lists_by_user_and_date_range() {
     assert_eq!(workouts.len(), 2);
     assert_eq!(workouts[0].planned_workout_id, "planned-1");
     assert_eq!(workouts[1].planned_workout_id, "planned-2");
+}
+
+#[test]
+fn planned_workout_payload_hash_uses_intervals_serialization_not_canonical_text() {
+    let workout = PlannedWorkout::new(
+        "planned-watts".to_string(),
+        "user-1".to_string(),
+        "2026-05-10".to_string(),
+        PlannedWorkoutContent {
+            lines: vec![PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                duration_seconds: 300,
+                kind: PlannedWorkoutStepKind::Steady,
+                target: PlannedWorkoutTarget::WattsRange { min: 250, max: 250 },
+            })],
+        },
+    );
+    let parsed = domain_to_intervals_planned_workout(&workout);
+
+    assert_eq!(
+        planned_workout_payload_hash(&workout),
+        intervals_planned_workout_payload_hash(
+            &workout.date,
+            &parsed,
+            planned_workout_sync_name(&workout).as_deref(),
+        )
+    );
 }
 
 fn sample_workout(planned_workout_id: &str, user_id: &str, date: &str) -> PlannedWorkout {

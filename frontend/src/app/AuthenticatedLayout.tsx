@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  BedDouble,
   Bell,
   Bot,
   Calendar,
@@ -30,6 +31,7 @@ const PAGE_TITLE_KEYS: Record<string, string> = {
   '/calendar': 'appShell.pageTitles.calendar',
   '/calendar/meso': 'appShell.pageTitles.mesoCycle',
   '/races': 'appShell.pageTitles.races',
+  '/planned-rest-days': 'appShell.pageTitles.plannedRestDays',
   '/ai-coach': 'appShell.pageTitles.aiCoach',
   '/admin/task-scheduler': 'appShell.pageTitles.taskScheduler',
   '/admin/prompt-preview': 'appShell.pageTitles.promptPreview',
@@ -68,6 +70,7 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
           <NavItem end to="/calendar" icon={Calendar} label={t('nav.calendar')} />
           <NavItem to="/calendar/meso" icon={CalendarRange} label={t('nav.mesoCycle')} />
           <NavItem to="/races" icon={Flag} label={t('nav.races')} />
+          <NavItem to="/planned-rest-days" icon={BedDouble} label={t('nav.plannedRestDays')} />
           <NavItem to="/ai-coach" icon={Bot} label={t('nav.aiCoach')} />
           <NavItem to="/settings" icon={Settings} label={t('nav.settings')} />
           {currentUser && currentUser.roles.includes('admin') && (

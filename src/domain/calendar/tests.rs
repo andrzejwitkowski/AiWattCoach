@@ -24,9 +24,9 @@ use crate::domain::{
     },
     planned_workout_tokens::{NoopPlannedWorkoutTokenRepository, PlannedWorkoutToken},
     planned_workouts::{
-        PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError, PlannedWorkoutLine,
-        PlannedWorkoutRepository, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
-        PlannedWorkoutText,
+        planned_workout_payload_hash, PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError,
+        PlannedWorkoutLine, PlannedWorkoutRepository, PlannedWorkoutStep, PlannedWorkoutStepKind,
+        PlannedWorkoutTarget, PlannedWorkoutText,
     },
     settings::{CyclingSettings, SettingsError, UserSettings, UserSettingsRepository, WahooConfig},
     training_plan::{
@@ -2603,6 +2603,83 @@ fn sample_completed_workout(completed_workout_id: &str) -> CompletedWorkout {
         },
         details_unavailable_reason: None,
         power_curve_5s: None,
+    }
+}
+
+#[test]
+fn projected_day_payload_hash_matches_refreshed_planned_workout_payload_hash() {
+    use crate::domain::planned_workouts::intervals_planned_workout_payload_hash;
+
+    let day = projected_day_with_doc(
+        "user-1",
+        "training-plan:user-1:w1:1",
+        "2026-06-10",
+        "Warmup\n\n- 15m 55%\n- 45m 75%\n- 15m 55%",
+    );
+    let domain_workout = planned_workout_from_projected_day(&day);
+    let intervals_workout = day.workout.as_ref().expect("projected workout");
+    let sync_name = intervals_workout
+        .lines
+        .iter()
+        .find_map(|line| line.text().map(ToString::to_string));
+    let sync_hash =
+        intervals_planned_workout_payload_hash(&day.date, intervals_workout, sync_name.as_deref());
+
+    assert_eq!(planned_workout_payload_hash(&domain_workout), sync_hash);
+}
+
+fn planned_workout_from_projected_day(day: &TrainingPlanProjectedDay) -> PlannedWorkout {
+    let workout = day.workout.as_ref().expect("projected workout");
+    PlannedWorkout::new(
+        format!("{}:{}", day.operation_key, day.date),
+        day.user_id.clone(),
+        day.date.clone(),
+        PlannedWorkoutContent {
+            lines: workout
+                .lines
+                .iter()
+                .cloned()
+                .map(map_intervals_line_to_domain_line)
+                .collect(),
+        },
+    )
+}
+
+fn map_intervals_line_to_domain_line(
+    line: crate::domain::intervals::PlannedWorkoutLine,
+) -> PlannedWorkoutLine {
+    match line {
+        crate::domain::intervals::PlannedWorkoutLine::BlankLine => PlannedWorkoutLine::BlankLine,
+        crate::domain::intervals::PlannedWorkoutLine::Text(text) => {
+            PlannedWorkoutLine::Text(PlannedWorkoutText { text: text.text })
+        }
+        crate::domain::intervals::PlannedWorkoutLine::Repeat(repeat) => {
+            PlannedWorkoutLine::Repeat(crate::domain::planned_workouts::PlannedWorkoutRepeat {
+                title: repeat.title,
+                count: repeat.count,
+            })
+        }
+        crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
+            PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                duration_seconds: step.duration_seconds,
+                kind: match step.kind {
+                    crate::domain::intervals::PlannedWorkoutStepKind::Steady => {
+                        PlannedWorkoutStepKind::Steady
+                    }
+                    crate::domain::intervals::PlannedWorkoutStepKind::Ramp => {
+                        PlannedWorkoutStepKind::Ramp
+                    }
+                },
+                target: match step.target {
+                    crate::domain::intervals::PlannedWorkoutTarget::PercentFtp { min, max } => {
+                        PlannedWorkoutTarget::PercentFtp { min, max }
+                    }
+                    crate::domain::intervals::PlannedWorkoutTarget::WattsRange { min, max } => {
+                        PlannedWorkoutTarget::WattsRange { min, max }
+                    }
+                },
+            })
+        }
     }
 }
 

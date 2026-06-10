@@ -4,10 +4,10 @@ mod service;
 
 pub use model::{
     AthleteProfileContext, FuturePlannedEventContext, HistoricalTrainingContext,
-    IntervalsStatusContext, PlannedWorkoutContext, ProjectedDayContext, ProjectedWorkoutContext,
-    RaceContext, RecentDayContext, RecentWorkoutContext, RecentWorkoutRecapContext,
-    RenderedTrainingContext, SpecialDayContext, TrainingContext, TrainingContextBuildResult,
-    UpcomingDayContext, WeeklyAvailabilityContext,
+    IntervalsStatusContext, PlannedRestDayContext, PlannedWorkoutContext, ProjectedDayContext,
+    ProjectedWorkoutContext, RaceContext, RecentDayContext, RecentWorkoutContext,
+    RecentWorkoutRecapContext, RenderedTrainingContext, SpecialDayContext, TrainingContext,
+    TrainingContextBuildResult, UpcomingDayContext, WeeklyAvailabilityContext,
 };
 pub use packing::{approximate_token_count, render_training_context};
 pub use service::{

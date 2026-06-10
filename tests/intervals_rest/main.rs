@@ -12,5 +12,6 @@ mod event_queries;
 mod fixtures;
 mod identity_fakes;
 mod intervals_fakes;
+mod planned_rest_days;
 mod races;
 mod test_support;

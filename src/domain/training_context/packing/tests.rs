@@ -36,6 +36,7 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
             discipline: "road".to_string(),
             priority: "A".to_string(),
         }],
+        planned_rest_days: Vec::new(),
         future_events: vec![FuturePlannedEventContext {
             event_id: 303,
             start_date_local: "2026-04-12T07:00:00".to_string(),
@@ -186,6 +187,7 @@ fn compact_render_omits_nulls_and_empty_lists() {
         },
         profile: AthleteProfileContext::default(),
         races: Vec::new(),
+        planned_rest_days: Vec::new(),
         future_events: Vec::new(),
         history: HistoricalTrainingContext::default(),
         recent_days: Vec::new(),
@@ -217,6 +219,7 @@ fn compact_render_omits_weekly_availability_when_not_configured() {
             ..AthleteProfileContext::default()
         },
         races: Vec::new(),
+        planned_rest_days: Vec::new(),
         future_events: Vec::new(),
         history: HistoricalTrainingContext::default(),
         recent_days: Vec::new(),

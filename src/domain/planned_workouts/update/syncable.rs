@@ -97,19 +97,18 @@ pub(super) fn map_planned_workout_to_syncable(
 
 impl SyncablePlannedWorkout {
     pub(super) fn payload_hash(&self) -> String {
-        let workout_text = if self.rest_day {
-            None
-        } else {
-            Some(crate::domain::intervals::serialize_planned_workout_for_intervals(&self.workout))
-        };
-        crate::domain::planned_workouts::planned_workout_payload_hash_parts(
+        if self.rest_day {
+            return crate::domain::planned_workouts::planned_workout_payload_hash_parts(
+                &self.date,
+                Some("Rest Day"),
+                None,
+            );
+        }
+
+        crate::domain::planned_workouts::intervals_planned_workout_payload_hash(
             &self.date,
+            &self.workout,
             self.name.as_deref(),
-            crate::domain::planned_workouts::comparable_workout_text_for_payload_hash(
-                self.name.as_deref(),
-                workout_text.as_deref(),
-            )
-            .as_deref(),
         )
     }
 

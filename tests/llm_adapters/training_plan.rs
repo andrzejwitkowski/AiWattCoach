@@ -52,6 +52,7 @@ impl TrainingContextBuilder for LargeContextTrainingContextBuilder {
                     },
                     profile: Default::default(),
                     races: Vec::new(),
+                    planned_rest_days: Vec::new(),
                     future_events: Vec::new(),
                     history: Default::default(),
                     recent_days: Vec::new(),
@@ -131,6 +132,7 @@ impl TrainingContextBuilder for UnconfiguredAvailabilityTrainingContextBuilder {
                         ..Default::default()
                     },
                     races: Vec::new(),
+                    planned_rest_days: Vec::new(),
                     future_events: Vec::new(),
                     history: Default::default(),
                     recent_days: Vec::new(),

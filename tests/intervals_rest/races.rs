@@ -16,7 +16,10 @@ use axum::{
 use tower::util::ServiceExt;
 
 use crate::{
-    app::{intervals_test_app_with_all_services, EmptyTrainingPlanProjectionRepository},
+    app::{
+        intervals_test_app_with_all_services, EmptyPlannedRestDayService,
+        EmptyTrainingPlanProjectionRepository,
+    },
     fixtures::{get_json, session_cookie},
     identity_fakes::{SessionMappedIdentityService, TestIdentityServiceWithSession},
     intervals_fakes::ScopedIntervalsService,
@@ -32,6 +35,7 @@ async fn create_race_returns_created_race_payload() {
         EmptyLabelSource,
         EmptyHiddenSource,
         race_service.clone(),
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -70,6 +74,7 @@ async fn list_races_returns_all_races() {
         EmptyLabelSource,
         EmptyHiddenSource,
         race_service,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -105,6 +110,7 @@ async fn get_race_returns_race_for_existing_id() {
         EmptyLabelSource,
         EmptyHiddenSource,
         race_service,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -134,6 +140,7 @@ async fn get_race_returns_404_for_missing_id() {
         EmptyLabelSource,
         EmptyHiddenSource,
         race_service,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -161,6 +168,7 @@ async fn update_race_returns_updated_race_payload() {
         EmptyLabelSource,
         EmptyHiddenSource,
         race_service,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -197,6 +205,7 @@ async fn delete_race_returns_204() {
         EmptyLabelSource,
         EmptyHiddenSource,
         race_service,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -225,6 +234,7 @@ async fn create_race_returns_400_for_invalid_date() {
         EmptyLabelSource,
         EmptyHiddenSource,
         race_service,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -256,6 +266,7 @@ async fn create_race_returns_400_for_blank_name() {
         EmptyLabelSource,
         EmptyHiddenSource,
         race_service,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -287,6 +298,7 @@ async fn create_race_requires_authentication() {
         EmptyLabelSource,
         EmptyHiddenSource,
         race_service,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -317,6 +329,7 @@ async fn list_races_requires_authentication() {
         EmptyLabelSource,
         EmptyHiddenSource,
         race_service,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -342,6 +355,7 @@ async fn list_races_rejects_inverted_date_range() {
         EmptyLabelSource,
         EmptyHiddenSource,
         RecordingRaceService::default(),
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -382,6 +396,7 @@ async fn list_races_is_scoped_to_authenticated_user() {
         EmptyLabelSource,
         EmptyHiddenSource,
         race_service,
+        EmptyPlannedRestDayService,
     )
     .await;
 

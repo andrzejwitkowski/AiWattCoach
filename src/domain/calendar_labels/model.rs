@@ -44,6 +44,7 @@ impl CalendarLabel {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CalendarLabelPayload {
     Race(CalendarRaceLabel),
+    PlannedRestDay(CalendarPlannedRestDayLabel),
     Activity(CalendarActivityLabel),
     Health(CalendarHealthLabel),
     Custom(CalendarCustomLabel),
@@ -53,11 +54,21 @@ impl CalendarLabelPayload {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::Race(_) => "race",
+            Self::PlannedRestDay(_) => "planned_rest_day",
             Self::Activity(_) => "activity",
             Self::Health(_) => "health",
             Self::Custom(_) => "custom",
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CalendarPlannedRestDayLabel {
+    pub planned_rest_day_id: String,
+    pub start_date: String,
+    pub end_date: String,
+    pub title: Option<String>,
+    pub note: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -9,7 +9,9 @@ use aiwattcoach::{
     config::AppState,
     domain::{
         calendar::{CalendarService, HiddenCalendarEventSource},
-        calendar_labels::{CalendarLabelSource, CalendarLabelsService},
+        calendar_labels::{
+            CalendarLabelSource, CalendarLabelsService, CompositeCalendarLabelSource,
+        },
         calendar_view::{
             BoxFuture as CalendarBoxFuture, CalendarEntryKind, CalendarEntrySync,
             CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRepository,
@@ -22,6 +24,10 @@ use aiwattcoach::{
         external_sync::NoopExternalSyncStateRepository,
         identity::{Clock, IdentityUseCases},
         intervals::{DateRange, IntervalsUseCases},
+        planned_rest_days::{
+            BoxFuture as PlannedRestDayBoxFuture, CreatePlannedRestDay, PlannedRestDay,
+            PlannedRestDayError, PlannedRestDayUseCases, UpdatePlannedRestDay,
+        },
         races::RaceUseCases,
         training_plan::{
             BoxFuture as TrainingPlanBoxFuture, TrainingPlanError, TrainingPlanProjectedDay,
@@ -288,6 +294,7 @@ pub(crate) async fn intervals_test_app_with_all_services(
     calendar_label_source: impl CalendarLabelSource + Clone + 'static,
     _hidden_calendar_event_source: impl HiddenCalendarEventSource + Clone + 'static,
     race_service: impl RaceUseCases + 'static,
+    planned_rest_day_service: impl PlannedRestDayUseCases + 'static,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = shared_frontend_fixture();
@@ -301,7 +308,9 @@ pub(crate) async fn intervals_test_app_with_all_services(
         )
         .with_completed_workouts(InMemoryCompletedWorkoutRepository::default()),
     );
-    let calendar_labels_service = Arc::new(CalendarLabelsService::new(calendar_label_source));
+    let calendar_labels_service = Arc::new(CalendarLabelsService::new(
+        CompositeCalendarLabelSource::new(calendar_label_source, EmptyCalendarLabelSource),
+    ));
     let manual_calendar_refresh_service = Arc::new(TestManualCalendarRefreshService);
 
     build_app_with_frontend_dist(
@@ -321,6 +330,7 @@ pub(crate) async fn intervals_test_app_with_all_services(
         .with_calendar_labels_service(calendar_labels_service)
         .with_manual_calendar_refresh_service(manual_calendar_refresh_service)
         .with_race_service(Arc::new(race_service))
+        .with_planned_rest_day_service(Arc::new(planned_rest_day_service))
         .with_intervals_service(Arc::new(intervals_service)),
         fixture.dist_dir(),
     )
@@ -722,6 +732,52 @@ impl CalendarLabelSource for EmptyCalendarLabelSource {
         >,
     > {
         Box::pin(async { Ok(Vec::new()) })
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct EmptyPlannedRestDayService;
+
+impl PlannedRestDayUseCases for EmptyPlannedRestDayService {
+    fn list(
+        &self,
+        _user_id: &str,
+        _range: &DateRange,
+    ) -> PlannedRestDayBoxFuture<Result<Vec<PlannedRestDay>, PlannedRestDayError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn get(
+        &self,
+        _user_id: &str,
+        _planned_rest_day_id: &str,
+    ) -> PlannedRestDayBoxFuture<Result<PlannedRestDay, PlannedRestDayError>> {
+        Box::pin(async { Err(PlannedRestDayError::NotFound) })
+    }
+
+    fn create(
+        &self,
+        _user_id: &str,
+        _request: CreatePlannedRestDay,
+    ) -> PlannedRestDayBoxFuture<Result<PlannedRestDay, PlannedRestDayError>> {
+        Box::pin(async { Err(PlannedRestDayError::Internal("not configured".to_string())) })
+    }
+
+    fn update(
+        &self,
+        _user_id: &str,
+        _planned_rest_day_id: &str,
+        _request: UpdatePlannedRestDay,
+    ) -> PlannedRestDayBoxFuture<Result<PlannedRestDay, PlannedRestDayError>> {
+        Box::pin(async { Err(PlannedRestDayError::NotFound) })
+    }
+
+    fn delete(
+        &self,
+        _user_id: &str,
+        _planned_rest_day_id: &str,
+    ) -> PlannedRestDayBoxFuture<Result<(), PlannedRestDayError>> {
+        Box::pin(async { Err(PlannedRestDayError::NotFound) })
     }
 }
 

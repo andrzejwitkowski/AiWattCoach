@@ -124,12 +124,26 @@ export const calendarCustomLabelPayloadSchema = z.object({
   value: z.string(),
 });
 
+export const calendarPlannedRestDayLabelPayloadSchema = z.object({
+  plannedRestDayId: z.string(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  title: z.string().nullable(),
+  note: z.string().nullable(),
+});
+
 export const calendarLabelSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('race'),
     title: z.string(),
     subtitle: z.string().nullable(),
     payload: calendarRaceLabelPayloadSchema,
+  }),
+  z.object({
+    kind: z.literal('planned_rest_day'),
+    title: z.string(),
+    subtitle: z.string().nullable(),
+    payload: calendarPlannedRestDayLabelPayloadSchema,
   }),
   z.object({
     kind: z.literal('activity'),
@@ -157,6 +171,7 @@ export const calendarLabelsResponseSchema = z.object({
 
 export type CalendarLabel = z.infer<typeof calendarLabelSchema>;
 export type CalendarRaceLabel = Extract<CalendarLabel, { kind: 'race' }>;
+export type CalendarPlannedRestDayLabel = Extract<CalendarLabel, { kind: 'planned_rest_day' }>;
 export type CalendarCoachConversation = z.infer<typeof calendarCoachConversationSchema>;
 export type CalendarCoachMessage = z.infer<typeof calendarCoachMessageSchema>;
 export type CalendarCoachConversationResponse = z.infer<typeof calendarCoachConversationResponseSchema>;

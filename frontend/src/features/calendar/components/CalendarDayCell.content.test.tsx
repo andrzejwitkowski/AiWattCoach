@@ -6,10 +6,10 @@ import { makeActivity, makeCalendarDay, makeEvent } from '../testData';
 import { CalendarDayCell } from './CalendarDayCell';
 
 describe('CalendarDayCell content', () => {
-  it('renders a rest day state when no data is present', () => {
+  it('renders a neutral empty state when no data is present', () => {
     render(<CalendarDayCell day={makeCalendarDay({ date: new Date(2026, 2, 23), dateKey: '2026-03-23' })} isToday={false} />);
 
-    expect(screen.getByText(/rest day/i)).toBeInTheDocument();
+    expect(screen.getByText(/no training/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /rest day/i })).not.toBeInTheDocument();
   });
 
@@ -834,5 +834,34 @@ describe('CalendarDayCell content', () => {
     render(<CalendarDayCell day={day} isToday={false} onSelect={onSelect} />);
 
     expect(screen.getByRole('button', { name: /selectable ride/i })).toBeInTheDocument();
+  });
+
+  it('renders user planned rest day labels with violet styling distinct from rest days', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 11, 24),
+      dateKey: '2026-12-24',
+      labels: [
+        {
+          kind: 'planned_rest_day',
+          title: 'Holiday',
+          subtitle: 'Family trip',
+          payload: {
+            plannedRestDayId: 'prd-1',
+            startDate: '2026-12-24',
+            endDate: '2026-12-26',
+            title: 'Holiday',
+            note: 'Family trip',
+          },
+        },
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('Holiday')).toBeInTheDocument();
+    expect(within(dayCell).getByText(/planned rest/i)).toBeInTheDocument();
+    expect(dayCell.className).toContain('border-violet-400/50');
+    expect(within(dayCell).queryByRole('button')).not.toBeInTheDocument();
   });
 });

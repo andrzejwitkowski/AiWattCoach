@@ -20,6 +20,7 @@ use crate::domain::identity::IdentityUseCases;
 use crate::domain::intervals::{IntervalsConnectionTester, IntervalsUseCases};
 use crate::domain::llm::{LlmChatPort, UserLlmConfigProvider};
 use crate::domain::meso_cycle::MesoCycleUseCases;
+use crate::domain::planned_rest_days::PlannedRestDayUseCases;
 use crate::domain::races::RaceUseCases;
 use crate::domain::settings::UserSettingsUseCases;
 use crate::domain::task_scheduler::AdminTaskSchedulerUseCases;
@@ -45,6 +46,7 @@ pub struct AppState {
     pub wahoo_service: Option<Arc<dyn WahooUseCases>>,
     pub wahoo_webhook_service: Option<Arc<dyn WahooWebhookUseCases>>,
     pub race_service: Option<Arc<dyn RaceUseCases>>,
+    pub planned_rest_day_service: Option<Arc<dyn PlannedRestDayUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     pub admin_task_scheduler_service: Option<Arc<dyn AdminTaskSchedulerUseCases>>,
     pub admin_prompt_preview_service: Option<Arc<dyn AdminPromptPreviewUseCases>>,
@@ -129,6 +131,7 @@ impl AppState {
             wahoo_service: None,
             wahoo_webhook_service: None,
             race_service: None,
+            planned_rest_day_service: None,
             settings_service: None,
             admin_task_scheduler_service: None,
             admin_prompt_preview_service: None,
@@ -322,6 +325,14 @@ impl AppState {
 
     pub fn with_race_service(mut self, race_service: Arc<dyn RaceUseCases>) -> Self {
         self.race_service = Some(race_service);
+        self
+    }
+
+    pub fn with_planned_rest_day_service(
+        mut self,
+        planned_rest_day_service: Arc<dyn PlannedRestDayUseCases>,
+    ) -> Self {
+        self.planned_rest_day_service = Some(planned_rest_day_service);
         self
     }
 

@@ -16,7 +16,10 @@ use axum::{
 use tower::util::ServiceExt;
 
 use crate::{
-    app::{intervals_test_app_with_all_services, EmptyTrainingPlanProjectionRepository},
+    app::{
+        intervals_test_app_with_all_services, EmptyPlannedRestDayService,
+        EmptyTrainingPlanProjectionRepository,
+    },
     fixtures::{get_json, session_cookie},
     identity_fakes::{SessionMappedIdentityService, TestIdentityServiceWithSession},
     intervals_fakes::ScopedIntervalsService,
@@ -31,6 +34,7 @@ async fn list_calendar_labels_returns_race_labels_grouped_by_date() {
         RaceLabelSource::with_labels(vec![race_label("race-1", "2026-03-22", "Tatra Road Race")]),
         EmptyHiddenSource,
         StubRaceService,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -105,6 +109,7 @@ async fn list_calendar_events_hides_intervals_events_linked_to_labels() {
         RaceLabelSource::default(),
         hidden_source,
         StubRaceService,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -134,6 +139,7 @@ async fn list_calendar_labels_returns_400_for_invalid_date() {
         RaceLabelSource::default(),
         EmptyHiddenSource,
         StubRaceService,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -160,6 +166,7 @@ async fn list_calendar_labels_rejects_inverted_date_range() {
         RaceLabelSource::default(),
         EmptyHiddenSource,
         StubRaceService,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -186,6 +193,7 @@ async fn list_calendar_labels_requires_authentication() {
         RaceLabelSource::default(),
         EmptyHiddenSource,
         StubRaceService,
+        EmptyPlannedRestDayService,
     )
     .await;
 
@@ -216,6 +224,7 @@ async fn list_calendar_labels_is_scoped_to_authenticated_user() {
         RaceLabelSource::with_labels(vec![race_label("race-1", "2026-03-22", "Tatra Road Race")]),
         EmptyHiddenSource,
         StubRaceService,
+        EmptyPlannedRestDayService,
     )
     .await;
 

@@ -24,4 +24,39 @@ describe('DecodedPackedContext', () => {
     expect(screen.getByText('Recovery')).toBeInTheDocument();
     expect(screen.queryByText('[2 items]')).not.toBeInTheDocument();
   });
+
+  it('renders planned rest day blocks instead of collapsing them to a count', () => {
+    render(
+      <DecodedPackedContext
+        label="Stable Context"
+        data={{
+          v: 1,
+          prd: [
+            {
+              id: 'prd-1',
+              sd: '2026-07-01',
+              ed: '2026-07-07',
+              n: 'Summer break',
+              nt: 'No structured training',
+            },
+            {
+              id: 'prd-2',
+              sd: '2026-08-01',
+              ed: '2026-08-01',
+              n: 'Travel day',
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Planned Rest Days (2)')).toBeInTheDocument();
+    expect(screen.getByText('Summer break')).toBeInTheDocument();
+    expect(screen.getByText('2026-07-01 – 2026-07-07 (7 days)')).toBeInTheDocument();
+    expect(screen.getByText('No structured training')).toBeInTheDocument();
+    expect(screen.getByText('Travel day')).toBeInTheDocument();
+    expect(screen.getByText('2026-08-01')).toBeInTheDocument();
+    expect(screen.queryByText('Other Fields')).not.toBeInTheDocument();
+    expect(screen.queryByText('[2 items]')).not.toBeInTheDocument();
+  });
 });
