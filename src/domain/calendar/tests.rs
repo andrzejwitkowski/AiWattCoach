@@ -221,7 +221,7 @@ async fn sync_planned_workout_to_intervals_uses_default_name_when_workout_has_no
         id: 78,
         start_date_local: "2026-06-12T00:00:00".to_string(),
         event_type: Some("Ride".to_string()),
-        name: Some("Planned workout".to_string()),
+        name: Some(crate::domain::intervals::DEFAULT_PLANNED_WORKOUT_NAME.to_string()),
         category: EventCategory::Workout,
         description: Some("- 60m 55%".to_string()),
         indoor: false,
@@ -256,7 +256,10 @@ async fn sync_planned_workout_to_intervals_uses_default_name_when_workout_has_no
 
     let created = intervals.created_events.lock().unwrap().clone();
     assert_eq!(created.len(), 1);
-    assert_eq!(created[0].name.as_deref(), Some("Planned workout"));
+    assert_eq!(
+        created[0].name.as_deref(),
+        Some(crate::domain::intervals::DEFAULT_PLANNED_WORKOUT_NAME)
+    );
     assert_eq!(created[0].description.as_deref(), Some("- 60m 55%"));
 }
 
