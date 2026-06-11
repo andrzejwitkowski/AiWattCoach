@@ -31,6 +31,7 @@ const INVALID_PLANNED_WORKOUT_DATE_MESSAGE: &str =
     "planned workout date must be in YYYY-MM-DD format";
 const WAHOO_SYNC_WINDOW_MESSAGE: &str =
     "Only planned workouts scheduled between today and the next 6 days can sync to Wahoo";
+
 impl<
         Intervals,
         Entries,
