@@ -31,6 +31,7 @@ const INVALID_PLANNED_WORKOUT_DATE_MESSAGE: &str =
     "planned workout date must be in YYYY-MM-DD format";
 const WAHOO_SYNC_WINDOW_MESSAGE: &str =
     "Only planned workouts scheduled between today and the next 6 days can sync to Wahoo";
+const DEFAULT_PLANNED_WORKOUT_NAME: &str = "Planned workout";
 
 impl<
         Intervals,
@@ -639,12 +640,16 @@ where
     }))
 }
 
+fn intervals_sync_event_name(day: &TrainingPlanProjectedDay) -> Option<String> {
+    projected_workout_name(day).or_else(|| Some(DEFAULT_PLANNED_WORKOUT_NAME.to_string()))
+}
+
 fn build_create_event(day: &TrainingPlanProjectedDay) -> CreateEvent {
     CreateEvent {
         category: EventCategory::Workout,
         start_date_local: projected_event_start_date_local(&day.date),
         event_type: Some("Ride".to_string()),
-        name: projected_workout_name(day),
+        name: intervals_sync_event_name(day),
         description: projected_event_sync_body(day),
         indoor: false,
         color: None,
@@ -661,7 +666,7 @@ fn build_update_event(day: &TrainingPlanProjectedDay, existing_event: &Event) ->
             .event_type
             .clone()
             .or_else(|| Some("Ride".to_string())),
-        name: projected_workout_name(day),
+        name: intervals_sync_event_name(day),
         description: preserve_event_description(
             existing_event.description.as_deref(),
             projected_event_sync_body(day).as_deref(),
