@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use chrono::NaiveDate;
 
 use crate::domain::{
-    intervals::{parse_planned_workout_days, PlannedWorkoutDay},
+    intervals::{ensure_planned_workout_title, parse_planned_workout_days, PlannedWorkoutDay},
     training_plan::split_into_day_blocks,
 };
 
@@ -13,7 +13,7 @@ fn map_parsed_day(day: PlannedWorkoutDay) -> MesoCycleDay {
     let date = day.date.clone();
     let rest_day = day.is_rest_day();
     let rest_day_reason = day.rest_day_reason().map(ToString::to_string);
-    let workout = day.into_workout();
+    let workout = day.into_workout().map(ensure_planned_workout_title);
     MesoCycleDay {
         date,
         rest_day,
@@ -107,6 +107,38 @@ fn validate_contiguous_window(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_meso_plan_window_adds_default_workout_name_when_model_omits_title() {
+        let start = NaiveDate::from_ymd_opt(2026, 6, 1).expect("valid date");
+        let end = start + chrono::Duration::days((MESO_CYCLE_WINDOW_DAY_COUNT - 1) as i64);
+        let mut plan = String::new();
+        for offset in 0..MESO_CYCLE_WINDOW_DAY_COUNT {
+            let date = (start + chrono::Duration::days(offset as i64)).format("%Y-%m-%d");
+            if offset == 5 {
+                plan.push_str(&format!("{date}\n- 60m 55%\n"));
+            } else {
+                plan.push_str(&format!("{date}\nRest Day\n"));
+            }
+        }
+
+        let days = parse_meso_plan_window(
+            &plan,
+            &start.format("%Y-%m-%d").to_string(),
+            &end.format("%Y-%m-%d").to_string(),
+        )
+        .expect("meso window should parse");
+
+        let workout_day = days
+            .iter()
+            .find(|day| day.date == "2026-06-06")
+            .expect("workout day should exist");
+        let workout = workout_day.workout.as_ref().expect("workout should exist");
+        assert_eq!(
+            workout.lines.first().and_then(|line| line.text()),
+            Some(crate::domain::intervals::DEFAULT_PLANNED_WORKOUT_NAME)
+        );
+    }
 
     #[test]
     fn rejects_window_that_does_not_match_requested_bounds() {

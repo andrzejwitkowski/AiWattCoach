@@ -4,7 +4,7 @@ use crate::domain::{
     ai_workflow::ValidationIssue,
     calendar_view::CalendarEntryViewRefreshPort,
     identity::Clock,
-    intervals::{parse_planned_workout_days, PlannedWorkoutDay},
+    intervals::{ensure_planned_workout_title, parse_planned_workout_days, PlannedWorkoutDay},
 };
 
 use super::{ParsedPlanWindow, TrainingPlanGenerationService};
@@ -97,7 +97,7 @@ where
         let date = day.date.clone();
         let rest_day = day.is_rest_day();
         let rest_day_reason = day.rest_day_reason().map(ToString::to_string);
-        let workout = day.into_workout();
+        let workout = day.into_workout().map(ensure_planned_workout_title);
         TrainingPlanDay {
             date,
             rest_day,
