@@ -48,7 +48,7 @@ pub fn assemble_meso_cycle_coach_request(
         input.training_context.rendered.volatile_context
     );
     let user_prompt = format!(
-        "Generate exactly {MESO_CYCLE_WINDOW_DAY_COUNT} dated training days from {} through {} inclusive. Return only the JSON envelope requested by the system prompt. Put parser-friendly workout-builder text in the `plan` field, include rest days explicitly when needed, and use `Rest Day: <reason>` when you prescribe full rest.",
+        "Generate exactly {MESO_CYCLE_WINDOW_DAY_COUNT} dated training days from {} through {} inclusive. Return only the JSON envelope requested by the system prompt. Put parser-friendly workout-builder text in the `plan` field, include rest days explicitly when needed, use `Rest Day: <reason>` when you prescribe full rest, and name every workout day on the first line after the date before any `-` steps.",
         input.window.meso_start, input.window.meso_end
     );
     let tool_context = ToolExecutionContext {
