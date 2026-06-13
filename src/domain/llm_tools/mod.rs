@@ -577,10 +577,16 @@ fn scope_specific_tool_guidance(
     scope: ToolScope,
     available_tool_names: &[&'static str],
 ) -> Vec<String> {
-    if scope != ToolScope::WorkoutSummaryChat {
-        return Vec::new();
+    match scope {
+        ToolScope::WorkoutSummaryChat => workout_summary_tool_guidance(available_tool_names),
+        ToolScope::TrainingPlanGeneration => {
+            training_plan_generation_tool_guidance(available_tool_names)
+        }
+        ToolScope::CalendarCoachChat => calendar_coach_tool_guidance(available_tool_names),
     }
+}
 
+fn workout_summary_tool_guidance(available_tool_names: &[&'static str]) -> Vec<String> {
     let mut guidance = Vec::new();
     let selected_workout_tool_name = GetSelectedWorkout.name();
     let selected_workout_by_id_tool_name = GetSelectedWorkoutById.name();
@@ -591,27 +597,82 @@ fn scope_specific_tool_guidance(
     let has_power_curve = available_tool_names.contains(&power_curve_tool_name);
 
     if has_selected_workout_by_id {
-        guidance.push(
-            format!(
-                "- For the currently selected workout, prefer `{selected_workout_by_id_tool_name}` so you can inspect exact workout details without guessing the date from nearby history."
-            ),
-        );
+        guidance.push(format!(
+            "- For the currently selected workout, prefer `{selected_workout_by_id_tool_name}` so you can inspect exact workout details without guessing the date from nearby history."
+        ));
     }
 
     if has_selected_workout {
-        guidance.push(
-            format!(
-                "- For workout-summary execution judgments, `{selected_workout_tool_name}` is the fallback when packed evidence like bl, ps, and cs is insufficient. It returns watts and cadence as [min,max,durationSec] segment triplets; heartrate remains full 1-second resolution."
-            ),
-        );
+        guidance.push(format!(
+            "- For workout-summary execution judgments, `{selected_workout_tool_name}` is the fallback when packed evidence like bl, ps, and cs is insufficient. It returns watts and cadence as [min,max,durationSec] segment triplets; heartrate remains full 1-second resolution."
+        ));
     }
 
     if has_power_curve {
-        guidance.push(
-            format!(
-                "- `{power_curve_tool_name}` is supplemental for duration-specific power facts and not the primary basis for deciding whether planned interval blocks were hit."
-            ),
-        );
+        guidance.push(format!(
+            "- `{power_curve_tool_name}` is supplemental for duration-specific power facts and not the primary basis for deciding whether planned interval blocks were hit."
+        ));
+    }
+
+    guidance
+}
+
+fn training_plan_generation_tool_guidance(available_tool_names: &[&'static str]) -> Vec<String> {
+    let mut guidance = Vec::new();
+    let simulate_tool_name = SimulateForwardLoad.name();
+    let power_curve_tool_name = SelectedWorkoutPowerCurve.name();
+    let selected_workout_tool_name = GetSelectedWorkout.name();
+
+    if available_tool_names.contains(&simulate_tool_name) {
+        guidance.push(format!(
+            "- Before returning the plan envelope, call `{simulate_tool_name}` at least once with no arguments to audit the current schedule, then with dated_workout_text containing your draft plan to validate forward TSB under rc.pri A/B/C rules."
+        ));
+    }
+
+    if available_tool_names.contains(&power_curve_tool_name) {
+        guidance.push(format!(
+            "- When prescribing duration-specific intensity, call `{power_curve_tool_name}` on a recent rd session instead of inferring power-duration shape from NP or TSS."
+        ));
+    }
+
+    if available_tool_names.contains(&selected_workout_tool_name) {
+        guidance.push(format!(
+            "- Read rc.pri for A/B/C race strategy; fe may supply race-day TSS inside `{simulate_tool_name}`."
+        ));
+    }
+
+    guidance
+}
+
+fn calendar_coach_tool_guidance(available_tool_names: &[&'static str]) -> Vec<String> {
+    let mut guidance = Vec::new();
+    let simulate_tool_name = SimulateForwardLoad.name();
+    let power_curve_tool_name = SelectedWorkoutPowerCurve.name();
+    let selected_workout_tool_name = GetSelectedWorkout.name();
+    let w_prime_tool_name = WPrimeBalance.name();
+
+    if available_tool_names.contains(&simulate_tool_name) {
+        guidance.push(format!(
+            "- For race-week, fatigue, or next-14-days audits, call `{simulate_tool_name}` before stating forward TSB trends."
+        ));
+    }
+
+    if available_tool_names.contains(&power_curve_tool_name) {
+        guidance.push(format!(
+            "- For power-duration or repeatability questions, call `{power_curve_tool_name}` instead of guessing from summary metrics."
+        ));
+    }
+
+    if available_tool_names.contains(&selected_workout_tool_name) {
+        guidance.push(format!(
+            "- When comparing planned bl vs executed ps on a date, call `{selected_workout_tool_name}`."
+        ));
+    }
+
+    if available_tool_names.contains(&w_prime_tool_name) {
+        guidance.push(format!(
+            "- For crit, sprint, or post-race anaerobic analysis, call `{w_prime_tool_name}`."
+        ));
     }
 
     guidance
@@ -806,6 +867,49 @@ mod tests {
         assert!(!prompt.lines().any(|line| {
             line.contains("`selected_workout_power_curve`") && line.contains("supplemental")
         }));
+    }
+
+    #[test]
+    fn calendar_coach_prompt_guidance_includes_racing_strategist_tool_workflow() {
+        let prompt = with_tool_prompt_guidance(
+            "Base prompt.",
+            ToolScope::CalendarCoachChat,
+            &LlmProvider::OpenAi,
+            &sample_tool_context(true),
+        );
+
+        assert!(prompt.contains("before stating forward TSB trends"));
+        assert!(prompt.contains("power-duration or repeatability"));
+        assert!(prompt.contains("planned bl vs executed ps"));
+        assert!(prompt.contains("get_w_prime_balance"));
+    }
+
+    #[test]
+    fn training_plan_prompt_guidance_includes_racing_strategist_tool_workflow() {
+        let prompt = with_tool_prompt_guidance(
+            "Base prompt.",
+            ToolScope::TrainingPlanGeneration,
+            &LlmProvider::OpenAi,
+            &sample_tool_context(true),
+        );
+
+        assert!(prompt.contains("Before returning the plan envelope"));
+        assert!(prompt.contains("dated_workout_text"));
+        assert!(prompt.contains("rc.pri"));
+        assert!(prompt.contains("selected_workout_power_curve"));
+    }
+
+    #[test]
+    fn training_plan_prompt_guidance_requires_simulate_forward_load_without_data_port() {
+        let prompt = with_tool_prompt_guidance(
+            "Base prompt.",
+            ToolScope::TrainingPlanGeneration,
+            &LlmProvider::OpenAi,
+            &sample_tool_context(false),
+        );
+
+        assert!(prompt.contains("Before returning the plan envelope"));
+        assert!(!prompt.contains("selected_workout_power_curve"));
     }
 
     #[test]
