@@ -7,4 +7,4 @@ pub(crate) fn non_empty_context_parts<'a>(
         .collect()
 }
 
-pub(crate) use crate::domain::llm::PACKED_TRAINING_CONTEXT_LEGEND;
+pub(crate) use crate::domain::llm::packed_training_context_legend_with_guidance;

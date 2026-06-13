@@ -26,7 +26,7 @@ pub(crate) struct VolatilePayload<'a> {
 impl<'a> VolatilePayload<'a> {
     pub(crate) fn from_context(context: &'a TrainingContext) -> Self {
         Self {
-            v: 1,
+            v: 2,
             g: context.generated_at_epoch_seconds,
             fx: CompactFocus {
                 id: context.focus_workout_id.as_deref(),
@@ -149,9 +149,9 @@ struct CompactRecentWorkout<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     vi: Option<f64>,
     #[serde(skip_serializing_if = "is_empty_slice")]
-    p3: &'a [i32],
+    ps: &'a [[i32; 3]],
     #[serde(skip_serializing_if = "is_empty_slice")]
-    c5: &'a [i32],
+    cs: &'a [[i32; 3]],
     #[serde(skip_serializing_if = "Option::is_none")]
     pw: Option<CompactPlannedWorkoutRef<'a>>,
 }
@@ -171,8 +171,8 @@ impl<'a> CompactRecentWorkout<'a> {
             rpe: workout.rpe,
             recap: workout.workout_recap.as_deref(),
             vi: workout.variability_index,
-            p3: &workout.power_values_3s,
-            c5: &workout.cadence_values_5s,
+            ps: &workout.power_segments,
+            cs: &workout.cadence_segments,
             pw: workout
                 .planned_workout
                 .as_ref()

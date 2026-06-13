@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use crate::domain::llm::{
-    build_chat_request, conversation_timing_volatile_context, LlmChatMessage, LlmChatRequest,
-    LlmChatRequestInput, LlmProviderConfig, LlmToolChoice, PACKED_TRAINING_CONTEXT_LEGEND,
+    build_chat_request, conversation_timing_volatile_context,
+    packed_training_context_legend_with_guidance, LlmChatMessage, LlmChatRequest,
+    LlmChatRequestInput, LlmProviderConfig, LlmToolChoice,
 };
 use crate::domain::llm_tools::{
     tool_definitions_for_scope, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
@@ -98,10 +99,11 @@ pub fn assemble_meso_cycle_coach_request(
 
 pub fn meso_cycle_system_prompt(availability_configured: bool) -> String {
     format!(
-        "{MESO_CYCLE_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {PACKED_TRAINING_CONTEXT_LEGEND}",
+        "{MESO_CYCLE_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {}",
         training_plan_llm_envelope_json_schema(),
         training_plan_planning_guidelines(availability_configured, MESO_CYCLE_WINDOW_DAY_COUNT),
         training_plan_output_grammar(),
+        packed_training_context_legend_with_guidance()
     )
 }
 

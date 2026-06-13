@@ -1,3 +1,9 @@
+mod segments;
+
+pub use segments::{
+    bucket_and_encode_cadence_segments, bucket_and_encode_power_segments, SegmentTriplet,
+};
+
 pub const POWER_BUCKET_SECONDS: usize = 3;
 pub const CADENCE_BUCKET_SECONDS: usize = 5;
 

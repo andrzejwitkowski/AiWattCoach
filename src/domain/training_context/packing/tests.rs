@@ -83,8 +83,8 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
                 activity_id: "ride-1".to_string(),
                 start_date_local: "2026-04-01T08:00:00".to_string(),
                 workout_recap: Some("Held power well and finished controlled".to_string()),
-                power_values_3s: vec![220, 270],
-                cadence_values_5s: vec![85, 88],
+                power_segments: vec![[220, 220, 3], [270, 270, 3]],
+                cadence_segments: vec![[87, 87, 5]],
                 planned_workout: Some(PlannedWorkoutReference {
                     event_id: 101,
                     start_date_local: "2026-04-01T07:00:00".to_string(),
@@ -155,8 +155,12 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
     assert!(rendered
         .volatile_context
         .contains("\"sickn\":\"felt unwell\""));
-    assert!(rendered.volatile_context.contains("\"p3\":[220,270]"));
+    assert!(rendered.volatile_context.contains("\"v\":2"));
+    assert!(rendered
+        .volatile_context
+        .contains("\"ps\":[[220,220,3],[270,270,3]]"));
     assert!(!rendered.volatile_context.contains("\"pc\":"));
+    assert!(!rendered.volatile_context.contains("\"p3\":"));
     assert!(rendered
         .volatile_context
         .contains("\"recap\":\"Held power well and finished controlled\""));
@@ -230,4 +234,20 @@ fn compact_render_omits_weekly_availability_when_not_configured() {
 
     assert!(rendered.stable_context.contains("\"acfg\":false"));
     assert!(!rendered.stable_context.contains("\"av\":"));
+}
+
+#[test]
+fn segment_encoding_reduces_prompt_size_for_steady_ride() {
+    use crate::domain::workout_streams;
+
+    let steady_watts = vec![245; 7200];
+    let bucket_array =
+        workout_streams::average_into_buckets(&steady_watts, workout_streams::POWER_BUCKET_SECONDS);
+    let segments = workout_streams::bucket_and_encode_power_segments(&steady_watts);
+
+    let bucket_json = serde_json::to_string(&bucket_array).expect("bucket json");
+    let segment_json = serde_json::to_string(&segments).expect("segment json");
+
+    assert!(segments.len() < bucket_array.len() / 10);
+    assert!(segment_json.len() < bucket_json.len() / 10);
 }

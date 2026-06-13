@@ -279,8 +279,9 @@ async fn training_plan_generator_describes_packed_context_legend_in_system_promp
     assert!(prompt.contains("rd=recent days"));
     assert!(prompt.contains("ud=upcoming days"));
     assert!(prompt.contains("pd=projected days"));
-    assert!(prompt.contains("p3=power watts in 3-second buckets"));
-    assert!(prompt.contains("p3 is the full average-watts series in 3-second buckets"));
+    assert!(prompt.contains("ps=executed power segments"));
+    assert!(prompt.contains("[minW,maxW,durationSec]"));
+    assert!(!prompt.contains("p3=power watts in 3-second buckets"));
 }
 
 #[tokio::test]
