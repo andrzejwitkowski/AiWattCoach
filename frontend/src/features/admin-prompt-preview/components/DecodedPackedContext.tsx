@@ -405,7 +405,7 @@ function buildRecentDays(rd: unknown[]) {
             <details key={i}>
               <summary className="cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm">
                 <span className="text-slate-300">{String(d.d ?? '')}</span>
-                {d.fr ? <span className="ml-2 text-xs text-cyan-400">Free day</span> : null}
+                {d.fr ? <span className="ml-2 text-xs text-cyan-400">Calendar Empty</span> : null}
                 {d.sick ? <span className="ml-2 text-xs text-red-400">Sick</span> : null}
                 {Array.isArray(d.w) && d.w.length > 0 ? (
                   <span className="ml-2 text-xs text-slate-500">
