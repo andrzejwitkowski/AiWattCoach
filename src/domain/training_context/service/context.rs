@@ -13,7 +13,6 @@ use crate::domain::{
         RecentDayContext, RecentWorkoutContext, SpecialDayContext, UpcomingDayContext,
     },
     training_load::{FtpHistoryEntry, TrainingLoadDailySnapshot},
-    workout_streams,
 };
 
 use super::{
@@ -22,7 +21,7 @@ use super::{
         average_metric, average_recent_tss, build_daily_tss_map, build_load_trend, ewma_latest,
         recent_slice,
     },
-    power::{extract_and_average_stream, extract_power_values_3s},
+    power::{extract_cadence_segments_5s, extract_power_segments_3s},
 };
 
 pub(super) fn build_historical_context(
@@ -38,10 +37,10 @@ pub(super) fn build_historical_context(
     let workouts = activities
         .iter()
         .map(|activity| {
-            let power_values_3s = workout_sources
+            let power_segments = workout_sources
                 .detailed_activities_by_id
                 .get(&activity.id)
-                .map(|detailed| extract_power_values_3s(&detailed.details.streams))
+                .map(|detailed| extract_power_segments_3s(&detailed.details.streams))
                 .unwrap_or_default();
 
             HistoricalWorkoutContext {
@@ -62,7 +61,7 @@ pub(super) fn build_historical_context(
                     .get(&activity.id)
                     .cloned(),
                 variability_index: activity.metrics.variability_index,
-                power_values_3s,
+                power_segments,
                 interval_blocks: workout_sources
                     .recent_interval_blocks_by_activity_id
                     .get(&activity.id)
@@ -406,12 +405,8 @@ fn build_recent_workout(
     configured_ftp: Option<i32>,
 ) -> RecentWorkoutContext {
     let resolved_ftp = activity.metrics.ftp_watts.or(configured_ftp);
-    let power_values_3s = extract_power_values_3s(&activity.details.streams);
-    let cadence_values_5s = extract_and_average_stream(
-        &activity.details.streams,
-        "cadence",
-        workout_streams::CADENCE_BUCKET_SECONDS,
-    );
+    let power_segments = extract_power_segments_3s(&activity.details.streams);
+    let cadence_segments = extract_cadence_segments_5s(&activity.details.streams);
     let planned_workout = matched_event.map(|event| {
         let parsed = parse_workout_doc(event.structured_workout_text(), resolved_ftp);
 
@@ -461,8 +456,8 @@ fn build_recent_workout(
                 .and_then(|id| workout_recaps_by_id.get(id).cloned())
         }),
         variability_index: activity.metrics.variability_index,
-        power_values_3s,
-        cadence_values_5s,
+        power_segments,
+        cadence_segments,
         planned_workout,
     }
 }

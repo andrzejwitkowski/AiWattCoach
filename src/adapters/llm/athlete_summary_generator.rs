@@ -6,12 +6,16 @@ use crate::domain::{
     llm::{
         build_chat_request, conversation_timing_volatile_context, hash_text, LlmChatMessage,
         LlmChatPort, LlmChatRequestInput, LlmChatResponse, LlmError, LlmMessageRole,
-        UserLlmConfigProvider,
+        UserLlmConfigProvider, ATHLETE_SUMMARY_CALENDAR_GUARD,
     },
     training_context::TrainingContextBuilder,
 };
 
-const ATHLETE_SUMMARY_SYSTEM_PROMPT: &str = "You are an elite endurance coach. Write a concise bird's-eye 360 view of the athlete using the supplied training context. Summarize profile, training patterns, strengths, weaknesses, likely limiters, fatigue/load tendencies, and practical coaching considerations. Do not dump raw data arrays or reproduce raw JSON. Prefer compact prose and short bullet-like sections in plain text.";
+fn athlete_summary_system_prompt() -> String {
+    format!(
+        "You are an elite endurance coach. Write a concise bird's-eye 360 view of the athlete using the supplied training context. Summarize profile, training patterns, strengths, weaknesses, likely limiters, fatigue/load tendencies, and practical coaching observations. Do not dump raw data arrays or reproduce raw JSON. Prefer compact prose and short bullet-like sections in plain text. {ATHLETE_SUMMARY_CALENDAR_GUARD} Do not invent section titles implying configured calendar facts. Keep load/fatigue observations observational, not scheduled time off."
+    )
+}
 
 #[derive(Clone)]
 pub struct AthleteSummaryLlmGenerator<Time>
@@ -75,7 +79,7 @@ where
             let user_prompt = "Create an up-to-date athlete summary for future coaching conversations. Keep it textual, high signal, and do not include raw data dumps.";
             let request = build_chat_request(LlmChatRequestInput {
                 user_id: user_id.clone(),
-                system_prompt: ATHLETE_SUMMARY_SYSTEM_PROMPT.to_string(),
+                system_prompt: athlete_summary_system_prompt(),
                 stable_context: stable_context.clone(),
                 volatile_context,
                 conversation: vec![LlmChatMessage {
@@ -97,6 +101,13 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn athlete_summary_system_prompt_forbids_unconfigured_vacation_claims() {
+        let prompt = super::athlete_summary_system_prompt();
+        assert!(prompt.contains("unless it appears in packed prd"));
+        assert!(prompt.contains("fr:true"));
+    }
+
     #[test]
     fn athlete_summary_volatile_context_includes_conversation_timing() {
         let volatile_context = format!(

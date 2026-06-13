@@ -10,7 +10,10 @@ mod preview_messages;
 mod request_builder;
 mod transcript;
 
-pub(crate) use context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
+pub use context_prelude::{
+    packed_training_context_legend_with_guidance, ATHLETE_SUMMARY_CALENDAR_GUARD,
+    PACKED_CALENDAR_AUTHORITY_GUIDANCE, PACKED_TRAINING_CONTEXT_LEGEND,
+};
 pub(crate) use transcript::{
     final_assistant_text, last_nonempty_assistant_content, merge_provider_transcript_entries,
     next_provider_transcript_updated_at_epoch_seconds, provider_transcript_from_legacy_response,

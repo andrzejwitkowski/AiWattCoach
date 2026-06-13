@@ -99,6 +99,9 @@ async fn llm_workout_coach_includes_athlete_summary_in_stable_context() {
     assert_eq!(requests.len(), 1);
     assert!(requests[0]
         .stable_context
+        .contains("athlete_summary_guidance="));
+    assert!(requests[0]
+        .stable_context
         .contains("athlete_summary_text=Athlete is durable, handles load well"));
 }
 
@@ -127,7 +130,7 @@ async fn llm_workout_coach_includes_current_workout_recap_in_stable_context() {
 }
 
 #[tokio::test]
-async fn llm_workout_coach_describes_true_p3_power_in_system_prompt() {
+async fn llm_workout_coach_describes_ps_cs_segments_in_system_prompt() {
     let chat_port = Arc::new(CapturingChatPort::default());
     let coach = LlmWorkoutCoach::new(
         chat_port.clone(),
@@ -142,10 +145,13 @@ async fn llm_workout_coach_describes_true_p3_power_in_system_prompt() {
         .unwrap();
 
     let prompt = &chat_port.requests()[0].system_prompt;
-    assert!(prompt.contains("p3 as executed power in 3-second average watts"));
-    assert!(prompt.contains("p3=power watts in 3-second buckets"));
-    assert!(prompt.contains("c5=cadence values in 5-second buckets"));
-    assert!(prompt.contains("judge execution quality primarily from packed workout evidence"));
+    assert!(prompt.contains("ps (executed power segments)"));
+    assert!(prompt.contains("ps=executed power segments"));
+    assert!(prompt.contains("cs=executed cadence segments"));
+    assert!(prompt.contains("judge interval execution primarily from bl"));
+    assert!(!prompt.contains("p3=power watts"));
+    assert!(!prompt.contains("c5=cadence values"));
+    assert!(!prompt.contains("level:seconds"));
 }
 
 #[test]

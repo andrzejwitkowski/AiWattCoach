@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use super::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
+use super::context_prelude::packed_training_context_legend_with_guidance;
 
 use crate::domain::{
     ai_workflow::ValidationIssue,
@@ -531,7 +531,10 @@ async fn request_training_plan_envelope_repair(
 }
 
 fn training_plan_recap_system_prompt() -> String {
-    format!("{TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE} {PACKED_TRAINING_CONTEXT_LEGEND}")
+    format!(
+        "{TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE} {}",
+        packed_training_context_legend_with_guidance()
+    )
 }
 
 fn training_plan_envelope_repair_system_prompt() -> String {
@@ -550,25 +553,21 @@ fn training_plan_envelope_repair_user_prompt(previous_assistant_content: &str) -
 
 fn training_plan_initial_window_system_prompt(availability_configured: bool) -> String {
     format!(
-        "{TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {PACKED_TRAINING_CONTEXT_LEGEND}",
+        "{TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {}",
         training_plan_llm_envelope_json_schema(),
-        training_plan_planning_guidelines(
-            availability_configured,
-            TRAINING_PLAN_WINDOW_DAY_COUNT,
-        ),
+        training_plan_planning_guidelines(availability_configured, TRAINING_PLAN_WINDOW_DAY_COUNT,),
         training_plan_output_grammar(),
+        packed_training_context_legend_with_guidance()
     )
 }
 
 fn training_plan_correction_system_prompt(availability_configured: bool) -> String {
     format!(
-        "{TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {PACKED_TRAINING_CONTEXT_LEGEND}",
+        "{TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {}",
         training_plan_llm_envelope_json_schema(),
-        training_plan_planning_guidelines(
-            availability_configured,
-            TRAINING_PLAN_WINDOW_DAY_COUNT,
-        ),
+        training_plan_planning_guidelines(availability_configured, TRAINING_PLAN_WINDOW_DAY_COUNT,),
         training_plan_output_grammar(),
+        packed_training_context_legend_with_guidance()
     )
 }
 

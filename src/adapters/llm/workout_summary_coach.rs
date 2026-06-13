@@ -278,12 +278,16 @@ mod tests {
         assert!(prompt.contains(r#""freeTextLabel""#));
         assert!(prompt.contains(r#""additionalProperties": false"#));
         assert!(prompt.contains(
-            "For completed interval workouts, judge execution quality primarily from packed workout evidence"
+            "For completed interval workouts, judge interval execution primarily from bl"
         ));
-        assert!(prompt.contains("bl as intended block structure/targets"));
-        assert!(prompt.contains("p3 as executed power in 3-second average watts"));
-        assert!(prompt.contains("p3=power watts in 3-second buckets"));
-        assert!(prompt.contains("c5 as supporting cadence evidence"));
+        assert!(prompt.contains("ps (executed power segments)"));
+        assert!(prompt.contains("ps=executed power segments"));
+        assert!(
+            prompt.contains("cs ([minRPM,maxRPM,durationSec]) as supporting cadence evidence only")
+        );
+        assert!(prompt.contains("Never tell the athlete they have free time, vacation, or a rest block unless prd confirms it"));
+        assert!(!prompt.contains("p3 as executed power"));
+        assert!(!prompt.contains("p3=power watts"));
         assert!(prompt.contains(
             "Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only"
         ));
@@ -319,6 +323,29 @@ mod tests {
         assert!(context.contains(
             "current_workout_context=You are discussing the completed workout from 2026-05-29."
         ));
+    }
+
+    #[test]
+    fn build_stable_context_wraps_athlete_summary_with_guidance() {
+        let summary = crate::domain::workout_summary::WorkoutSummary::new(
+            "summary-1".to_string(),
+            "user-1".to_string(),
+            "workout-1".to_string(),
+            1,
+        );
+
+        let context = build_stable_context(
+            &summary,
+            "2026-05-29",
+            "{}",
+            Some("Durable athlete with strong threshold repeatability."),
+            None,
+        );
+
+        assert!(context.contains("athlete_summary_guidance="));
+        assert!(context.contains("NOT calendar truth"));
+        assert!(context
+            .contains("athlete_summary_text=Durable athlete with strong threshold repeatability."));
     }
 
     #[test]
