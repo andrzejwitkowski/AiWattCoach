@@ -1,16 +1,16 @@
-use crate::domain::{intervals::ActivityStream, workout_streams};
+use crate::domain::{
+    intervals::ActivityStream,
+    workout_streams::{self, SegmentTriplet},
+};
 
-pub(super) fn extract_and_average_stream(
-    streams: &[ActivityStream],
-    stream_type: &str,
-    bucket_size: usize,
-) -> Vec<i32> {
-    let values = extract_raw_stream(streams, stream_type);
-    workout_streams::average_into_buckets(&values, bucket_size)
+pub(super) fn extract_power_segments_3s(streams: &[ActivityStream]) -> Vec<SegmentTriplet> {
+    let values = extract_raw_stream(streams, "watts");
+    workout_streams::bucket_and_encode_power_segments(&values)
 }
 
-pub(super) fn extract_power_values_3s(streams: &[ActivityStream]) -> Vec<i32> {
-    extract_and_average_stream(streams, "watts", workout_streams::POWER_BUCKET_SECONDS)
+pub(super) fn extract_cadence_segments_5s(streams: &[ActivityStream]) -> Vec<SegmentTriplet> {
+    let values = extract_raw_stream(streams, "cadence");
+    workout_streams::bucket_and_encode_cadence_segments(&values)
 }
 
 fn extract_raw_stream(streams: &[ActivityStream], stream_type: &str) -> Vec<i32> {

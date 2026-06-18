@@ -7,8 +7,8 @@ use crate::domain::{
     planned_workouts::PlannedWorkout,
     races::Race,
     workout_streams::{
-        average_into_buckets, is_llm_workout_stream_type, CADENCE_BUCKET_SECONDS,
-        POWER_BUCKET_SECONDS,
+        bucket_and_encode_cadence_segments, bucket_and_encode_power_segments,
+        is_llm_workout_stream_type, SegmentTriplet,
     },
     workout_summary::{MessageRole, WorkoutSummary},
 };
@@ -215,19 +215,19 @@ fn serialize_primary_stream(
     };
 
     if stream_type.eq_ignore_ascii_case("watts") {
-        return serialize_integer_buckets(series, POWER_BUCKET_SECONDS);
+        return serialize_segment_triplets(series, bucket_and_encode_power_segments);
     }
 
     if stream_type.eq_ignore_ascii_case("cadence") {
-        return serialize_integer_buckets(series, CADENCE_BUCKET_SECONDS);
+        return serialize_segment_triplets(series, bucket_and_encode_cadence_segments);
     }
 
     serialize_full_series(series)
 }
 
-fn serialize_integer_buckets(
+fn serialize_segment_triplets(
     series: &CompletedWorkoutSeries,
-    bucket_seconds: usize,
+    encode: fn(&[i32]) -> Vec<SegmentTriplet>,
 ) -> Vec<serde_json::Value> {
     let CompletedWorkoutSeries::Integers(values) = series else {
         return serialize_full_series(series);
@@ -238,9 +238,9 @@ fn serialize_integer_buckets(
         .map(|&value| i32::try_from(value).unwrap_or(0))
         .collect();
 
-    average_into_buckets(&samples, bucket_seconds)
+    encode(&samples)
         .into_iter()
-        .map(|value| json!(value))
+        .map(|triplet| json!(triplet))
         .collect()
 }
 

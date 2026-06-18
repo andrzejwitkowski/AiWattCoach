@@ -40,7 +40,7 @@ impl LlmTool for GetSelectedWorkout {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Get detailed workout data for a specific date. Returns completed workouts with full statistics, streams limited to watts (3-second buckets), cadence (5-second buckets), and heartrate (1-second resolution); total distance is in distance_meters, not as a stream. Also returns planned workouts (if future or not completed) and basic race info if no completed workout exists for that day.".to_string(),
+            description: "Get detailed workout data for a specific date. Returns completed workouts with full statistics, streams limited to watts and cadence as [min,max,durationSec] segment triplets and heartrate (1-second resolution); total distance is in distance_meters, not as a stream. Also returns planned workouts (if future or not completed) and basic race info if no completed workout exists for that day.".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,
@@ -58,7 +58,7 @@ impl LlmTool for GetSelectedWorkout {
 
     fn prompt_guidance(&self) -> Option<&'static str> {
         Some(
-            "use when packed p3/c5/bl evidence is insufficient; watts in the response are true 3-second average watts",
+            "use when packed ps/cs/bl evidence is insufficient; watts and cadence in the response are [min,max,durationSec] segment triplets",
         )
     }
 

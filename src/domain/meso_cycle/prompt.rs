@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use crate::domain::llm::{
-    build_chat_request, conversation_timing_volatile_context, LlmChatMessage, LlmChatRequest,
-    LlmChatRequestInput, LlmProviderConfig, LlmToolChoice, PACKED_TRAINING_CONTEXT_LEGEND,
+    build_chat_request, conversation_timing_volatile_context,
+    packed_training_context_legend_with_guidance, LlmChatMessage, LlmChatRequest,
+    LlmChatRequestInput, LlmProviderConfig, LlmToolChoice,
 };
 use crate::domain::llm_tools::{
     tool_definitions_for_scope, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
@@ -48,7 +49,7 @@ pub fn assemble_meso_cycle_coach_request(
         input.training_context.rendered.volatile_context
     );
     let user_prompt = format!(
-        "Generate exactly {MESO_CYCLE_WINDOW_DAY_COUNT} dated training days from {} through {} inclusive. Return only the JSON envelope requested by the system prompt. Put parser-friendly workout-builder text in the `plan` field, include rest days explicitly when needed, and use `Rest Day: <reason>` when you prescribe full rest.",
+        "Generate exactly {MESO_CYCLE_WINDOW_DAY_COUNT} dated training days from {} through {} inclusive. Return only the JSON envelope requested by the system prompt. Put parser-friendly workout-builder text in the `plan` field, include rest days explicitly when needed, use `Rest Day: <reason>` when you prescribe full rest, and name every workout day on the first line after the date before any `-` steps.",
         input.window.meso_start, input.window.meso_end
     );
     let tool_context = ToolExecutionContext {
@@ -98,10 +99,11 @@ pub fn assemble_meso_cycle_coach_request(
 
 pub fn meso_cycle_system_prompt(availability_configured: bool) -> String {
     format!(
-        "{MESO_CYCLE_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {PACKED_TRAINING_CONTEXT_LEGEND}",
+        "{MESO_CYCLE_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {}",
         training_plan_llm_envelope_json_schema(),
         training_plan_planning_guidelines(availability_configured, MESO_CYCLE_WINDOW_DAY_COUNT),
         training_plan_output_grammar(),
+        packed_training_context_legend_with_guidance()
     )
 }
 

@@ -5,7 +5,7 @@ use crate::domain::{
     meso_cycle::{MesoCycleProjectedDay, MesoCycleProjectionRepository},
 };
 
-pub const MESO_CYCLE_ROADMAP_GUIDANCE: &str = "This section is a predicted, suggested mesocycle roadmap for upcoming training. It may change as the athlete trains and plans evolve. It was created as general strategic orientation and help, not a rigid schedule the athlete must follow or that you must defend.";
+pub const MESO_CYCLE_ROADMAP_GUIDANCE: &str = "This section is a predicted, suggested mesocycle roadmap for upcoming training. It may change as the athlete trains and plans evolve. It was created as general strategic orientation and help, not a rigid schedule the athlete must follow or that you must defend. Do not cite it as current vacation, configured rest, or proof the athlete has free time.";
 
 pub fn format_meso_roadmap_stable_context(days: &[MesoCycleProjectedDay]) -> Option<String> {
     if days.is_empty() {

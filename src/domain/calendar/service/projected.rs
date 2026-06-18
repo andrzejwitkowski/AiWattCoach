@@ -6,6 +6,7 @@ use crate::domain::{
         PlannedWorkoutSyncStatus,
     },
     external_sync::{ExternalProvider, ExternalSyncState, ExternalSyncStatus},
+    intervals::DEFAULT_PLANNED_WORKOUT_NAME,
     training_plan::TrainingPlanProjectedDay,
 };
 
@@ -58,11 +59,12 @@ pub(super) fn projected_workout_name(day: &TrainingPlanProjectedDay) -> Option<S
         return Some("Rest Day".to_string());
     }
 
-    day.workout.as_ref().and_then(|workout| {
+    day.workout.as_ref().map(|workout| {
         workout
             .lines
             .iter()
             .find_map(|line| line.text().map(ToString::to_string))
+            .unwrap_or_else(|| DEFAULT_PLANNED_WORKOUT_NAME.to_string())
     })
 }
 

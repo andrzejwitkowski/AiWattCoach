@@ -20,10 +20,11 @@ pub use pest_parser_poc::{
     PestParserPocSource, PestParserPocStatus, PestParserPocWorkoutRecord, PestParserPocWriter,
 };
 pub use planned_workout::{
-    parse_planned_workout, parse_planned_workout_days, serialize_planned_workout,
-    serialize_planned_workout_for_intervals, PlannedWorkout, PlannedWorkoutDay, PlannedWorkoutDays,
-    PlannedWorkoutLine, PlannedWorkoutParseError, PlannedWorkoutRepeat, PlannedWorkoutStep,
-    PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
+    ensure_planned_workout_title, parse_planned_workout, parse_planned_workout_days,
+    serialize_planned_workout, serialize_planned_workout_for_intervals, PlannedWorkout,
+    PlannedWorkoutDay, PlannedWorkoutDays, PlannedWorkoutLine, PlannedWorkoutParseError,
+    PlannedWorkoutRepeat, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
+    PlannedWorkoutText, DEFAULT_PLANNED_WORKOUT_NAME,
 };
 pub use ports::{
     ActivityFileIdentityExtractorPort, ActivityRepositoryPort,

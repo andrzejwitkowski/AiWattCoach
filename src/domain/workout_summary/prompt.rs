@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::domain::llm::{
     build_chat_request, coach_planning_literature_guidance, conversation_timing_volatile_context,
-    rebuild_conversation_with_provider_transcript, timestamped_message_content, LlmChatMessage,
-    LlmChatRequest, LlmChatRequestInput, LlmMessageRole, LlmProviderConfig, LlmToolChoice,
-    PACKED_TRAINING_CONTEXT_LEGEND,
+    packed_training_context_legend_with_guidance, rebuild_conversation_with_provider_transcript,
+    timestamped_message_content, LlmChatMessage, LlmChatRequest, LlmChatRequestInput,
+    LlmMessageRole, LlmProviderConfig, LlmToolChoice,
 };
 use crate::domain::llm_tools::{
     tool_definitions_for_scope, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
@@ -18,7 +18,9 @@ use super::{
 
 pub const ADMIN_PREVIEW_USER_MESSAGE: &str = "Preview: [admin] sample athlete message";
 
-const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background. Be direct, adult, and concise. Do not flatter, hedge, or act like a yes-man. Challenge weak reasoning when the context does not support it. Keep the conversation focused and practical rather than digressive. In your first reply after a workout, ask all follow-up questions you genuinely need at once instead of stretching them across many turns. The athlete should still feel coached, not interrogated. Ask concrete questions about the workout limiter, legs, breathing, fueling, sleep, stress, pain, readiness for the next days, and any plan constraints when relevant. Add other questions only when the workout characteristics clearly justify them. You may also ask about nutrition, race strategy, or the desired direction of the next 14 days when that would materially improve the next plan. For completed interval workouts, judge execution quality primarily from packed workout evidence: bl as intended block structure/targets, p3 as executed power in 3-second average watts, and c5 as supporting cadence evidence. Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only and are not sufficient proof that interval blocks were or were not executed correctly. Do not conclude poor interval execution just because whole-workout averages were lowered by recovery valleys, coasting, zeros, terrain, or wind. If the packed evidence is insufficient for a confident execution judgment, inspect higher-fidelity data before making a strong claim. When workout tools are available, use them for that fallback. If you already have enough information to generate the plan, say that clearly and tell the athlete to save the summary. Return your final answer as JSON only matching the workout summary coach reply schema. The summary may use markdown. Questions may be an empty array when you are ready. Do not output any text outside the JSON object. Do not invent details beyond the provided context.";
+const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background. Be direct, adult, and concise. Do not flatter, hedge, or act like a yes-man. Challenge weak reasoning when the context does not support it. Keep the conversation focused and practical rather than digressive. In your first reply after a workout, ask all follow-up questions you genuinely need at once instead of stretching them across many turns. The athlete should still feel coached, not interrogated. Ask concrete questions about the workout limiter, legs, breathing, fueling, sleep, stress, pain, readiness for the next days, and any plan constraints when relevant. Add other questions only when the workout characteristics clearly justify them. You may also ask about nutrition, race strategy, or the desired direction of the next 14 days when that would materially improve the next plan. For completed interval workouts, judge interval execution primarily from bl (planned block targets) against ps (executed power segments). Read each ps entry as [minW,maxW,durationSec] in chronological order before comparing to bl. Use cs ([minRPM,maxRPM,durationSec]) as supporting cadence evidence only. Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only and are not sufficient proof that interval blocks were or were not executed correctly. Do not conclude poor interval execution just because whole-workout averages were lowered by recovery valleys, coasting, zeros, terrain, or wind. If the packed evidence is insufficient for a confident execution judgment, inspect higher-fidelity data before making a strong claim. When workout tools are available, use them for that fallback. Never tell the athlete they have free time, vacation, or a rest block unless prd confirms it or pd/ud/pw show it; if the athlete challenges such a claim, cite the exact packed field or admit it was unsupported. If you already have enough information to generate the plan, say that clearly and tell the athlete to save the summary. Return your final answer as JSON only matching the workout summary coach reply schema. The summary may use markdown. Questions may be an empty array when you are ready. Do not output any text outside the JSON object. Do not invent details beyond the provided context.";
+
+pub const ATHLETE_SUMMARY_GUIDANCE: &str = "AI-generated athlete orientation only; NOT calendar truth. Never tell the athlete they have free time, vacation, or a rest block based on this text alone. For any schedule/rest/availability claim, verify packed prd, pd, ud, and pw first.";
 
 const WORKOUT_COACH_SELECTED_WORKOUT_PROMPT: &str = "Use the provided selected workout date as the active workout context for this conversation. When inspecting the current workout, prefer that exact selected workout date or id instead of inferring from nearby history.";
 
@@ -113,8 +115,9 @@ fn apply_tool_scope(
 
 pub fn workout_coach_system_prompt() -> String {
     format!(
-        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\n{WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT}\nworkout_summary_coach_reply_schema={}\n{PACKED_TRAINING_CONTEXT_LEGEND}\n{WORKOUT_COACH_PLANNING_LITERATURE_FRAMING}\n{}",
+        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\n{WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT}\nworkout_summary_coach_reply_schema={}\n{}\n{WORKOUT_COACH_PLANNING_LITERATURE_FRAMING}\n{}",
         workout_summary_coach_reply_json_schema(),
+        packed_training_context_legend_with_guidance(),
         coach_planning_literature_guidance(),
     )
 }
@@ -139,6 +142,9 @@ pub fn build_stable_context(
     );
 
     if let Some(summary_text) = athlete_summary_text.filter(|value| !value.trim().is_empty()) {
+        context.push_str(&format!(
+            "\nathlete_summary_guidance={ATHLETE_SUMMARY_GUIDANCE}"
+        ));
         context.push_str(&format!("\nathlete_summary_text={summary_text}"));
     }
 

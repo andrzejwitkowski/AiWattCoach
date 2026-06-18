@@ -1,3 +1,9 @@
+mod segments;
+
+pub use segments::{
+    bucket_and_encode_cadence_segments, bucket_and_encode_power_segments, SegmentTriplet,
+};
+
 pub fn is_llm_workout_stream_type(stream_type: &str) -> bool {
     stream_type.eq_ignore_ascii_case("watts")
         || stream_type.eq_ignore_ascii_case("cadence")

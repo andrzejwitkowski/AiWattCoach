@@ -216,6 +216,54 @@ async fn sync_planned_workout_to_intervals_sends_structured_workout_as_descripti
 }
 
 #[tokio::test]
+async fn sync_planned_workout_to_intervals_uses_default_name_when_workout_has_no_title_line() {
+    let intervals = FakeIntervalsService::with_created_event(Event {
+        id: 78,
+        start_date_local: "2026-06-12T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some(crate::domain::intervals::DEFAULT_PLANNED_WORKOUT_NAME.to_string()),
+        category: EventCategory::Workout,
+        description: Some("- 60m 55%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    });
+    let service = CalendarService::new(
+        intervals.clone(),
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![projected_day_with_doc(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2026-06-12",
+            "- 60m 55%",
+        )]),
+        InMemoryExternalSyncStateRepository::default(),
+        FixedClock,
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default());
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2026-06-12".to_string(),
+                provider: PlannedWorkoutSyncProvider::Intervals,
+            },
+        )
+        .await
+        .unwrap();
+
+    let created = intervals.created_events.lock().unwrap().clone();
+    assert_eq!(created.len(), 1);
+    assert_eq!(
+        created[0].name.as_deref(),
+        Some(crate::domain::intervals::DEFAULT_PLANNED_WORKOUT_NAME)
+    );
+    assert_eq!(created[0].description.as_deref(), Some("- 60m 55%"));
+}
+
+#[tokio::test]
 async fn sync_planned_workout_to_intervals_uses_local_calendar_override_when_retrying_after_update_failure(
 ) {
     let intervals = FakeIntervalsService::with_created_event(Event {

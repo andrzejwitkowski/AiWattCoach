@@ -23,7 +23,7 @@ pub(crate) struct StablePayload<'a> {
 impl<'a> StablePayload<'a> {
     pub(crate) fn from_context(context: &'a TrainingContext) -> Self {
         Self {
-            v: 1,
+            v: 2,
             i: CompactIntervalsStatus::from_status(&context.intervals_status),
             p: CompactProfile::from_profile(&context.profile),
             rc: context.races.iter().map(CompactRace::from_race).collect(),
@@ -328,7 +328,7 @@ struct CompactHistoricalWorkout<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     vi: Option<f64>,
     #[serde(skip_serializing_if = "crate::domain::training_context::packing::is_empty_slice")]
-    p3: &'a [i32],
+    ps: &'a [[i32; 3]],
     #[serde(skip_serializing_if = "Vec::is_empty")]
     bl: Vec<CompactPlannedWorkoutBlock>,
 }
@@ -348,7 +348,7 @@ impl<'a> CompactHistoricalWorkout<'a> {
             ftp: workout.ftp_watts,
             recap: workout.workout_recap.as_deref(),
             vi: workout.variability_index,
-            p3: &workout.power_values_3s,
+            ps: &workout.power_segments,
             bl: workout
                 .interval_blocks
                 .iter()

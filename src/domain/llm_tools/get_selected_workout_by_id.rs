@@ -29,7 +29,7 @@ impl LlmTool for GetSelectedWorkoutById {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Get detailed workout data for a specific frontend-visible workout id. Use this for the currently selected workout instead of inferring a date from nearby history. Returns completed workouts with full statistics, streams limited to watts (3-second buckets), cadence (5-second buckets), and heartrate (1-second resolution); total distance is in distance_meters, not as a stream, plus AI conversation history and related plan/race context for that workout date.".to_string(),
+            description: "Get detailed workout data for a specific frontend-visible workout id. Use this for the currently selected workout instead of inferring a date from nearby history. Returns completed workouts with full statistics, streams limited to watts and cadence as [min,max,durationSec] segment triplets and heartrate (1-second resolution); total distance is in distance_meters, not as a stream, plus AI conversation history and related plan/race context for that workout date.".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,

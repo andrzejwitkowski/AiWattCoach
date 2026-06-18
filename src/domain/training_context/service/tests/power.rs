@@ -1,31 +1,30 @@
 use crate::domain::intervals::ActivityStream;
 
-use super::super::power::extract_and_average_stream;
+use super::super::power::{extract_cadence_segments_5s, extract_power_segments_3s};
 
 #[test]
-fn power_3s_averages_watts_into_three_second_buckets() {
+fn power_segments_encode_fixture_watts() {
     assert_eq!(
-        extract_and_average_stream(&watts_stream(&[200, 220, 240, 260, 280]), "watts", 3,),
-        vec![220, 270],
+        extract_power_segments_3s(&watts_stream(&[200, 220, 240, 260, 280])),
+        vec![[220, 220, 3], [270, 270, 3]],
     );
 }
 
 #[test]
-fn power_3s_returns_empty_without_watts_stream() {
-    assert!(extract_and_average_stream(&[], "watts", 3).is_empty());
+fn power_segments_return_empty_without_watts_stream() {
+    assert!(extract_power_segments_3s(&[]).is_empty());
 }
 
 #[test]
-fn power_3s_returns_full_bucket_count_for_long_streams() {
-    let values: Vec<i32> = (0..1000).collect();
-    assert_eq!(
-        extract_and_average_stream(&watts_stream(&values), "watts", 3).len(),
-        334
-    );
+fn power_segments_compress_long_steady_stream() {
+    let values: Vec<i32> = vec![245; 7200];
+    let segments = extract_power_segments_3s(&watts_stream(&values));
+    assert_eq!(segments.len(), 1);
+    assert!(segments[0][2] >= 7200);
 }
 
 #[test]
-fn power_3s_preserves_missing_samples_as_zero_in_bucket_average() {
+fn power_segments_preserve_missing_samples_as_zero_in_bucket_average() {
     let streams = vec![ActivityStream {
         stream_type: "watts".to_string(),
         name: None,
@@ -35,11 +34,11 @@ fn power_3s_preserves_missing_samples_as_zero_in_bucket_average() {
         custom: false,
         all_null: false,
     }];
-    assert_eq!(extract_and_average_stream(&streams, "watts", 3), vec![137]);
+    assert_eq!(extract_power_segments_3s(&streams), vec![[137, 137, 3]]);
 }
 
 #[test]
-fn extract_and_average_stream_preserves_missing_samples_for_alignment() {
+fn cadence_segments_encode_stream() {
     let streams = vec![ActivityStream {
         stream_type: "cadence".to_string(),
         name: None,
@@ -50,7 +49,7 @@ fn extract_and_average_stream_preserves_missing_samples_for_alignment() {
         all_null: false,
     }];
 
-    assert_eq!(extract_and_average_stream(&streams, "cadence", 5), vec![55]);
+    assert_eq!(extract_cadence_segments_5s(&streams), vec![[55, 55, 5]]);
 }
 
 fn watts_stream(values: &[i32]) -> Vec<ActivityStream> {

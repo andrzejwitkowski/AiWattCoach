@@ -5,9 +5,9 @@ use serde_json::json;
 use crate::domain::{
     llm::{
         build_chat_request, coach_planning_literature_guidance,
-        conversation_timing_volatile_context, timestamped_message_content, LlmChatMessage,
-        LlmChatRequest, LlmChatRequestInput, LlmMessageRole, LlmProviderConfig, LlmToolChoice,
-        PACKED_TRAINING_CONTEXT_LEGEND,
+        conversation_timing_volatile_context, packed_training_context_legend_with_guidance,
+        timestamped_message_content, LlmChatMessage, LlmChatRequest, LlmChatRequestInput,
+        LlmMessageRole, LlmProviderConfig, LlmToolChoice,
     },
     llm_tools::{
         tool_definitions_for_scope, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
@@ -119,11 +119,12 @@ pub fn training_plan_correction_system_prompt(availability_configured: bool) -> 
 
 fn training_plan_system_prompt(base: &str, availability_configured: bool) -> String {
     format!(
-        "{base} JSON schema: {} {} {} {} {PACKED_TRAINING_CONTEXT_LEGEND}",
+        "{base} JSON schema: {} {} {} {} {}",
         training_plan_llm_envelope_json_schema(),
         training_plan_planning_guidelines(availability_configured, TRAINING_PLAN_WINDOW_DAY_COUNT,),
         coach_planning_literature_guidance(),
         training_plan_output_grammar(),
+        packed_training_context_legend_with_guidance(),
     )
 }
 

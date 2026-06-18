@@ -55,7 +55,7 @@ fn get_selected_workout_returns_completed_data_and_hides_race() {
     assert_eq!(workout["kind"], "completed");
     assert_eq!(workout["workout_id"], "completed-1");
     assert_eq!(stream["stream_type"], "watts");
-    assert_eq!(stream["data"], serde_json::json!([260]));
+    assert_eq!(stream["data"], serde_json::json!([[260, 260, 3]]));
     assert_eq!(stream["secondary_data"], serde_json::json!([251, 261, 271]));
     assert_eq!(conversation["role"], "coach");
     assert_eq!(workout["ai_summary"], "Strong threshold execution");
@@ -67,7 +67,7 @@ fn get_selected_workout_returns_completed_data_and_hides_race() {
 }
 
 #[test]
-fn get_selected_workout_returns_full_watts_buckets_without_cap() {
+fn get_selected_workout_returns_watts_segments_for_long_stream() {
     let tool = GetSelectedWorkout;
     let mut workout = sample_completed_workout(None);
     workout.details.streams[0].primary_series = Some(CompletedWorkoutSeries::Integers(
@@ -87,11 +87,14 @@ fn get_selected_workout_returns_full_watts_buckets_without_cap() {
         .as_array()
         .expect("stream data should be an array");
 
-    assert_eq!(stream_data.len(), 334);
+    assert!(stream_data.len() <= 334);
+    assert!(stream_data
+        .iter()
+        .all(|entry| entry.as_array().is_some_and(|triplet| triplet.len() == 3)));
 }
 
 #[test]
-fn get_selected_workout_buckets_watts_to_three_second_averages() {
+fn get_selected_workout_encodes_watts_as_segments() {
     let tool = GetSelectedWorkout;
     let mut workout = sample_completed_workout(None);
     workout.details.streams[0].primary_series = Some(CompletedWorkoutSeries::Integers(vec![
@@ -109,11 +112,14 @@ fn get_selected_workout_buckets_watts_to_three_second_averages() {
         serde_json::from_str(&response).expect("response should be valid json");
     let stream_data = &json["workouts"][0]["streams"][0]["data"];
 
-    assert_eq!(stream_data, &serde_json::json!([220, 270]));
+    assert_eq!(
+        stream_data,
+        &serde_json::json!([[220, 220, 3], [270, 270, 3]])
+    );
 }
 
 #[test]
-fn get_selected_workout_returns_full_cadence_buckets() {
+fn get_selected_workout_returns_cadence_segments() {
     let tool = GetSelectedWorkout;
     let mut workout = sample_completed_workout(None);
     workout.details.streams[0].stream_type = "cadence".to_string();
@@ -134,6 +140,9 @@ fn get_selected_workout_returns_full_cadence_buckets() {
         .expect("stream data should be an array");
 
     assert_eq!(stream_data.len(), 52);
+    assert!(stream_data
+        .iter()
+        .all(|entry| entry.as_array().is_some_and(|triplet| triplet.len() == 3)));
 }
 
 #[test]

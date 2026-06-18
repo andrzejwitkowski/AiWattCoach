@@ -7,9 +7,28 @@ pub use parser::{
     serialize_planned_workout_for_intervals,
 };
 
+pub const DEFAULT_PLANNED_WORKOUT_NAME: &str = "Planned workout";
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlannedWorkout {
     pub lines: Vec<PlannedWorkoutLine>,
+}
+
+pub fn ensure_planned_workout_title(workout: PlannedWorkout) -> PlannedWorkout {
+    if workout
+        .lines
+        .iter()
+        .any(|line| matches!(line, PlannedWorkoutLine::Text(_)))
+    {
+        return workout;
+    }
+
+    let mut lines = Vec::with_capacity(workout.lines.len() + 1);
+    lines.push(PlannedWorkoutLine::Text(PlannedWorkoutText {
+        text: DEFAULT_PLANNED_WORKOUT_NAME.to_string(),
+    }));
+    lines.extend(workout.lines);
+    PlannedWorkout { lines }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -146,3 +165,37 @@ impl fmt::Display for PlannedWorkoutParseError {
 }
 
 impl Error for PlannedWorkoutParseError {}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ensure_planned_workout_title, parse_planned_workout, PlannedWorkoutLine,
+        DEFAULT_PLANNED_WORKOUT_NAME,
+    };
+
+    #[test]
+    fn ensure_planned_workout_title_inserts_default_name_before_steps() {
+        let workout = parse_planned_workout("- 60m 55%").expect("workout should parse");
+        let titled = ensure_planned_workout_title(workout);
+
+        assert_eq!(
+            titled.lines.first().and_then(|line| line.text()),
+            Some(DEFAULT_PLANNED_WORKOUT_NAME)
+        );
+        assert!(matches!(
+            titled.lines.get(1),
+            Some(PlannedWorkoutLine::Step(_))
+        ));
+    }
+
+    #[test]
+    fn ensure_planned_workout_title_preserves_existing_name() {
+        let workout = parse_planned_workout("Endurance\n- 60m 55%").expect("workout should parse");
+        let titled = ensure_planned_workout_title(workout);
+
+        assert_eq!(
+            titled.lines.first().and_then(|line| line.text()),
+            Some("Endurance")
+        );
+    }
+}

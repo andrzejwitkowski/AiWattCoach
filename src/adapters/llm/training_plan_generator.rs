@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use super::context_prelude::packed_training_context_legend_with_guidance;
+
 use crate::domain::{
     ai_workflow::ValidationIssue,
     identity::Clock,
@@ -7,7 +9,6 @@ use crate::domain::{
         build_chat_request, conversation_timing_volatile_context,
         merge_provider_transcript_entries, BoxFuture, LlmChatMessage, LlmChatPort,
         LlmChatRequestInput, LlmChatResponse, LlmError, UserLlmConfigProvider,
-        PACKED_TRAINING_CONTEXT_LEGEND,
     },
     llm_tools::{
         run_tool_loop_with_checkpoint, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
@@ -505,7 +506,10 @@ async fn request_training_plan_envelope_repair(
 }
 
 fn training_plan_recap_system_prompt() -> String {
-    format!("{TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE} {PACKED_TRAINING_CONTEXT_LEGEND}")
+    format!(
+        "{TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE} {}",
+        packed_training_context_legend_with_guidance()
+    )
 }
 
 fn training_plan_envelope_repair_system_prompt() -> String {
