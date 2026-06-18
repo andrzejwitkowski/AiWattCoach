@@ -1,12 +1,15 @@
+use chrono::{Duration, NaiveDate};
 use serde::Serialize;
 
 use super::super::is_empty_slice;
 use super::stable::CompactPlannedWorkoutBlock;
 use crate::domain::training_context::model::{
     PlannedWorkoutContext, PlannedWorkoutReference, ProjectedDayContext, ProjectedWorkoutContext,
-    RecentDayContext, RecentWorkoutContext, RecentWorkoutRecapContext, SpecialDayContext,
-    TrainingContext, UpcomingDayContext,
+    RaceContext, RecentDayContext, RecentWorkoutContext, RecentWorkoutRecapContext,
+    SpecialDayContext, TrainingContext, UpcomingDayContext,
 };
+
+const RACE_STRATEGY_WINDOW_DAYS: i64 = 14;
 
 #[derive(Serialize)]
 pub(crate) struct VolatilePayload<'a> {
@@ -21,6 +24,8 @@ pub(crate) struct VolatilePayload<'a> {
     ud: Vec<CompactUpcomingDay<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pd: Vec<CompactProjectedDay<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    rs: Vec<CompactRaceStrategyWindow<'a>>,
 }
 
 impl<'a> VolatilePayload<'a> {
@@ -52,8 +57,87 @@ impl<'a> VolatilePayload<'a> {
                 .iter()
                 .map(CompactProjectedDay::from_projected_day)
                 .collect(),
+            rs: build_race_strategy_window(context),
         }
     }
+}
+
+#[derive(Serialize)]
+struct CompactRaceStrategyWindow<'a> {
+    d: &'a str,
+    pri: &'a str,
+    disc: &'a str,
+    n: &'a str,
+    days_out: i32,
+}
+
+fn build_race_strategy_window(context: &TrainingContext) -> Vec<CompactRaceStrategyWindow<'_>> {
+    if context.races.is_empty() {
+        return Vec::new();
+    }
+
+    let Some(focus_date) = infer_packed_focus_date(context) else {
+        return Vec::new();
+    };
+    let window_end = focus_date + Duration::days(RACE_STRATEGY_WINDOW_DAYS);
+    let mut entries = context
+        .races
+        .iter()
+        .filter_map(|race| compact_race_strategy_window_entry(race, focus_date, window_end))
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.d.cmp(right.d));
+    entries
+}
+
+fn compact_race_strategy_window_entry<'a>(
+    race: &'a RaceContext,
+    focus_date: NaiveDate,
+    window_end: NaiveDate,
+) -> Option<CompactRaceStrategyWindow<'a>> {
+    let race_date = NaiveDate::parse_from_str(&race.date, "%Y-%m-%d").ok()?;
+    if race_date < focus_date || race_date > window_end {
+        return None;
+    }
+
+    Some(CompactRaceStrategyWindow {
+        d: &race.date,
+        pri: &race.priority,
+        disc: &race.discipline,
+        n: &race.name,
+        days_out: (race_date - focus_date).num_days() as i32,
+    })
+}
+
+fn infer_packed_focus_date(context: &TrainingContext) -> Option<NaiveDate> {
+    if let Some(latest_recent_day) = context
+        .recent_days
+        .iter()
+        .filter_map(|day| NaiveDate::parse_from_str(&day.date, "%Y-%m-%d").ok())
+        .max()
+    {
+        return Some(latest_recent_day);
+    }
+
+    if let Some(earliest_upcoming_day) = context
+        .upcoming_days
+        .iter()
+        .filter_map(|day| NaiveDate::parse_from_str(&day.date, "%Y-%m-%d").ok())
+        .min()
+    {
+        return earliest_upcoming_day.pred_opt();
+    }
+
+    if let Some(earliest_projected_day) = context
+        .projected_days
+        .iter()
+        .filter_map(|day| NaiveDate::parse_from_str(&day.date, "%Y-%m-%d").ok())
+        .min()
+    {
+        return earliest_projected_day.pred_opt();
+    }
+
+    chrono::DateTime::from_timestamp(context.generated_at_epoch_seconds, 0)
+        .map(|timestamp| timestamp.date_naive())
 }
 
 #[derive(Serialize)]

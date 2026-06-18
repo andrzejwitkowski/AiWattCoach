@@ -205,6 +205,62 @@ fn compact_render_omits_nulls_and_empty_lists() {
     assert!(!rendered.volatile_context.contains("\"rd\":[]"));
     assert!(!rendered.volatile_context.contains("\"ud\":[]"));
     assert!(!rendered.volatile_context.contains("\"pd\":[]"));
+    assert!(!rendered.volatile_context.contains("\"rs\":"));
+}
+
+#[test]
+fn compact_render_includes_race_strategy_window_for_next_14_days() {
+    let context = TrainingContext {
+        generated_at_epoch_seconds: 1,
+        focus_workout_id: None,
+        focus_kind: "summary".to_string(),
+        intervals_status: IntervalsStatusContext::default(),
+        profile: AthleteProfileContext::default(),
+        races: vec![
+            RaceContext {
+                race_id: "race-past".to_string(),
+                date: "2026-06-05".to_string(),
+                name: "Past Crit".to_string(),
+                distance_meters: 40_000,
+                discipline: "crit".to_string(),
+                priority: "C".to_string(),
+            },
+            RaceContext {
+                race_id: "race-window".to_string(),
+                date: "2026-06-20".to_string(),
+                name: "Target Road Race".to_string(),
+                distance_meters: 120_000,
+                discipline: "road".to_string(),
+                priority: "B".to_string(),
+            },
+            RaceContext {
+                race_id: "race-future".to_string(),
+                date: "2026-07-01".to_string(),
+                name: "Later Stage".to_string(),
+                distance_meters: 150_000,
+                discipline: "road".to_string(),
+                priority: "A".to_string(),
+            },
+        ],
+        planned_rest_days: Vec::new(),
+        future_events: Vec::new(),
+        history: HistoricalTrainingContext::default(),
+        recent_days: vec![RecentDayContext {
+            date: "2026-06-10".to_string(),
+            ..RecentDayContext::default()
+        }],
+        recent_workout_recaps: Vec::new(),
+        upcoming_days: Vec::new(),
+        projected_days: Vec::new(),
+    };
+
+    let rendered = render_training_context(&context);
+
+    assert!(rendered.volatile_context.contains(
+        "\"rs\":[{\"d\":\"2026-06-20\",\"pri\":\"B\",\"disc\":\"road\",\"n\":\"Target Road Race\",\"days_out\":10}]"
+    ));
+    assert!(!rendered.volatile_context.contains("Past Crit"));
+    assert!(!rendered.volatile_context.contains("Later Stage"));
 }
 
 #[test]
