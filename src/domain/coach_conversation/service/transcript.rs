@@ -2,6 +2,7 @@ use crate::domain::llm::{
     conversation_timing_volatile_context, rebuild_conversation_with_provider_transcript,
     timestamped_message_content, LlmChatMessage, LlmChatResponse, LlmMessageRole,
 };
+use crate::domain::racing_strategy::racing_strategist_calendar_guidance;
 
 use super::super::{CoachConversation, CoachConversationMessage, CoachConversationMessageRole};
 
@@ -13,7 +14,8 @@ pub(super) fn final_assistant_text(response: &LlmChatResponse) -> Option<String>
 
 pub fn calendar_coach_system_prompt() -> String {
     format!(
-        "{CALENDAR_COACH_SYSTEM_PROMPT_BASE} {}",
+        "{CALENDAR_COACH_SYSTEM_PROMPT_BASE} {} {}",
+        racing_strategist_calendar_guidance(),
         crate::domain::llm::packed_training_context_legend_with_guidance(),
     )
 }
@@ -161,5 +163,15 @@ mod tests {
         assert!(conversation[1]
             .content
             .starts_with("[sent_at=2025-05-06T00:10:00+00:00]\n"));
+    }
+
+    #[test]
+    fn calendar_coach_system_prompt_includes_racing_strategist_guidance() {
+        let prompt = super::calendar_coach_system_prompt();
+        assert!(prompt.contains("Seiler 2010"));
+        assert!(prompt.contains("critical audit"));
+        assert!(prompt.contains("simulate_forward_load"));
+        assert!(prompt.contains("cannot rewrite pd"));
+        assert!(prompt.contains("unless prd confirms"));
     }
 }

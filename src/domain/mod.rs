@@ -20,6 +20,7 @@ pub mod planned_workout_wahoo_syncs;
 pub mod planned_workouts;
 pub mod public_tool_calls;
 pub mod races;
+pub mod racing_strategy;
 pub mod return_to;
 pub mod settings;
 pub mod special_days;
