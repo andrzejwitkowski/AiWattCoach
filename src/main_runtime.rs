@@ -72,43 +72,10 @@ where
             workout_summary_service
                 .get_summary(&user_id, &workout_id)
                 .await
-                .map(map_workout_summary_to_planning_context)
+                .map(crate::domain::training_plan::map_workout_summary_to_planning_context)
                 .map_err(map_workout_summary_error)
         })
     }
-}
-
-fn map_workout_summary_to_planning_context(
-    summary: crate::domain::workout_summary::WorkoutSummary,
-) -> Option<crate::domain::training_plan::TrainingPlanPlanningContext> {
-    let messages = summary
-        .messages
-        .into_iter()
-        .filter(|message| message.role != crate::domain::workout_summary::MessageRole::Tool)
-        .map(
-            |message| crate::domain::training_plan::TrainingPlanConversationMessage {
-                role: match message.role {
-                    crate::domain::workout_summary::MessageRole::Coach => {
-                        crate::domain::training_plan::TrainingPlanConversationRole::Coach
-                    }
-                    crate::domain::workout_summary::MessageRole::User => {
-                        crate::domain::training_plan::TrainingPlanConversationRole::User
-                    }
-                    crate::domain::workout_summary::MessageRole::Tool => unreachable!(),
-                },
-                content: message.content,
-                created_at_epoch_seconds: message.created_at_epoch_seconds,
-            },
-        )
-        .collect::<Vec<_>>();
-    if summary.rpe.is_none() && messages.is_empty() {
-        return None;
-    }
-
-    Some(crate::domain::training_plan::TrainingPlanPlanningContext {
-        rpe: summary.rpe,
-        messages,
-    })
 }
 
 fn map_workout_summary_error(

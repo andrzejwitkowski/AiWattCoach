@@ -6,7 +6,7 @@ import { adminPromptPreviewResponseSchema, type AdminPromptPreviewResponse } fro
 
 function buildPath(
   userId: string,
-  surface: 'post-workout' | 'calendar-coach' | 'meso-cycle',
+  surface: 'post-workout' | 'calendar-coach' | 'meso-cycle' | 'training-plan',
   date: string,
 ) {
   const encodedUserId = encodeURIComponent(userId);
@@ -41,6 +41,15 @@ export async function loadAdminMesoCyclePromptPreview(
   return adminPromptPreviewResponseSchema.parse(data);
 }
 
+export async function loadAdminTrainingPlanPromptPreview(
+  apiBaseUrl: string,
+  userId: string,
+  date: string,
+): Promise<AdminPromptPreviewResponse> {
+  const data = await get(apiBaseUrl, buildPath(userId, 'training-plan', date));
+  return adminPromptPreviewResponseSchema.parse(data);
+}
+
 export function useAdminPromptPreviewApi() {
   const apiBaseUrl = useApiBaseUrl();
 
@@ -62,12 +71,19 @@ export function useAdminPromptPreviewApi() {
     [apiBaseUrl],
   );
 
+  const loadTrainingPlan = useCallback(
+    async (userId: string, date: string) =>
+      loadAdminTrainingPlanPromptPreview(apiBaseUrl, userId, date),
+    [apiBaseUrl],
+  );
+
   return useMemo(
     () => ({
       loadAdminPostWorkoutPromptPreview: loadPostWorkout,
       loadAdminCalendarCoachPromptPreview: loadCalendarCoach,
       loadAdminMesoCyclePromptPreview: loadMesoCycle,
+      loadAdminTrainingPlanPromptPreview: loadTrainingPlan,
     }),
-    [loadCalendarCoach, loadMesoCycle, loadPostWorkout],
+    [loadCalendarCoach, loadMesoCycle, loadPostWorkout, loadTrainingPlan],
   );
 }

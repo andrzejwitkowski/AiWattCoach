@@ -5,6 +5,7 @@ import {
   loadAdminCalendarCoachPromptPreview,
   loadAdminMesoCyclePromptPreview,
   loadAdminPostWorkoutPromptPreview,
+  loadAdminTrainingPlanPromptPreview,
 } from './api';
 
 const originalFetch = global.fetch;
@@ -94,5 +95,33 @@ describe('admin prompt preview api', () => {
     const result = await loadAdminMesoCyclePromptPreview('', 'user-1', '2026-05-01');
     expect(result.meta.surface).toBe('meso_cycle_coach');
     expect(result.meta.mesoStart).toBe('2026-05-02');
+  });
+
+  it('loads training plan preview', async () => {
+    mockFetch({
+      meta: {
+        userId: 'user-1',
+        date: '2026-05-01',
+        surface: 'training_plan_generator',
+        provider: 'openrouter',
+        model: 'test-model',
+        focusDate: '2026-05-01',
+        selectedWorkoutId: 'ride-1',
+        selectionMethod: 'single_workout',
+      },
+      request: {
+        systemPrompt: 'system',
+        stableContext: 'stable',
+        volatileContext: 'volatile',
+        conversation: [{ role: 'user', content: 'generate plan' }],
+        tools: [],
+        toolChoice: 'auto',
+      },
+      providerMessages: [],
+    });
+
+    const result = await loadAdminTrainingPlanPromptPreview('', 'user-1', '2026-05-01');
+    expect(result.meta.surface).toBe('training_plan_generator');
+    expect(result.meta.selectedWorkoutId).toBe('ride-1');
   });
 });

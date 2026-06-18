@@ -6,5 +6,3 @@ pub(crate) fn non_empty_context_parts<'a>(
         .filter(|(_, content)| !content.trim().is_empty())
         .collect()
 }
-
-pub(crate) use crate::domain::llm::PACKED_TRAINING_CONTEXT_LEGEND;

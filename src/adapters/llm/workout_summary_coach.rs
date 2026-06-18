@@ -294,6 +294,8 @@ mod tests {
             "Do not conclude poor interval execution just because whole-workout averages were lowered by recovery valleys, coasting, zeros, terrain, or wind"
         ));
         assert!(prompt.contains("When workout tools are available, use them for that fallback"));
+        assert!(prompt.contains("Seiler polarized training model"));
+        assert!(prompt.contains("Do not use this block to justify extra follow-up questions"));
         assert!(
             prompt.contains("Use the provided selected workout date as the active workout context")
         );

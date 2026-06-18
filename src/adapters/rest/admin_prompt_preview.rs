@@ -70,10 +70,27 @@ pub async fn preview_meso_cycle_coach(
     .await
 }
 
+pub async fn preview_training_plan_generator(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<AdminPromptPreviewPath>,
+    Query(query): Query<AdminPromptPreviewQuery>,
+) -> impl IntoResponse {
+    preview_with_surface(
+        state,
+        headers,
+        path,
+        query,
+        PreviewSurfaceRoute::TrainingPlanGenerator,
+    )
+    .await
+}
+
 enum PreviewSurfaceRoute {
     PostWorkout,
     CalendarCoach,
     MesoCycleCoach,
+    TrainingPlanGenerator,
 }
 
 async fn preview_with_surface(
@@ -119,6 +136,11 @@ async fn preview_with_surface(
         PreviewSurfaceRoute::MesoCycleCoach => {
             service
                 .preview_meso_cycle_coach(&path.user_id, &query.date)
+                .await
+        }
+        PreviewSurfaceRoute::TrainingPlanGenerator => {
+            service
+                .preview_training_plan_generator(&path.user_id, &query.date)
                 .await
         }
     };

@@ -102,6 +102,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                     get(admin_prompt_preview::preview_meso_cycle_coach),
                 )
                 .route(
+                    "/api/admin/users/{user_id}/prompt-preview/training-plan",
+                    get(admin_prompt_preview::preview_training_plan_generator),
+                )
+                .route(
                     "/api/admin/task-scheduler/tasks",
                     get(admin_task_scheduler::list_tasks),
                 )

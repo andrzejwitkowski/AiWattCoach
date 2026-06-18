@@ -6,7 +6,10 @@ use crate::domain::{
     completed_workouts::{CompletedWorkout, CompletedWorkoutSeries},
     planned_workouts::PlannedWorkout,
     races::Race,
-    workout_streams::{self, CADENCE_BUCKET_SECONDS, POWER_BUCKET_SECONDS},
+    workout_streams::{
+        average_into_buckets, is_llm_workout_stream_type, CADENCE_BUCKET_SECONDS,
+        POWER_BUCKET_SECONDS,
+    },
     workout_summary::{MessageRole, WorkoutSummary},
 };
 
@@ -170,6 +173,7 @@ fn map_completed_workout(workout: &CompletedWorkout, summaries: &[WorkoutSummary
             .details
             .streams
             .iter()
+            .filter(|stream| is_llm_workout_stream_type(&stream.stream_type))
             .map(|stream| StreamDto {
                 stream_type: stream.stream_type.clone(),
                 data: serialize_primary_stream(&stream.stream_type, stream.primary_series.as_ref()),
@@ -234,7 +238,7 @@ fn serialize_integer_buckets(
         .map(|&value| i32::try_from(value).unwrap_or(0))
         .collect();
 
-    workout_streams::average_into_buckets(&samples, bucket_seconds)
+    average_into_buckets(&samples, bucket_seconds)
         .into_iter()
         .map(|value| json!(value))
         .collect()

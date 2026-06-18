@@ -23,13 +23,14 @@ export function AdminPromptPreviewPage() {
     loadAdminPostWorkoutPromptPreview,
     loadAdminCalendarCoachPromptPreview,
     loadAdminMesoCyclePromptPreview,
+    loadAdminTrainingPlanPromptPreview,
   } = useAdminPromptPreviewApi();
   const [userId, setUserId] = useState(user?.id ?? '');
   const [date, setDate] = useState(todayIsoDate());
   const [preview, setPreview] = useState<AdminPromptPreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingSurface, setLoadingSurface] = useState<
-    'post-workout' | 'calendar-coach' | 'meso-cycle' | null
+    'post-workout' | 'calendar-coach' | 'meso-cycle' | 'training-plan' | null
   >(null);
 
   const maxDate = useMemo(() => todayIsoDate(), []);
@@ -39,7 +40,9 @@ export function AdminPromptPreviewPage() {
   );
   const [showRawJson, setShowRawJson] = useState(false);
 
-  const runPreview = async (surface: 'post-workout' | 'calendar-coach' | 'meso-cycle') => {
+  const runPreview = async (
+    surface: 'post-workout' | 'calendar-coach' | 'meso-cycle' | 'training-plan',
+  ) => {
     if (!userId.trim() || !date) {
       setError(t('adminPromptPreview.validation'));
       return;
@@ -57,7 +60,9 @@ export function AdminPromptPreviewPage() {
           ? await loadAdminPostWorkoutPromptPreview(userId.trim(), date)
           : surface === 'calendar-coach'
             ? await loadAdminCalendarCoachPromptPreview(userId.trim(), date)
-            : await loadAdminMesoCyclePromptPreview(userId.trim(), date);
+            : surface === 'meso-cycle'
+              ? await loadAdminMesoCyclePromptPreview(userId.trim(), date)
+              : await loadAdminTrainingPlanPromptPreview(userId.trim(), date);
       setPreview(response);
     } catch {
       setPreview(null);
@@ -126,6 +131,16 @@ export function AdminPromptPreviewPage() {
             {loadingSurface === 'meso-cycle'
               ? t('adminPromptPreview.loading')
               : t('adminPromptPreview.mesoCycleButton')}
+          </button>
+          <button
+            type="button"
+            disabled={loadingSurface !== null}
+            onClick={() => void runPreview('training-plan')}
+            className="rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:border-[#f2c98e]/45 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingSurface === 'training-plan'
+              ? t('adminPromptPreview.loading')
+              : t('adminPromptPreview.trainingPlanButton')}
           </button>
         </div>
       </div>

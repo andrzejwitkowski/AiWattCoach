@@ -1,3 +1,4 @@
+mod coach_planning_literature;
 mod context_prelude;
 mod error;
 mod logging;
@@ -10,6 +11,7 @@ mod preview_messages;
 mod request_builder;
 mod transcript;
 
+pub use coach_planning_literature::coach_planning_literature_guidance;
 pub(crate) use context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
 pub(crate) use transcript::{
     final_assistant_text, last_nonempty_assistant_content, merge_provider_transcript_entries,
