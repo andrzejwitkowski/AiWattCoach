@@ -40,7 +40,7 @@ impl LlmTool for GetSelectedWorkout {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Get detailed workout data for a specific date. Returns completed workouts with full statistics, stream data (watts and cadence as [min,max,durationSec] segment triplets, heartrate and other streams at full resolution), and AI conversation history. Also returns planned workouts (if future or not completed) and basic race info if no completed workout exists for that day.".to_string(),
+            description: "Get detailed workout data for a specific date. Returns completed workouts with full statistics, streams limited to watts and cadence as [min,max,durationSec] segment triplets and heartrate (1-second resolution); total distance is in distance_meters, not as a stream. Also returns planned workouts (if future or not completed) and basic race info if no completed workout exists for that day.".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,

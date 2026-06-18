@@ -1,3 +1,4 @@
+mod coach_planning_literature;
 mod context_prelude;
 mod error;
 mod logging;
@@ -10,6 +11,7 @@ mod preview_messages;
 mod request_builder;
 mod transcript;
 
+pub use coach_planning_literature::coach_planning_literature_guidance;
 pub use context_prelude::{
     packed_training_context_legend_with_guidance, ATHLETE_SUMMARY_CALENDAR_GUARD,
     PACKED_CALENDAR_AUTHORITY_GUIDANCE, PACKED_TRAINING_CONTEXT_LEGEND,

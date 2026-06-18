@@ -167,14 +167,14 @@ function buildProfileTable(p: Record<string, unknown>) {
 }
 
 function buildPlannedRestDaysTable(entries: unknown[]) {
+  const normalizedEntries = entries.filter(isObject);
   return (
     <div>
       <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-violet-300">
-        Planned Rest Days ({entries.length})
+        Planned Rest Days ({normalizedEntries.length})
       </div>
       <div className="space-y-2">
-        {entries.map((item, i) => {
-          const entry = item as Record<string, unknown>;
+        {normalizedEntries.map((entry, i) => {
           const startDate = String(entry.sd ?? '');
           const endDate = String(entry.ed ?? startDate);
           const title = typeof entry.n === 'string' && entry.n.trim() ? entry.n : 'Planned rest';

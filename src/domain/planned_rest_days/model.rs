@@ -197,9 +197,11 @@ pub fn expand_inclusive_date_range(
     start_date: &str,
     end_date: &str,
 ) -> Result<Vec<String>, PlannedRestDayError> {
+    validate_date_range(start_date, end_date)?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
-    let mut dates = Vec::new();
+    let span_days = (end - start).num_days() + 1;
+    let mut dates = Vec::with_capacity(span_days as usize);
     let mut current = start;
 
     while current <= end {

@@ -198,6 +198,60 @@ fn get_selected_workout_maps_non_finite_float_stream_values_to_null() {
 }
 
 #[test]
+fn get_selected_workout_omits_non_llm_stream_types() {
+    let tool = GetSelectedWorkout;
+    let mut workout = sample_completed_workout(None);
+    workout.distance_meters = Some(42_000.0);
+    workout.details.streams = vec![
+        CompletedWorkoutStream {
+            stream_type: "watts".to_string(),
+            name: Some("Power".to_string()),
+            primary_series: Some(CompletedWorkoutSeries::Integers(vec![250, 260, 270])),
+            secondary_series: None,
+            value_type_is_array: false,
+            custom: false,
+            all_null: false,
+        },
+        CompletedWorkoutStream {
+            stream_type: "distance".to_string(),
+            name: Some("Distance".to_string()),
+            primary_series: Some(CompletedWorkoutSeries::Floats(vec![100.0, 200.0, 300.0])),
+            secondary_series: None,
+            value_type_is_array: false,
+            custom: false,
+            all_null: false,
+        },
+        CompletedWorkoutStream {
+            stream_type: "altitude".to_string(),
+            name: Some("Altitude".to_string()),
+            primary_series: Some(CompletedWorkoutSeries::Floats(vec![10.0, 20.0])),
+            secondary_series: None,
+            value_type_is_array: false,
+            custom: false,
+            all_null: false,
+        },
+    ];
+    let context = sample_context(TestDataPort {
+        completed: vec![workout],
+        planned: Vec::new(),
+        races: Vec::new(),
+        summaries: Vec::new(),
+    });
+
+    let response = futures::executor::block_on(tool.execute(r#"{"date":"2026-05-05"}"#, &context));
+    let json: serde_json::Value =
+        serde_json::from_str(&response).expect("response should be valid json");
+    let workout = &json["workouts"][0];
+    let streams = workout["streams"]
+        .as_array()
+        .expect("streams should be an array");
+
+    assert_eq!(streams.len(), 1);
+    assert_eq!(streams[0]["stream_type"], "watts");
+    assert_eq!(workout["distance_meters"], 42_000.0);
+}
+
+#[test]
 fn get_selected_workout_marks_past_uncompleted_plan() {
     let tool = GetSelectedWorkout;
     let context = sample_context(TestDataPort {

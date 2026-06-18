@@ -10,6 +10,7 @@ pub enum AdminPromptPreviewSurface {
     PostWorkout,
     CalendarCoach,
     MesoCycleCoach,
+    TrainingPlanGenerator,
 }
 
 impl AdminPromptPreviewSurface {
@@ -18,6 +19,7 @@ impl AdminPromptPreviewSurface {
             Self::PostWorkout => "post_workout",
             Self::CalendarCoach => "calendar_coach",
             Self::MesoCycleCoach => "meso_cycle_coach",
+            Self::TrainingPlanGenerator => "training_plan_generator",
         }
     }
 }

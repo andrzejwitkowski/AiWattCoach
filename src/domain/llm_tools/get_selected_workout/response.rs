@@ -6,7 +6,10 @@ use crate::domain::{
     completed_workouts::{CompletedWorkout, CompletedWorkoutSeries},
     planned_workouts::PlannedWorkout,
     races::Race,
-    workout_streams::{self, SegmentTriplet},
+    workout_streams::{
+        bucket_and_encode_cadence_segments, bucket_and_encode_power_segments,
+        is_llm_workout_stream_type, SegmentTriplet,
+    },
     workout_summary::{MessageRole, WorkoutSummary},
 };
 
@@ -170,6 +173,7 @@ fn map_completed_workout(workout: &CompletedWorkout, summaries: &[WorkoutSummary
             .details
             .streams
             .iter()
+            .filter(|stream| is_llm_workout_stream_type(&stream.stream_type))
             .map(|stream| StreamDto {
                 stream_type: stream.stream_type.clone(),
                 data: serialize_primary_stream(&stream.stream_type, stream.primary_series.as_ref()),
@@ -211,17 +215,11 @@ fn serialize_primary_stream(
     };
 
     if stream_type.eq_ignore_ascii_case("watts") {
-        return serialize_segment_triplets(
-            series,
-            workout_streams::bucket_and_encode_power_segments,
-        );
+        return serialize_segment_triplets(series, bucket_and_encode_power_segments);
     }
 
     if stream_type.eq_ignore_ascii_case("cadence") {
-        return serialize_segment_triplets(
-            series,
-            workout_streams::bucket_and_encode_cadence_segments,
-        );
+        return serialize_segment_triplets(series, bucket_and_encode_cadence_segments);
     }
 
     serialize_full_series(series)

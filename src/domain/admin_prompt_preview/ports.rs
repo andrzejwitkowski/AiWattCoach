@@ -22,4 +22,10 @@ pub trait AdminPromptPreviewUseCases: Send + Sync {
         user_id: &str,
         date: &str,
     ) -> BoxFuture<Result<AdminPromptPreviewResponse, AdminPromptPreviewError>>;
+
+    fn preview_training_plan_generator(
+        &self,
+        user_id: &str,
+        date: &str,
+    ) -> BoxFuture<Result<AdminPromptPreviewResponse, AdminPromptPreviewError>>;
 }

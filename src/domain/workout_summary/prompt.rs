@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::domain::llm::{
-    build_chat_request, conversation_timing_volatile_context,
+    build_chat_request, coach_planning_literature_guidance, conversation_timing_volatile_context,
     packed_training_context_legend_with_guidance, rebuild_conversation_with_provider_transcript,
     timestamped_message_content, LlmChatMessage, LlmChatRequest, LlmChatRequestInput,
     LlmMessageRole, LlmProviderConfig, LlmToolChoice,
@@ -23,6 +23,8 @@ const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach help
 pub const ATHLETE_SUMMARY_GUIDANCE: &str = "AI-generated athlete orientation only; NOT calendar truth. Never tell the athlete they have free time, vacation, or a rest block based on this text alone. For any schedule/rest/availability claim, verify packed prd, pd, ud, and pw first.";
 
 const WORKOUT_COACH_SELECTED_WORKOUT_PROMPT: &str = "Use the provided selected workout date as the active workout context for this conversation. When inspecting the current workout, prefer that exact selected workout date or id instead of inferring from nearby history.";
+
+const WORKOUT_COACH_PLANNING_LITERATURE_FRAMING: &str = "Use the scientific foundations below when reasoning about the next 14-day training direction, race-week load tradeoffs, and whether you already have enough information to tell the athlete to save the summary. Do not use this block to justify extra follow-up questions or to interrogate the athlete about physiology they already answered.";
 
 const WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT: &str = "Saved workout summaries for recent sessions appear in packed context as wr (preferred) and optionally as recap on matching entries in rd. Treat each saved recap as already-known context for that workout. Do not ask the athlete again for information clearly stated in wr, recap, RPE, or earlier messages in the current workout thread. Ask follow-up questions only when a decision still depends on missing or ambiguous information.";
 
@@ -113,9 +115,10 @@ fn apply_tool_scope(
 
 pub fn workout_coach_system_prompt() -> String {
     format!(
-        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\n{WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT}\nworkout_summary_coach_reply_schema={}\n{}",
+        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\n{WORKOUT_COACH_SELECTED_WORKOUT_PROMPT}\n{WORKOUT_COACH_RECENT_WORKOUT_RECAP_PROMPT}\nworkout_summary_coach_reply_schema={}\n{}\n{WORKOUT_COACH_PLANNING_LITERATURE_FRAMING}\n{}",
         workout_summary_coach_reply_json_schema(),
-        packed_training_context_legend_with_guidance()
+        packed_training_context_legend_with_guidance(),
+        coach_planning_literature_guidance(),
     )
 }
 

@@ -182,7 +182,9 @@ impl PlannedRestDayUseCases for RecordingPlannedRestDayService {
                 .cloned()
                 .ok_or(PlannedRestDayError::NotFound)?;
             let updated = existing.mark_updated(request, 2)?;
-            stored.retain(|entry| entry.planned_rest_day_id != planned_rest_day_id);
+            stored.retain(|entry| {
+                !(entry.user_id == user_id && entry.planned_rest_day_id == planned_rest_day_id)
+            });
             stored.push(updated.clone());
             Ok(updated)
         })

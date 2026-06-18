@@ -224,6 +224,35 @@ async fn admin_prompt_preview_meso_cycle_returns_payload_for_admin() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn admin_prompt_preview_training_plan_returns_payload_for_admin() {
+    let app = auth_test_app_with_admin_prompt_preview(
+        TestIdentityService::default(),
+        TestAdminPromptPreview,
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/users/user-1/prompt-preview/training-plan?date=2026-05-01")
+                .header(header::COOKIE, "aiwattcoach_session=session-1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), RESPONSE_LIMIT_BYTES)
+        .await
+        .unwrap();
+    let payload: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(payload["meta"]["surface"], "training_plan_generator");
+    assert_eq!(payload["request"]["systemPrompt"], "training-plan-system");
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn admin_prompt_preview_calendar_coach_returns_payload_for_admin() {
     let app = auth_test_app_with_admin_prompt_preview(
         TestIdentityService::default(),
@@ -427,6 +456,21 @@ impl AdminPromptPreviewUseCases for TestAdminPromptPreview {
         let date = date.to_string();
         Box::pin(async move { Ok(sample_meso_cycle_preview(&user_id, &date)) })
     }
+
+    fn preview_training_plan_generator(
+        &self,
+        user_id: &str,
+        date: &str,
+    ) -> PreviewBoxFuture<
+        Result<
+            AdminPromptPreviewResponse,
+            aiwattcoach::domain::admin_prompt_preview::AdminPromptPreviewError,
+        >,
+    > {
+        let user_id = user_id.to_string();
+        let date = date.to_string();
+        Box::pin(async move { Ok(sample_training_plan_preview(&user_id, &date)) })
+    }
 }
 
 fn sample_post_workout_preview(user_id: &str, date: &str) -> AdminPromptPreviewResponse {
@@ -511,6 +555,34 @@ fn sample_calendar_coach_preview(user_id: &str, date: &str) -> AdminPromptPrevie
             conversation: Vec::new(),
             tools: Vec::new(),
             tool_choice: LlmToolChoice::None,
+        },
+        provider_messages: Vec::new(),
+    }
+}
+
+fn sample_training_plan_preview(user_id: &str, date: &str) -> AdminPromptPreviewResponse {
+    AdminPromptPreviewResponse {
+        meta: AdminPromptPreviewMeta {
+            user_id: user_id.to_string(),
+            date: date.to_string(),
+            surface: "training_plan_generator".to_string(),
+            provider: "openrouter".to_string(),
+            model: "test-model".to_string(),
+            focus_date: date.to_string(),
+            selected_workout_id: Some("ride-1".to_string()),
+            selection_method: Some("single_workout".to_string()),
+            compliance_score: None,
+            meso_start: None,
+            meso_end: None,
+            ai_coach_last_date: None,
+        },
+        request: AdminPromptPreviewRequestBody {
+            system_prompt: "training-plan-system".to_string(),
+            stable_context: "stable".to_string(),
+            volatile_context: "volatile".to_string(),
+            conversation: Vec::new(),
+            tools: Vec::new(),
+            tool_choice: LlmToolChoice::Auto,
         },
         provider_messages: Vec::new(),
     }

@@ -21,6 +21,10 @@ use crate::domain::{
     settings::UserSettingsUseCases,
     special_days::SpecialDayRepository,
     training_context::{pick_representative_completed_workout_for_day, TrainingContextBuilder},
+    training_plan::{
+        assemble_training_plan_initial_window_request, map_workout_summary_to_planning_context,
+        workout_recap_from_summary, TrainingPlanInitialWindowPromptInput,
+    },
     workout_summary::{
         assemble_workout_summary_coach_request, try_load_meso_roadmap_stable_context,
         CompletedWorkoutTargetUseCases, WorkoutSummary, WorkoutSummaryCoachPromptInput,
@@ -193,6 +197,50 @@ where
             .map_err(|error| AdminPromptPreviewError::Repository(error.to_string()))?;
         Ok(summary.map(|value| value.summary_text))
     }
+
+    async fn resolve_representative_workout_for_date(
+        &self,
+        user_id: &str,
+        date: &str,
+    ) -> Result<PostWorkoutPreviewMeta, AdminPromptPreviewError> {
+        let settings = self
+            .settings_service
+            .get_settings(user_id)
+            .await
+            .map_err(|error| AdminPromptPreviewError::Settings(error.to_string()))?;
+
+        let day_workouts = self
+            .completed_workout_read
+            .list_completed_workouts(user_id, date, date)
+            .await
+            .map_err(map_completed_workout_error)?;
+        let planned_workouts = self.load_planned_workouts(user_id, date).await?;
+        let special_days = self.load_special_days(user_id, date).await?;
+        let pick = pick_representative_completed_workout_for_day(
+            day_workouts,
+            &std::collections::HashSet::new(),
+            &planned_workouts,
+            &special_days,
+            settings
+                .cycling
+                .ftp_watts
+                .map(|value| i32::try_from(value).unwrap_or(i32::MAX)),
+        )
+        .ok_or(AdminPromptPreviewError::NoCompletedWorkoutForDate)?;
+
+        let resolved = self
+            .completed_workout_target_service
+            .resolve_completed_workout_target(user_id, &pick.workout.completed_workout_id)
+            .await
+            .map_err(|error| AdminPromptPreviewError::TargetResolution(error.to_string()))?
+            .ok_or(AdminPromptPreviewError::NoCompletedWorkoutForDate)?;
+
+        Ok(PostWorkoutPreviewMeta {
+            selected_workout_id: resolved.preferred_workout_id,
+            selection_method: pick.method.as_str().to_string(),
+            compliance_score: pick.compliance_score,
+        })
+    }
 }
 
 fn map_planned_error(
@@ -250,6 +298,21 @@ where
         let date = date.to_string();
         Box::pin(async move { service.preview_meso_cycle_coach_impl(&user_id, &date).await })
     }
+
+    fn preview_training_plan_generator(
+        &self,
+        user_id: &str,
+        date: &str,
+    ) -> BoxFuture<Result<AdminPromptPreviewResponse, AdminPromptPreviewError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        let date = date.to_string();
+        Box::pin(async move {
+            service
+                .preview_training_plan_generator_impl(&user_id, &date)
+                .await
+        })
+    }
 }
 
 impl<Time, Planned, Special> AdminPromptPreviewService<Time, Planned, Special>
@@ -265,39 +328,10 @@ where
     ) -> Result<AdminPromptPreviewResponse, AdminPromptPreviewError> {
         let focus_date = self.validate_date(date)?;
         let preview_epoch = preview_focus_date_epoch_seconds(focus_date);
-
-        let settings = self
-            .settings_service
-            .get_settings(user_id)
-            .await
-            .map_err(|error| AdminPromptPreviewError::Settings(error.to_string()))?;
-
-        let day_workouts = self
-            .completed_workout_read
-            .list_completed_workouts(user_id, date, date)
-            .await
-            .map_err(map_completed_workout_error)?;
-        let planned_workouts = self.load_planned_workouts(user_id, date).await?;
-        let special_days = self.load_special_days(user_id, date).await?;
-        let pick = pick_representative_completed_workout_for_day(
-            day_workouts,
-            &std::collections::HashSet::new(),
-            &planned_workouts,
-            &special_days,
-            settings
-                .cycling
-                .ftp_watts
-                .map(|value| i32::try_from(value).unwrap_or(i32::MAX)),
-        )
-        .ok_or(AdminPromptPreviewError::NoCompletedWorkoutForDate)?;
-
-        let resolved = self
-            .completed_workout_target_service
-            .resolve_completed_workout_target(user_id, &pick.workout.completed_workout_id)
-            .await
-            .map_err(|error| AdminPromptPreviewError::TargetResolution(error.to_string()))?
-            .ok_or(AdminPromptPreviewError::NoCompletedWorkoutForDate)?;
-        let workout_id = resolved.preferred_workout_id;
+        let workout = self
+            .resolve_representative_workout_for_date(user_id, date)
+            .await?;
+        let workout_id = workout.selected_workout_id.clone();
 
         let training_context = self
             .training_context_builder
@@ -346,11 +380,7 @@ where
             provider: config.provider.as_str(),
             model: &config.model,
             request,
-            post_workout: Some(PostWorkoutPreviewMeta {
-                selected_workout_id: workout_id,
-                selection_method: pick.method.as_str().to_string(),
-                compliance_score: pick.compliance_score,
-            }),
+            post_workout: Some(workout),
             meso: None,
         }))
     }
@@ -480,6 +510,63 @@ where
                 meso_end: window.meso_end,
                 ai_coach_last_date: window.ai_coach_last_date,
             }),
+        }))
+    }
+
+    async fn preview_training_plan_generator_impl(
+        &self,
+        user_id: &str,
+        date: &str,
+    ) -> Result<AdminPromptPreviewResponse, AdminPromptPreviewError> {
+        let focus_date = self.validate_date(date)?;
+        let preview_epoch = preview_focus_date_epoch_seconds(focus_date);
+        let workout = self
+            .resolve_representative_workout_for_date(user_id, date)
+            .await?;
+        let workout_id = workout.selected_workout_id.clone();
+
+        let training_context = self
+            .training_context_builder
+            .build_as_of(user_id, &workout_id, focus_date)
+            .await
+            .map_err(AdminPromptPreviewError::Llm)?;
+
+        let summary = self
+            .workout_summary_repository
+            .find_by_user_id_and_workout_id(user_id, &workout_id)
+            .await
+            .map_err(|error| AdminPromptPreviewError::Repository(error.to_string()))?
+            .unwrap_or_else(|| preview_workout_summary(user_id, &workout_id, preview_epoch));
+
+        let config = self
+            .llm_config_provider
+            .get_config(user_id)
+            .await
+            .map_err(AdminPromptPreviewError::Llm)?;
+
+        let workout_recap = workout_recap_from_summary(&summary, preview_epoch);
+        let planning_context = map_workout_summary_to_planning_context(summary);
+        let request =
+            assemble_training_plan_initial_window_request(TrainingPlanInitialWindowPromptInput {
+                user_id: user_id.to_string(),
+                config: config.clone(),
+                saved_at_epoch_seconds: preview_epoch,
+                workout_recap,
+                planning_context,
+                training_context,
+                conversation_epoch_seconds: preview_epoch,
+                data_port: self.data_port.clone(),
+            });
+
+        Ok(Self::map_response(MappedPreviewResponse {
+            surface: AdminPromptPreviewSurface::TrainingPlanGenerator,
+            user_id,
+            date,
+            provider: config.provider.as_str(),
+            model: &config.model,
+            request,
+            post_workout: Some(workout),
+            meso: None,
         }))
     }
 }

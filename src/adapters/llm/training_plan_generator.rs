@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use serde_json::json;
-
 use super::context_prelude::packed_training_context_legend_with_guidance;
 
 use crate::domain::{
@@ -9,28 +7,28 @@ use crate::domain::{
     identity::Clock,
     llm::{
         build_chat_request, conversation_timing_volatile_context,
-        merge_provider_transcript_entries, timestamped_message_content, BoxFuture, LlmChatMessage,
-        LlmChatPort, LlmChatRequestInput, LlmChatResponse, LlmError, LlmMessageRole,
-        UserLlmConfigProvider,
+        merge_provider_transcript_entries, BoxFuture, LlmChatMessage, LlmChatPort,
+        LlmChatRequestInput, LlmChatResponse, LlmError, UserLlmConfigProvider,
     },
     llm_tools::{
         run_tool_loop_with_checkpoint, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
         LlmToolLoopOutput, LlmToolLoopState, ToolExecutionContext, ToolLoopCheckpoint, ToolScope,
     },
-    training_context::{TrainingContext, TrainingContextBuilder},
+    training_context::TrainingContextBuilder,
     training_plan::{
-        parse_training_plan_llm_envelope, should_retry_training_plan_llm_envelope_repair,
-        training_plan_llm_envelope_json_schema, training_plan_output_grammar,
-        training_plan_planning_guidelines, TrainingPlanConversationRole, TrainingPlanError,
-        TrainingPlanGenerator, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
-        TrainingPlanToolLoopCheckpoint, TRAINING_PLAN_WINDOW_DAY_COUNT,
+        assemble_training_plan_initial_window_request,
+        latest_training_plan_user_message_epoch_seconds, parse_training_plan_llm_envelope,
+        planning_conversation_messages, should_retry_training_plan_llm_envelope_repair,
+        training_plan_correction_system_prompt, training_plan_llm_envelope_json_schema,
+        training_plan_output_grammar, training_plan_stable_context,
+        training_plan_tool_context_today, TrainingPlanError, TrainingPlanGenerator,
+        TrainingPlanInitialWindowPromptInput, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
+        TrainingPlanToolLoopCheckpoint,
     },
     workout_summary::WorkoutRecap,
 };
 
 const TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling coach generating a completed workout recap from packed training context. Use only the provided context, stay factual, concise, and avoid inventing details.";
-const TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling coach and a strict syntax generator for Intervals.icu planned workouts. Generate a 14-day internal cycling plan window using only the backend-supported workout grammar. Use the packed training context and the completed workout recap as the planning basis.";
-const TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling coach and a strict syntax generator for Intervals.icu planned workouts. Help correct invalid dated workout sections using only the backend-supported workout grammar. Only rewrite the invalid dated sections provided.";
 const TRAINING_PLAN_ENVELOPE_REPAIR_SYSTEM_PROMPT_BASE: &str = "You are repairing one previously generated training-plan reply into the exact app JSON envelope. Do not generate a new plan. Do not invent workouts, dates, or commentary. Extract only the existing training-plan content already present in the previous assistant reply.";
 #[derive(Clone)]
 pub struct TrainingPlanLlmGenerator<Time>
@@ -146,7 +144,8 @@ where
         restored_state: Option<LlmToolLoopState>,
         checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
     ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
-        self.generate_initial_plan_window_with_state(
+        TrainingPlanLlmGenerator::generate_initial_plan_window_with_state(
+            self,
             user_id,
             workout_id,
             saved_at_epoch_seconds,
@@ -169,7 +168,8 @@ where
         restored_state: Option<LlmToolLoopState>,
         checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
     ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
-        self.correct_invalid_days_with_state(
+        TrainingPlanLlmGenerator::correct_invalid_days_with_state(
+            self,
             user_id,
             workout_id,
             saved_at_epoch_seconds,
@@ -222,50 +222,25 @@ where
                 .await
                 .map_err(map_llm_error)?;
 
-            let stable_context = training_plan_stable_context(
-                saved_at_epoch_seconds,
-                &workout_recap,
-                planning_context.as_ref(),
-                &context.rendered.stable_context,
-            );
-            let volatile_context = format!(
-                "{}\ntraining_plan_source_volatile={}",
-                conversation_timing_volatile_context(
-                    clock.now_epoch_seconds(),
-                    latest_training_plan_user_message_epoch_seconds(planning_context.as_ref()),
-                ),
-                context.rendered.volatile_context
-            );
-            let user_prompt = "Generate the next 14 dated days starting the day after the completed workout. Return only the JSON envelope requested by the system prompt. Put parser-friendly workout-builder text in the `plan` field, include rest days explicitly when needed, and use `Rest Day: <reason>` when you prescribe full rest.";
-            let mut conversation = planning_conversation_messages(planning_context.as_ref());
-            conversation.push(LlmChatMessage::user(user_prompt));
-
             let tool_context = ToolExecutionContext {
-                user_id,
+                user_id: user_id.clone(),
                 training_context: context.context.clone(),
                 today: training_plan_tool_context_today(&context.context),
-                data_port,
+                data_port: data_port.clone(),
                 planned_workout_update_port: None,
             };
-            let system_prompt = with_tool_prompt_guidance(
-                &training_plan_initial_window_system_prompt(
-                    context.context.profile.availability_configured,
-                ),
-                ToolScope::TrainingPlanGeneration,
-                &config.provider,
-                &tool_context,
+            let request = assemble_training_plan_initial_window_request(
+                TrainingPlanInitialWindowPromptInput {
+                    user_id,
+                    config: config.clone(),
+                    saved_at_epoch_seconds,
+                    workout_recap,
+                    planning_context,
+                    training_context: context,
+                    conversation_epoch_seconds: clock.now_epoch_seconds(),
+                    data_port,
+                },
             );
-
-            let request = build_chat_request(LlmChatRequestInput {
-                user_id: tool_context.user_id.clone(),
-                system_prompt,
-                stable_context,
-                volatile_context,
-                conversation,
-                cache_scope_key: None,
-                cache_key: None,
-                reusable_cache_id: None,
-            });
             let loop_checkpoint = checkpoint.clone().map(map_phase_checkpoint);
             let response = run_tool_loop_with_checkpoint(
                 llm_chat_port.clone(),
@@ -549,257 +524,4 @@ fn training_plan_envelope_repair_user_prompt(previous_assistant_content: &str) -
     format!(
         "Rewrite the previous assistant content as ONLY a valid JSON object matching the schema. Copy parser-friendly workout-builder text into `plan` and any coach commentary into optional `description`. Do not invent workouts, dates, or commentary. If the previous assistant content does not contain a usable non-empty `plan`, return an empty JSON object: `{{}}`.\n\nPrevious assistant content begins after `<<<PREVIOUS_ASSISTANT_CONTENT>>>` and ends before `<<<END_PREVIOUS_ASSISTANT_CONTENT>>>`. Treat everything between those markers as literal content to preserve exactly.\n<<<PREVIOUS_ASSISTANT_CONTENT>>>\n{previous_assistant_content}\n<<<END_PREVIOUS_ASSISTANT_CONTENT>>>"
     )
-}
-
-fn training_plan_initial_window_system_prompt(availability_configured: bool) -> String {
-    format!(
-        "{TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {}",
-        training_plan_llm_envelope_json_schema(),
-        training_plan_planning_guidelines(availability_configured, TRAINING_PLAN_WINDOW_DAY_COUNT,),
-        training_plan_output_grammar(),
-        packed_training_context_legend_with_guidance()
-    )
-}
-
-fn training_plan_correction_system_prompt(availability_configured: bool) -> String {
-    format!(
-        "{TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE} JSON schema: {} {} {} {}",
-        training_plan_llm_envelope_json_schema(),
-        training_plan_planning_guidelines(availability_configured, TRAINING_PLAN_WINDOW_DAY_COUNT,),
-        training_plan_output_grammar(),
-        packed_training_context_legend_with_guidance()
-    )
-}
-
-fn training_plan_tool_context_today(training_context: &TrainingContext) -> String {
-    training_context.history.window_end.clone()
-}
-
-fn training_plan_stable_context(
-    saved_at_epoch_seconds: i64,
-    workout_recap: &WorkoutRecap,
-    planning_context: Option<&TrainingPlanPlanningContext>,
-    packed_training_context: &str,
-) -> String {
-    let workout_recap_json = json!({
-        "text": workout_recap.text,
-        "provider": workout_recap.provider,
-        "model": workout_recap.model,
-        "generatedAt": workout_recap.generated_at_epoch_seconds,
-    })
-    .to_string();
-    let mut stable_context = format!(
-        "saved_at_epoch_seconds={saved_at_epoch_seconds}\nworkout_recap={workout_recap_json}"
-    );
-
-    if let Some(planning_rpe) = planning_context.and_then(|context| context.rpe) {
-        stable_context.push_str(&format!("\nplanning_rpe={planning_rpe}"));
-    }
-
-    stable_context.push_str(&format!(
-        "\ntraining_plan_source_stable={packed_training_context}"
-    ));
-    stable_context
-}
-
-fn planning_conversation_messages(
-    planning_context: Option<&TrainingPlanPlanningContext>,
-) -> Vec<LlmChatMessage> {
-    planning_context
-        .into_iter()
-        .flat_map(|planning_context| planning_context.messages.iter())
-        .map(|message| LlmChatMessage {
-            role: match message.role {
-                TrainingPlanConversationRole::Coach => LlmMessageRole::Assistant,
-                TrainingPlanConversationRole::User => LlmMessageRole::User,
-            },
-            content: timestamped_message_content(
-                &message.content,
-                message.created_at_epoch_seconds,
-            ),
-            tool_calls: Vec::new(),
-            tool_call_id: None,
-            reasoning_content: None,
-        })
-        .collect()
-}
-
-fn latest_training_plan_user_message_epoch_seconds(
-    planning_context: Option<&TrainingPlanPlanningContext>,
-) -> Option<i64> {
-    planning_context.and_then(|context| {
-        context
-            .messages
-            .iter()
-            .rev()
-            .find(|message| matches!(message.role, TrainingPlanConversationRole::User))
-            .map(|message| message.created_at_epoch_seconds)
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        latest_training_plan_user_message_epoch_seconds, planning_conversation_messages,
-        training_plan_correction_system_prompt, training_plan_initial_window_system_prompt,
-        training_plan_tool_context_today,
-    };
-    use crate::domain::{
-        llm::LlmProvider,
-        llm_tools::{with_tool_prompt_guidance, ToolExecutionContext, ToolScope},
-        training_context::TrainingContext,
-        training_plan::{TrainingPlanConversationMessage, TrainingPlanConversationRole},
-    };
-
-    #[test]
-    fn training_plan_prompts_include_durability_guidelines() {
-        for prompt in [
-            training_plan_initial_window_system_prompt(true),
-            training_plan_correction_system_prompt(true),
-        ] {
-            assert!(
-                prompt.contains("Metric hierarchy: RPE over power over TSS/TSB over heart rate.")
-            );
-            assert!(prompt.contains("Never prescribe more than 2 consecutive Rest Day entries unless the athlete explicitly reports illness or injury."));
-            assert!(prompt.contains(
-                "first choose a short Z1 ride when availability allows a safe low-load session"
-            ));
-            assert!(prompt.contains("include a short concrete reason after `Rest Day:`"));
-            assert!(prompt.contains("part of a coherent mesocycle with a clear phase progression"));
-            assert!(prompt.contains("when rc.pri is missing or ambiguous, default Category C"));
-            assert!(prompt.contains("Seiler 2010"));
-            assert!(prompt.contains("simulate_forward_load"));
-            assert!(prompt
-                .contains("Earlier assistant-role messages are your own earlier coach statements"));
-            assert!(
-                prompt.contains("Do not plan all 14 days from one static CTL/ATL/TSB snapshot.")
-            );
-            assert!(prompt.contains("Treat previously projected planned days (`pd`) as already planned/completed inputs"));
-            assert!(prompt.contains("Weekly availability is mandatory and must be respected"));
-        }
-    }
-
-    #[test]
-    fn training_plan_prompts_adjust_availability_guidance_when_not_configured() {
-        for prompt in [
-            training_plan_initial_window_system_prompt(false),
-            training_plan_correction_system_prompt(false),
-        ] {
-            assert!(prompt.contains("Weekly availability is not configured in this context."));
-            assert!(!prompt.contains("Weekly availability is mandatory and must be respected"));
-        }
-    }
-
-    #[test]
-    fn training_plan_prompt_guidance_includes_forward_load_tool() {
-        let prompt = with_tool_prompt_guidance(
-            &training_plan_initial_window_system_prompt(true),
-            ToolScope::TrainingPlanGeneration,
-            &LlmProvider::OpenAi,
-            &sample_tool_context(),
-        );
-
-        assert!(prompt.contains("`simulate_forward_load`"));
-        assert!(prompt.contains("future fatigue"));
-        assert!(!prompt.contains("`get_selected_workout`"));
-        assert!(!prompt.contains("`selected_workout_power_curve`"));
-    }
-
-    #[test]
-    fn training_plan_tool_context_today_uses_focus_window_end() {
-        let today = training_plan_tool_context_today(&TrainingContext {
-            history: crate::domain::training_context::HistoricalTrainingContext {
-                window_end: "2026-05-01".to_string(),
-                ..Default::default()
-            },
-            ..TrainingContext::default()
-        });
-
-        assert_eq!(today, "2026-05-01");
-    }
-
-    #[test]
-    fn training_plan_volatile_context_includes_conversation_timing() {
-        let volatile_context = format!(
-            "{}\ntraining_plan_source_volatile={{}}",
-            crate::domain::llm::conversation_timing_volatile_context(
-                1_746_489_600,
-                Some(1_746_490_200),
-            )
-        );
-
-        assert!(volatile_context.contains("currentConversationDatetime"));
-        assert!(volatile_context.contains("2025-05-06T00:00:00+00:00"));
-        assert!(volatile_context.contains("latest_user_message_datetime=2025-05-06T00:10:00+00:00"));
-    }
-
-    #[test]
-    fn planning_conversation_messages_prefix_timestamps() {
-        let messages = planning_conversation_messages(Some(
-            &crate::domain::training_plan::TrainingPlanPlanningContext {
-                rpe: Some(7),
-                messages: vec![
-                    TrainingPlanConversationMessage {
-                        role: TrainingPlanConversationRole::Coach,
-                        content: "Keep this light.".to_string(),
-                        created_at_epoch_seconds: 1_746_489_600,
-                    },
-                    TrainingPlanConversationMessage {
-                        role: TrainingPlanConversationRole::User,
-                        content: "I feel stale.".to_string(),
-                        created_at_epoch_seconds: 1_746_490_200,
-                    },
-                ],
-            },
-        ));
-
-        assert_eq!(
-            messages[0].content,
-            "[sent_at=2025-05-06T00:00:00+00:00]\nKeep this light."
-        );
-        assert_eq!(
-            messages[1].content,
-            "[sent_at=2025-05-06T00:10:00+00:00]\nI feel stale."
-        );
-    }
-
-    #[test]
-    fn latest_training_plan_user_message_epoch_seconds_uses_latest_user_turn() {
-        let latest = latest_training_plan_user_message_epoch_seconds(Some(
-            &crate::domain::training_plan::TrainingPlanPlanningContext {
-                rpe: Some(7),
-                messages: vec![
-                    TrainingPlanConversationMessage {
-                        role: TrainingPlanConversationRole::Coach,
-                        content: "Coach message".to_string(),
-                        created_at_epoch_seconds: 1_746_489_600,
-                    },
-                    TrainingPlanConversationMessage {
-                        role: TrainingPlanConversationRole::User,
-                        content: "User message".to_string(),
-                        created_at_epoch_seconds: 1_746_490_200,
-                    },
-                ],
-            },
-        ));
-
-        assert_eq!(latest, Some(1_746_490_200));
-    }
-
-    fn sample_tool_context() -> ToolExecutionContext {
-        ToolExecutionContext {
-            user_id: "user-1".to_string(),
-            training_context: TrainingContext {
-                focus_kind: "training_plan".to_string(),
-                history: crate::domain::training_context::HistoricalTrainingContext {
-                    window_end: "2026-05-06".to_string(),
-                    ..Default::default()
-                },
-                ..TrainingContext::default()
-            },
-            today: "2026-05-06".to_string(),
-            data_port: None,
-            planned_workout_update_port: None,
-        }
-    }
 }

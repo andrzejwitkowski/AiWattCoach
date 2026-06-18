@@ -99,7 +99,7 @@ Validation rules:
 - `end_date >= start_date`
 - Range length max **366 days** (reject longer spans at REST boundary)
 - `title` max 120 chars, `note` max 2000 chars
-- Create/update allowed only when `end_date >= user_today_utc` (past-only ranges rejected on write; historical rows remain readable after they pass)
+- Create/update reject ranges whose entire span ends before `user_today_utc`; historical rows remain readable, and title/note edits on fully past entries stay allowed without date changes
 
 Overlap policy (v1): **allow overlaps**. Multiple entries may cover the same day; calendar shows each label; LLM context lists each range. Simpler than merge logic and matches "I marked vacation + recovery" edge cases. Document in API validation messages.
 
