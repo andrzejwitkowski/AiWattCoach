@@ -64,6 +64,12 @@ fn expand_inclusive_date_range_returns_each_day() {
 }
 
 #[test]
+fn expand_inclusive_date_range_rejects_invalid_range() {
+    let err = expand_inclusive_date_range("2026-07-10", "2026-07-09").unwrap_err();
+    assert!(matches!(err, PlannedRestDayError::Validation(_)));
+}
+
+#[test]
 fn validate_write_range_rejects_fully_past_end() {
     let err = validate_write_range_ends_on_or_after(
         NaiveDate::from_ymd_opt(2026, 6, 10).unwrap(),

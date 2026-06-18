@@ -151,7 +151,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
       : hasTraining
         ? getIcon(visibleActivity, primaryEvent)
         : BedDouble;
-  const isSelectable = hasTraining && Boolean(onSelect);
+  const isSelectable = Boolean(onSelect) && hasTraining && !hasUserPlannedRestOnly;
   const plannedSyncVisual = isPredictedPlannedOnly ? getPlannedSyncVisual(plannedSyncStatus, t) : null;
   const racePriorityVisual = raceLabel ? getRacePriorityVisual(raceLabel.payload.priority) : null;
   const matchedPlanBadgeLabel = hasMatchedPlannedWorkout ? t('calendar.planMatched') : null;

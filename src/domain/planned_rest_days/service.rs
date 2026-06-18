@@ -84,17 +84,18 @@ where
         planned_rest_day_id: &str,
         request: UpdatePlannedRestDay,
     ) -> Result<PlannedRestDay, PlannedRestDayError> {
+        let today = self.today();
         let existing = self
             .repository
             .find_by_id(user_id, planned_rest_day_id)
             .await?
             .ok_or(PlannedRestDayError::NotFound)?;
 
-        validate_past_date_changes_allowed(&existing, &request, self.today())?;
+        validate_past_date_changes_allowed(&existing, &request, today)?;
 
         let existing_end = parse_date(&existing.end_date)?;
-        if existing_end >= self.today() {
-            validate_write_range_ends_on_or_after(self.today(), &request.end_date)?;
+        if existing_end >= today {
+            validate_write_range_ends_on_or_after(today, &request.end_date)?;
         }
 
         let updated = existing.mark_updated(request, self.clock.now_epoch_seconds())?;

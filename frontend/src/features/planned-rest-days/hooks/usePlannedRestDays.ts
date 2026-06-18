@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { usePlannedRestDaysApi } from '../api/plannedRestDays';
 import type { PlannedRestDay } from '../types';
@@ -24,12 +24,14 @@ function addDays(date: Date, days: number): Date {
 
 export function usePlannedRestDays(): UsePlannedRestDaysResult {
   const { listPlannedRestDays } = usePlannedRestDaysApi();
+  const latestRequestIdRef = useRef(0);
   const [entries, setEntries] = useState<PlannedRestDay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [todayKey, setTodayKey] = useState(() => toDateKey(new Date()));
 
   const refresh = useCallback(async () => {
+    const requestId = ++latestRequestIdRef.current;
     setIsLoading(true);
     setError(null);
 
@@ -39,11 +41,19 @@ export function usePlannedRestDays(): UsePlannedRestDaysResult {
         oldest: toDateKey(addDays(today, -PAST_DAYS)),
         newest: toDateKey(addDays(today, FUTURE_DAYS)),
       });
+      if (requestId !== latestRequestIdRef.current) {
+        return;
+      }
       setEntries(data);
     } catch (err) {
+      if (requestId !== latestRequestIdRef.current) {
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to load planned rest days');
     } finally {
-      setIsLoading(false);
+      if (requestId === latestRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [listPlannedRestDays]);
 
