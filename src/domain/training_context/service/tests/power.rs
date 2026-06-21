@@ -52,6 +52,26 @@ fn cadence_segments_encode_stream() {
     assert_eq!(extract_cadence_segments_5s(&streams), vec![[55, 55, 5]]);
 }
 
+#[test]
+fn cadence_segments_compress_long_steady_stream() {
+    let values: Vec<i32> = vec![88; 7200];
+    let segments = extract_cadence_segments_5s(&cadence_stream(&values));
+    assert_eq!(segments.len(), 1);
+    assert!(segments[0][2] >= 7200);
+}
+
+fn cadence_stream(values: &[i32]) -> Vec<ActivityStream> {
+    vec![ActivityStream {
+        stream_type: "cadence".to_string(),
+        name: None,
+        data: Some(serde_json::json!(values)),
+        data2: None,
+        value_type_is_array: false,
+        custom: false,
+        all_null: false,
+    }]
+}
+
 fn watts_stream(values: &[i32]) -> Vec<ActivityStream> {
     vec![ActivityStream {
         stream_type: "watts".to_string(),

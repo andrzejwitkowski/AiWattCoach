@@ -64,6 +64,8 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
             }],
             workouts: vec![HistoricalWorkoutContext {
                 activity_id: "ride-1".to_string(),
+                power_segments: vec![[220, 220, 3], [270, 270, 3]],
+                cadence_segments: vec![[87, 87, 5]],
                 interval_blocks: vec![PlannedWorkoutBlockContext {
                     duration_seconds: 480,
                     min_percent_ftp: Some(90.0),
@@ -145,6 +147,7 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
     assert!(rendered
         .stable_context
         .contains("\"bl\":[{\"dur\":480,\"minp\":90.0,\"maxp\":95.0,\"minw\":270,\"maxw\":285}]"));
+    assert!(rendered.stable_context.contains("\"cs\":[[87,87,5]]"));
     assert!(rendered
         .stable_context
         .contains("\"rc\":[{\"id\":\"race-1\",\"d\":\"2026-05-10\",\"n\":\"Spring Classic\",\"km\":123.0,\"disc\":\"road\",\"pri\":\"A\"}]"));

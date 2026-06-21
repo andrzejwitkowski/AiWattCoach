@@ -179,6 +179,7 @@ pub struct HistoricalWorkoutContext {
     pub workout_recap: Option<String>,
     pub variability_index: Option<f64>,
     pub power_segments: Vec<[i32; 3]>,
+    pub cadence_segments: Vec<[i32; 3]>,
     pub interval_blocks: Vec<PlannedWorkoutBlockContext>,
 }
 

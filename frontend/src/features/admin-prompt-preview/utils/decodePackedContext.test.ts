@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { decodeShortKey, formatSeconds } from './decodePackedContext';
+import { decodeShortKey, formatSeconds, formatSegmentTriplets } from './decodePackedContext';
 
 describe('decodeShortKey', () => {
   it('maps known short keys to human labels', () => {
     expect(decodeShortKey('ctl')).toBe('CTL');
     expect(decodeShortKey('fnm')).toBe('Full Name');
     expect(decodeShortKey('tss')).toBe('TSS');
+    expect(decodeShortKey('ps')).toBe('Power segments [minW,maxW,durSec]');
+    expect(decodeShortKey('cs')).toBe('Cadence segments [minRPM,maxRPM,durSec]');
   });
 
   it('returns the key as-is when unknown', () => {
@@ -24,5 +26,23 @@ describe('formatSeconds', () => {
   it('formats minutes only', () => {
     expect(formatSeconds(1842)).toBe('30m');
     expect(formatSeconds(60)).toBe('1m');
+  });
+});
+
+describe('formatSegmentTriplets', () => {
+  it('formats steady and ranged segments', () => {
+    expect(formatSegmentTriplets([[220, 220, 180], [240, 260, 120]], 'W')).toEqual([
+      '220 W · 3m',
+      '240–260 W · 2m',
+    ]);
+    expect(formatSegmentTriplets([[87, 87, 300]], 'RPM')).toEqual(['87 RPM · 5m']);
+  });
+
+  it('skips malformed triplets and non-numeric values', () => {
+    expect(formatSegmentTriplets([[220, 220], [240, 260, 120], 'bad'], 'W')).toEqual([
+      '240–260 W · 2m',
+    ]);
+    expect(formatSegmentTriplets([[NaN, 220, 180], [240, 'x', 120]], 'W')).toEqual([]);
+    expect(formatSegmentTriplets(null, 'RPM')).toEqual([]);
   });
 });
