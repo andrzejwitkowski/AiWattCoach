@@ -283,6 +283,7 @@ async fn training_plan_generator_describes_packed_context_legend_in_system_promp
     assert!(prompt.contains("[minW,maxW,durationSec]"));
     assert!(prompt.contains("max==0 indicate no pedaling"));
     assert!(prompt.contains("do not merge these with pedaling segments"));
+    assert!(prompt.contains("appear only in volatile rd.w entries, not in stable h.w"));
     assert!(!prompt.contains("p3=power watts in 3-second buckets"));
 }
 

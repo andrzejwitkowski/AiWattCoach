@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::model::{RenderedTrainingContext, TrainingContext};
 
 mod payloads;
@@ -26,6 +28,15 @@ pub fn render_training_context(context: &TrainingContext) -> RenderedTrainingCon
 
 pub fn approximate_token_count(value: &str) -> usize {
     value.chars().count().div_ceil(3)
+}
+
+pub(crate) fn recent_workout_activity_ids(context: &TrainingContext) -> HashSet<&str> {
+    context
+        .recent_days
+        .iter()
+        .flat_map(|day| day.workouts.iter())
+        .map(|workout| workout.activity_id.as_str())
+        .collect()
 }
 
 fn is_empty_slice<T>(value: &[T]) -> bool {

@@ -1,5 +1,8 @@
+use std::collections::HashSet;
+
 use serde::Serialize;
 
+use super::super::recent_workout_activity_ids;
 use crate::domain::training_context::model::{
     AthleteProfileContext, FuturePlannedEventContext, HistoricalLoadTrendPoint,
     HistoricalTrainingContext, HistoricalWorkoutContext, IntervalsStatusContext,
@@ -22,6 +25,8 @@ pub(crate) struct StablePayload<'a> {
 
 impl<'a> StablePayload<'a> {
     pub(crate) fn from_context(context: &'a TrainingContext) -> Self {
+        let recent_activity_ids = recent_workout_activity_ids(context);
+
         Self {
             v: 2,
             i: CompactIntervalsStatus::from_status(&context.intervals_status),
@@ -37,7 +42,7 @@ impl<'a> StablePayload<'a> {
                 .iter()
                 .map(CompactPlannedRestDay::from_entry)
                 .collect(),
-            h: CompactHistory::from_history(&context.history),
+            h: CompactHistory::from_history(&context.history, &recent_activity_ids),
         }
     }
 }
@@ -242,7 +247,10 @@ struct CompactHistory<'a> {
 }
 
 impl<'a> CompactHistory<'a> {
-    fn from_history(history: &'a HistoricalTrainingContext) -> Self {
+    fn from_history(
+        history: &'a HistoricalTrainingContext,
+        recent_activity_ids: &HashSet<&str>,
+    ) -> Self {
         Self {
             ws: &history.window_start,
             we: &history.window_end,
@@ -265,7 +273,12 @@ impl<'a> CompactHistory<'a> {
             w: history
                 .workouts
                 .iter()
-                .map(CompactHistoricalWorkout::from_workout)
+                .map(|workout| {
+                    CompactHistoricalWorkout::from_workout(
+                        workout,
+                        recent_activity_ids.contains(workout.activity_id.as_str()),
+                    )
+                })
                 .collect(),
         }
     }
@@ -336,7 +349,7 @@ struct CompactHistoricalWorkout<'a> {
 }
 
 impl<'a> CompactHistoricalWorkout<'a> {
-    fn from_workout(workout: &'a HistoricalWorkoutContext) -> Self {
+    fn from_workout(workout: &'a HistoricalWorkoutContext, omit_streams: bool) -> Self {
         Self {
             d: &workout.date,
             id: &workout.activity_id,
@@ -350,8 +363,16 @@ impl<'a> CompactHistoricalWorkout<'a> {
             ftp: workout.ftp_watts,
             recap: workout.workout_recap.as_deref(),
             vi: workout.variability_index,
-            ps: &workout.power_segments,
-            cs: &workout.cadence_segments,
+            ps: if omit_streams {
+                &workout.power_segments[..0]
+            } else {
+                &workout.power_segments
+            },
+            cs: if omit_streams {
+                &workout.cadence_segments[..0]
+            } else {
+                &workout.cadence_segments
+            },
             bl: workout
                 .interval_blocks
                 .iter()

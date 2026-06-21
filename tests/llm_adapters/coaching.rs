@@ -150,6 +150,7 @@ async fn llm_workout_coach_describes_ps_cs_segments_in_system_prompt() {
     assert!(prompt.contains("cs=executed cadence segments"));
     assert!(prompt.contains("max==0 indicate no pedaling"));
     assert!(prompt.contains("do not merge these with pedaling segments"));
+    assert!(prompt.contains("appear only in volatile rd.w entries, not in stable h.w"));
     assert!(prompt.contains("judge interval execution primarily from bl"));
     assert!(!prompt.contains("p3=power watts"));
     assert!(!prompt.contains("c5=cadence values"));

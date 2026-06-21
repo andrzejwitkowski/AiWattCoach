@@ -147,7 +147,8 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
     assert!(rendered
         .stable_context
         .contains("\"bl\":[{\"dur\":480,\"minp\":90.0,\"maxp\":95.0,\"minw\":270,\"maxw\":285}]"));
-    assert!(rendered.stable_context.contains("\"cs\":[[87,87,5]]"));
+    assert!(!rendered.stable_context.contains("\"ps\":"));
+    assert!(!rendered.stable_context.contains("\"cs\":"));
     assert!(rendered
         .stable_context
         .contains("\"rc\":[{\"id\":\"race-1\",\"d\":\"2026-05-10\",\"n\":\"Spring Classic\",\"km\":123.0,\"disc\":\"road\",\"pri\":\"A\"}]"));
@@ -162,6 +163,7 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
     assert!(rendered
         .volatile_context
         .contains("\"ps\":[[220,220,3],[270,270,3]]"));
+    assert!(rendered.volatile_context.contains("\"cs\":[[87,87,5]]"));
     assert!(!rendered.volatile_context.contains("\"pc\":"));
     assert!(!rendered.volatile_context.contains("\"p3\":"));
     assert!(rendered
@@ -309,4 +311,62 @@ fn segment_encoding_reduces_prompt_size_for_steady_ride() {
 
     assert!(segments.len() < bucket_array.len() / 10);
     assert!(segment_json.len() < bucket_json.len() / 10);
+}
+
+#[test]
+fn recent_workout_streams_omitted_from_stable_h_w() {
+    let context = TrainingContext {
+        generated_at_epoch_seconds: 1,
+        focus_workout_id: Some("ride-recent".to_string()),
+        focus_kind: "activity".to_string(),
+        intervals_status: IntervalsStatusContext::default(),
+        profile: AthleteProfileContext::default(),
+        races: Vec::new(),
+        planned_rest_days: Vec::new(),
+        future_events: Vec::new(),
+        history: HistoricalTrainingContext {
+            workouts: vec![
+                HistoricalWorkoutContext {
+                    date: "2026-04-01".to_string(),
+                    activity_id: "ride-recent".to_string(),
+                    power_segments: vec![[220, 220, 3]],
+                    cadence_segments: vec![[88, 88, 5]],
+                    ..HistoricalWorkoutContext::default()
+                },
+                HistoricalWorkoutContext {
+                    date: "2026-03-01".to_string(),
+                    activity_id: "ride-old".to_string(),
+                    power_segments: vec![[180, 180, 3]],
+                    cadence_segments: vec![[90, 90, 5]],
+                    ..HistoricalWorkoutContext::default()
+                },
+            ],
+            ..HistoricalTrainingContext::default()
+        },
+        recent_days: vec![RecentDayContext {
+            date: "2026-04-01".to_string(),
+            workouts: vec![RecentWorkoutContext {
+                activity_id: "ride-recent".to_string(),
+                start_date_local: "2026-04-01T08:00:00".to_string(),
+                power_segments: vec![[220, 220, 3]],
+                cadence_segments: vec![[88, 88, 5]],
+                ..RecentWorkoutContext::default()
+            }],
+            ..RecentDayContext::default()
+        }],
+        recent_workout_recaps: Vec::new(),
+        upcoming_days: Vec::new(),
+        projected_days: Vec::new(),
+    };
+
+    let rendered = render_training_context(&context);
+
+    assert!(rendered.stable_context.contains("\"id\":\"ride-recent\""));
+    assert!(!rendered.stable_context.contains("\"ps\":[[220,220,3]]"));
+    assert!(rendered
+        .stable_context
+        .contains("\"id\":\"ride-old\",\"ps\":[[180,180,3]],\"cs\":[[90,90,5]]"));
+    assert!(rendered
+        .volatile_context
+        .contains("\"id\":\"ride-recent\",\"sd\":\"2026-04-01T08:00:00\",\"ps\":[[220,220,3]],\"cs\":[[88,88,5]]"));
 }
