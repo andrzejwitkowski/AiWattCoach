@@ -222,11 +222,11 @@ async fn builder_renders_recent_and_historical_context() {
         .rendered
         .stable_context
         .contains("\"recap\":\"Strong sweet spot execution with steady control\""));
-    assert!(result
+    assert!(!result
         .rendered
         .stable_context
         .contains("\"ps\":[[220,220,3],[270,270,3]]"));
-    assert!(result
+    assert!(!result
         .rendered
         .stable_context
         .contains("\"cs\":[[84,84,5]]"));
