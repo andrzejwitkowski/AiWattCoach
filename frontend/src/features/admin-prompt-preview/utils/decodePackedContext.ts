@@ -96,12 +96,21 @@ export function formatSegmentTriplets(segments: unknown, unit: 'W' | 'RPM'): str
   if (!Array.isArray(segments)) return [];
 
   return segments.flatMap((segment) => {
-    if (!Array.isArray(segment) || segment.length < 3) return [];
+    if (!Array.isArray(segment) || segment.length !== 3) return [];
 
     const [min, max, duration] = segment;
     const minNum = Number(min);
     const maxNum = Number(max);
+    const durationNum = Number(duration);
+    if (
+      !Number.isFinite(minNum) ||
+      !Number.isFinite(maxNum) ||
+      !Number.isFinite(durationNum)
+    ) {
+      return [];
+    }
+
     const range = minNum === maxNum ? `${minNum}` : `${minNum}–${maxNum}`;
-    return [`${range} ${unit} · ${formatSeconds(Number(duration))}`];
+    return [`${range} ${unit} · ${formatSeconds(durationNum)}`];
   });
 }

@@ -366,6 +366,7 @@ function buildHistorySummary(h: Record<string, unknown>) {
           </summary>
           <div className="mt-2 space-y-2">
             {(h.w as unknown[]).map((item, i) => {
+              if (item == null || typeof item !== 'object') return null;
               const workout = item as Record<string, unknown>;
               const powerSegments = formatSegmentTriplets(workout.ps, 'W');
               const cadenceSegments = formatSegmentTriplets(workout.cs, 'RPM');

@@ -37,4 +37,12 @@ describe('formatSegmentTriplets', () => {
     ]);
     expect(formatSegmentTriplets([[87, 87, 300]], 'RPM')).toEqual(['87 RPM · 5m']);
   });
+
+  it('skips malformed triplets and non-numeric values', () => {
+    expect(formatSegmentTriplets([[220, 220], [240, 260, 120], 'bad'], 'W')).toEqual([
+      '240–260 W · 2m',
+    ]);
+    expect(formatSegmentTriplets([[NaN, 220, 180], [240, 'x', 120]], 'W')).toEqual([]);
+    expect(formatSegmentTriplets(null, 'RPM')).toEqual([]);
+  });
 });
