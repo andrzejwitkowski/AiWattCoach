@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { decodeShortKey, formatSeconds } from '../utils/decodePackedContext';
+import { decodeShortKey, formatSeconds, formatSegmentTriplets } from '../utils/decodePackedContext';
 
 type DecodedPackedContextProps = {
   label: string;
@@ -359,6 +359,47 @@ function buildHistorySummary(h: Record<string, unknown>) {
           </div>
         </details>
       )}
+      {Array.isArray(h.w) && h.w.length > 0 && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Historical Workouts ({h.w.length})
+          </summary>
+          <div className="mt-2 space-y-2">
+            {(h.w as unknown[]).map((item, i) => {
+              const workout = item as Record<string, unknown>;
+              const powerSegments = formatSegmentTriplets(workout.ps, 'W');
+              const cadenceSegments = formatSegmentTriplets(workout.cs, 'RPM');
+
+              return (
+                <div key={String(workout.id ?? i)} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm">
+                    <span className="text-slate-400">{String(workout.d ?? '')}</span>
+                    <span className="font-medium text-slate-200">{String(workout.n ?? workout.id ?? '')}</span>
+                    {workout.tss != null ? <span className="text-xs text-slate-400">{String(workout.tss)} TSS</span> : null}
+                  </div>
+                  <SegmentList label={decodeShortKey('ps')} segments={powerSegments} />
+                  <SegmentList label={decodeShortKey('cs')} segments={cadenceSegments} />
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function SegmentList({ label, segments }: { label: string; segments: string[] }) {
+  if (segments.length === 0) return null;
+
+  return (
+    <div className="mt-2">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
+      <ul className="mt-1 space-y-0.5 text-xs text-slate-300">
+        {segments.map((segment, i) => (
+          <li key={i}>{segment}</li>
+        ))}
+      </ul>
     </div>
   );
 }

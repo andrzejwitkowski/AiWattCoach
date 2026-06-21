@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { DecodedPackedContext } from './DecodedPackedContext';
@@ -58,5 +58,34 @@ describe('DecodedPackedContext', () => {
     expect(screen.getByText('2026-08-01')).toBeInTheDocument();
     expect(screen.queryByText('Other Fields')).not.toBeInTheDocument();
     expect(screen.queryByText('[2 items]')).not.toBeInTheDocument();
+  });
+
+  it('renders historical workouts with ps and cs segments', () => {
+    render(
+      <DecodedPackedContext
+        label="Stable Context"
+        data={{
+          h: {
+            ac: 1,
+            w: [
+              {
+                d: '2026-03-20',
+                id: 'ride-1',
+                n: 'Sweet Spot',
+                ps: [[220, 220, 180], [270, 270, 120]],
+                cs: [[84, 84, 300]],
+              },
+            ],
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText(/historical workouts \(1\)/i));
+    expect(screen.getByText('Sweet Spot')).toBeInTheDocument();
+    expect(screen.getByText('220 W · 3m')).toBeInTheDocument();
+    expect(screen.getByText('270 W · 2m')).toBeInTheDocument();
+    expect(screen.getByText('84 RPM · 5m')).toBeInTheDocument();
+    expect(screen.queryByText('[1 items]')).not.toBeInTheDocument();
   });
 });

@@ -37,10 +37,16 @@ pub(super) fn build_historical_context(
     let workouts = activities
         .iter()
         .map(|activity| {
-            let power_segments = workout_sources
+            let (power_segments, cadence_segments) = workout_sources
                 .detailed_activities_by_id
                 .get(&activity.id)
-                .map(|detailed| extract_power_segments_3s(&detailed.details.streams))
+                .map(|detailed| {
+                    let streams = detailed.details.streams.as_slice();
+                    (
+                        extract_power_segments_3s(streams),
+                        extract_cadence_segments_5s(streams),
+                    )
+                })
                 .unwrap_or_default();
 
             HistoricalWorkoutContext {
@@ -62,6 +68,7 @@ pub(super) fn build_historical_context(
                     .cloned(),
                 variability_index: activity.metrics.variability_index,
                 power_segments,
+                cadence_segments,
                 interval_blocks: workout_sources
                     .recent_interval_blocks_by_activity_id
                     .get(&activity.id)

@@ -226,6 +226,20 @@ async fn builder_renders_recent_and_historical_context() {
         .rendered
         .stable_context
         .contains("\"ps\":[[220,220,3],[270,270,3]]"));
+    assert!(result
+        .rendered
+        .stable_context
+        .contains("\"cs\":[[84,84,5]]"));
+    assert_eq!(
+        result
+            .context
+            .history
+            .workouts
+            .iter()
+            .find(|workout| workout.activity_id == "ride-1")
+            .map(|workout| workout.cadence_segments.as_slice()),
+        Some(&[[84, 84, 5]][..]),
+    );
     assert!(result.rendered.volatile_context.contains("\"ride-1\""));
     assert!(result
         .rendered

@@ -2,6 +2,12 @@ pub const POWER_TOLERANCE_WATTS: i32 = 5;
 pub const POWER_COASTING_THRESHOLD_WATTS: i32 = 10;
 pub const CADENCE_TOLERANCE_RPM: i32 = 2;
 
+#[derive(Clone, Copy)]
+enum CoastingBoundary {
+    Power,
+    Cadence,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct StreamSegment {
     min: i32,
@@ -17,7 +23,7 @@ pub fn bucket_and_encode_power_segments(values: &[i32]) -> Vec<SegmentTriplet> {
         &buckets,
         super::POWER_BUCKET_SECONDS,
         POWER_TOLERANCE_WATTS,
-        true,
+        CoastingBoundary::Power,
     )
     .into_iter()
     .map(|segment| [segment.min, segment.max, segment.duration_seconds])
@@ -30,7 +36,7 @@ pub fn bucket_and_encode_cadence_segments(values: &[i32]) -> Vec<SegmentTriplet>
         &buckets,
         super::CADENCE_BUCKET_SECONDS,
         CADENCE_TOLERANCE_RPM,
-        false,
+        CoastingBoundary::Cadence,
     )
     .into_iter()
     .map(|segment| [segment.min, segment.max, segment.duration_seconds])
@@ -41,7 +47,7 @@ fn encode_segments(
     buckets: &[i32],
     bucket_seconds: usize,
     tolerance: i32,
-    check_coasting_boundary: bool,
+    coasting_boundary: CoastingBoundary,
 ) -> Vec<StreamSegment> {
     if buckets.is_empty() || bucket_seconds == 0 {
         return Vec::new();
@@ -56,7 +62,7 @@ fn encode_segments(
     };
 
     for &value in &buckets[1..] {
-        if can_extend_segment(&current, value, tolerance, check_coasting_boundary) {
+        if can_extend_segment(&current, value, tolerance, coasting_boundary) {
             current.min = current.min.min(value);
             current.max = current.max.max(value);
             current.duration_seconds += bucket_duration;
@@ -78,9 +84,9 @@ fn can_extend_segment(
     segment: &StreamSegment,
     value: i32,
     tolerance: i32,
-    check_coasting_boundary: bool,
+    coasting_boundary: CoastingBoundary,
 ) -> bool {
-    if check_coasting_boundary && crosses_power_coasting_boundary(segment.max, value) {
+    if crosses_coasting_boundary(coasting_boundary, segment.max, value) {
         return false;
     }
 
@@ -89,10 +95,21 @@ fn can_extend_segment(
     (expanded_min..=expanded_max).contains(&value)
 }
 
+fn crosses_coasting_boundary(boundary: CoastingBoundary, segment_max: i32, value: i32) -> bool {
+    match boundary {
+        CoastingBoundary::Power => crosses_power_coasting_boundary(segment_max, value),
+        CoastingBoundary::Cadence => crosses_cadence_zero_boundary(segment_max, value),
+    }
+}
+
 fn crosses_power_coasting_boundary(segment_max: i32, value: i32) -> bool {
     let segment_is_coasting = segment_max < POWER_COASTING_THRESHOLD_WATTS;
     let value_is_coasting = value < POWER_COASTING_THRESHOLD_WATTS;
     segment_is_coasting != value_is_coasting
+}
+
+fn crosses_cadence_zero_boundary(segment_max: i32, value: i32) -> bool {
+    (segment_max <= 0) != (value <= 0)
 }
 
 #[cfg(test)]
@@ -100,11 +117,21 @@ mod tests {
     use super::*;
 
     fn encode_power_segments(buckets: &[i32], bucket_seconds: usize) -> Vec<StreamSegment> {
-        encode_segments(buckets, bucket_seconds, POWER_TOLERANCE_WATTS, true)
+        encode_segments(
+            buckets,
+            bucket_seconds,
+            POWER_TOLERANCE_WATTS,
+            CoastingBoundary::Power,
+        )
     }
 
     fn encode_cadence_segments(buckets: &[i32], bucket_seconds: usize) -> Vec<StreamSegment> {
-        encode_segments(buckets, bucket_seconds, CADENCE_TOLERANCE_RPM, false)
+        encode_segments(
+            buckets,
+            bucket_seconds,
+            CADENCE_TOLERANCE_RPM,
+            CoastingBoundary::Cadence,
+        )
     }
 
     #[test]
@@ -164,6 +191,15 @@ mod tests {
                 duration_seconds: 20,
             }]
         );
+    }
+
+    #[test]
+    fn cadence_zero_not_merged_with_pedaling() {
+        let buckets = vec![0, 0, 85, 85, 85];
+        let segments = encode_cadence_segments(&buckets, 5);
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].max, 0);
+        assert_eq!(segments[1].min, 85);
     }
 
     #[test]
