@@ -681,7 +681,7 @@ fn calendar_coach_tool_guidance(available_tool_names: &[&'static str]) -> Vec<St
 fn provider_supports_tools(provider: &LlmProvider) -> bool {
     matches!(
         provider,
-        LlmProvider::OpenAi | LlmProvider::OpenRouter | LlmProvider::DeepSeek
+        LlmProvider::OpenAi | LlmProvider::OpenRouter | LlmProvider::DeepSeek | LlmProvider::Zai
     )
 }
 

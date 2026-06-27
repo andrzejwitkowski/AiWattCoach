@@ -53,7 +53,8 @@ pub(super) fn parse_provider_settings_input(
 ) -> Result<FieldUpdate<LlmProvider>, SettingsError> {
     parse_provider_input(input, || {
         SettingsError::Validation(
-            "selectedProvider must be one of: openai, gemini, openrouter, deepseek".to_string(),
+            "selectedProvider must be one of: openai, gemini, openrouter, deepseek, zai"
+                .to_string(),
         )
     })
 }

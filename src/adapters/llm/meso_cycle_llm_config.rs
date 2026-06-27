@@ -47,6 +47,7 @@ impl MesoCycleLlmConfigPort for MesoCycleLlmConfigProvider {
                 LlmProvider::Gemini => settings.ai_agents.gemini_api_key,
                 LlmProvider::OpenRouter => settings.ai_agents.openrouter_api_key,
                 LlmProvider::DeepSeek => settings.ai_agents.deepseek_api_key,
+                LlmProvider::Zai => settings.ai_agents.zai_api_key,
             }
             .filter(|value| !value.trim().is_empty())
             .ok_or(MesoCycleError::NotConfigured)?;

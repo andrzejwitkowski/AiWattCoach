@@ -5,6 +5,7 @@ export type AiAgentsDraftState = {
   geminiApiKey: string;
   openrouterApiKey: string;
   deepseekApiKey: string;
+  zaiApiKey: string;
   selectedProvider: string;
   selectedModel: string;
   mesoCycleProvider: string;
@@ -22,6 +23,7 @@ export function createEmptyAiAgentsDraft(
     geminiApiKey: '',
     openrouterApiKey: '',
     deepseekApiKey: '',
+    zaiApiKey: '',
     selectedProvider: persisted.selectedProvider,
     selectedModel: persisted.selectedModel,
     mesoCycleProvider: persisted.mesoCycleProvider,
@@ -36,6 +38,7 @@ export function clearDraftApiKeys(draft: AiAgentsDraftState): AiAgentsDraftState
     geminiApiKey: '',
     openrouterApiKey: '',
     deepseekApiKey: '',
+    zaiApiKey: '',
   };
 }
 
@@ -57,6 +60,8 @@ export function mergeDraftWithPersisted(
       current.deepseekApiKey === previousPersisted.deepseekApiKey
         ? persisted.deepseekApiKey
         : current.deepseekApiKey,
+    zaiApiKey:
+      current.zaiApiKey === previousPersisted.zaiApiKey ? persisted.zaiApiKey : current.zaiApiKey,
     selectedProvider:
       current.selectedProvider === previousPersisted.selectedProvider
         ? persisted.selectedProvider
@@ -80,6 +85,7 @@ export function isAiAgentsDraftDirty(current: AiAgentsDraftState, clean: AiAgent
     current.geminiApiKey !== clean.geminiApiKey ||
     current.openrouterApiKey !== clean.openrouterApiKey ||
     current.deepseekApiKey !== clean.deepseekApiKey ||
+    current.zaiApiKey !== clean.zaiApiKey ||
     current.selectedProvider !== clean.selectedProvider ||
     current.selectedModel !== clean.selectedModel ||
     current.mesoCycleProvider !== clean.mesoCycleProvider ||
@@ -120,6 +126,7 @@ export function buildVisibleAiAgentsRequest(
   assignTrimmedApiKey(request, 'geminiApiKey', draft.geminiApiKey);
   assignTrimmedApiKey(request, 'openrouterApiKey', draft.openrouterApiKey);
   assignTrimmedApiKey(request, 'deepseekApiKey', draft.deepseekApiKey);
+  assignTrimmedApiKey(request, 'zaiApiKey', draft.zaiApiKey);
 
   const trimmedProvider = draft.selectedProvider.trim();
   const trimmedModel = draft.selectedModel.trim();

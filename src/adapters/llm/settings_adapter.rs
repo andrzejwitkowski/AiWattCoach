@@ -44,6 +44,7 @@ impl UserLlmConfigProvider for SettingsLlmConfigProvider {
                     settings.ai_agents.openrouter_api_key
                 }
                 crate::domain::llm::LlmProvider::DeepSeek => settings.ai_agents.deepseek_api_key,
+                crate::domain::llm::LlmProvider::Zai => settings.ai_agents.zai_api_key,
             }
             .filter(|value| !value.trim().is_empty())
             .ok_or(LlmError::CredentialsNotConfigured)?;

@@ -6,7 +6,7 @@ use aiwattcoach::{
 use crate::shared_support::tracing_capture::capture_tracing_logs;
 use crate::support::{
     deepseek_client, gemini_client, openai_client, openai_forbidden_client, openrouter_client,
-    sample_request, MockServer,
+    sample_request, zai_client, MockServer,
 };
 
 #[tokio::test]
@@ -67,6 +67,41 @@ async fn deepseek_client_maps_response_and_cache_hit_tokens() {
         requests[0].authorization.as_deref(),
         Some("Bearer deepseek-key")
     );
+}
+
+#[tokio::test]
+async fn zai_client_maps_response_cache_layout_and_cached_tokens() {
+    let server = MockServer::start().await;
+    let client = zai_client(&server.base_url);
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::Zai,
+                model: "glm-5.2".to_string(),
+                api_key: "zai-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.assistant_text(), Some("GLM says hi"));
+    assert_eq!(response.provider, LlmProvider::Zai);
+    assert_eq!(response.cache.cached_read_tokens, Some(96));
+    assert!(response.cache.cache_hit);
+
+    let requests = server.requests();
+    assert_eq!(requests[0].path, "/api/paas/v4/chat/completions");
+    assert_eq!(requests[0].authorization.as_deref(), Some("Bearer zai-key"));
+    assert_eq!(requests[0].body["prompt_cache_key"], "cache-key-1");
+
+    let messages = requests[0].body["messages"].as_array().unwrap();
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[0]["role"], "system");
+    assert_eq!(messages[0]["content"], "system\n\nstable");
+    assert_eq!(messages[1]["role"], "user");
+    assert_eq!(messages[1]["content"], "How did I do?\n\nvolatile");
 }
 
 #[tokio::test]

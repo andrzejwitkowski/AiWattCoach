@@ -3,6 +3,7 @@ const TRIMMED_STRING_FIELDS = [
   'geminiApiKey',
   'openrouterApiKey',
   'deepseekApiKey',
+  'zaiApiKey',
   'selectedProvider',
   'selectedModel',
   'mesoCycleProvider',

@@ -25,6 +25,7 @@ pub struct AiAgentsConfig {
     pub gemini_api_key: Option<String>,
     pub openrouter_api_key: Option<String>,
     pub deepseek_api_key: Option<String>,
+    pub zai_api_key: Option<String>,
     pub selected_provider: Option<LlmProvider>,
     pub selected_model: Option<String>,
     pub meso_cycle_provider: Option<LlmProvider>,
