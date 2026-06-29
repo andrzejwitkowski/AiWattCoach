@@ -43,11 +43,14 @@ fn build_race_table(races: &[RaceContext]) -> Option<HeaderTable> {
     if races.is_empty() {
         return None;
     }
+    let def_disc = uniform_string(races.iter().map(|race| race.discipline.as_str()))
+        .filter(|disc| !disc.is_empty());
     let mut builder = TableBuilder::new(&[
         ("d", false),
         ("n", false),
         ("km", false),
         ("pri", false),
+        ("disc", true),
         ("id", false),
     ]);
     for race in races {
@@ -56,10 +59,11 @@ fn build_race_table(races: &[RaceContext]) -> Option<HeaderTable> {
             cell_str(&race.name),
             cell_f64(race.distance_meters as f64 / 1000.0),
             cell_str(&race.priority),
+            cell_opt_str(def_disc.is_none().then_some(race.discipline.as_str())),
             cell_str(&race.race_id),
         ]);
     }
-    if let Some(disc) = uniform_string(races.iter().map(|race| race.discipline.as_str())) {
+    if let Some(disc) = def_disc {
         builder = builder.def_str("def_disc", &disc);
     }
     builder.build()
@@ -138,9 +142,20 @@ fn build_historical_workouts_table(workouts: &[HistoricalWorkoutContext]) -> Opt
     if workouts.is_empty() {
         return None;
     }
+    let def_ty = workouts
+        .iter()
+        .map(|workout| {
+            workout
+                .activity_type
+                .as_deref()
+                .filter(|value| !value.is_empty())
+        })
+        .collect::<Option<Vec<_>>>()
+        .and_then(|values| uniform_string(values.into_iter()));
     let mut builder = TableBuilder::new(&[
         ("d", false),
         ("id", false),
+        ("ty", true),
         ("n", true),
         ("dur", true),
         ("tss", true),
@@ -150,9 +165,15 @@ fn build_historical_workouts_table(workouts: &[HistoricalWorkoutContext]) -> Opt
         ("bl", true),
     ]);
     for workout in workouts {
+        let activity_type = if def_ty.is_some() {
+            None
+        } else {
+            workout.activity_type.as_deref()
+        };
         builder = builder.push_row(vec![
             cell_str(&workout.date),
             cell_str(&workout.activity_id),
+            cell_opt_str(activity_type),
             cell_opt_str(workout.name.as_deref()),
             cell_opt_i32(workout.duration_seconds),
             cell_opt_i32(workout.training_stress_score),
@@ -162,11 +183,7 @@ fn build_historical_workouts_table(workouts: &[HistoricalWorkoutContext]) -> Opt
             cell_opt_json(interval_blocks_table(&workout.interval_blocks)),
         ]);
     }
-    if let Some(ty) = uniform_string(
-        workouts
-            .iter()
-            .filter_map(|workout| workout.activity_type.as_deref()),
-    ) {
+    if let Some(ty) = def_ty {
         builder = builder.def_str("def_ty", &ty);
     }
     builder.build()

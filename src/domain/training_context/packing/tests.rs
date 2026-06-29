@@ -386,3 +386,70 @@ fn recent_workout_streams_omitted_from_stable_h_w() {
         .contains("\"w\":{\"h\":[\"id\",\"sd\",\"ps\",\"cs\"]"));
     assert!(rendered.volatile_context.contains("[[220,220,3]]"));
 }
+
+#[test]
+fn mixed_race_disciplines_keep_per_row_disc_column() {
+    let context = TrainingContext {
+        races: vec![
+            RaceContext {
+                race_id: "race-1".to_string(),
+                date: "2026-06-01".to_string(),
+                name: "Road Race".to_string(),
+                distance_meters: 100_000,
+                discipline: "road".to_string(),
+                priority: "A".to_string(),
+            },
+            RaceContext {
+                race_id: "race-2".to_string(),
+                date: "2026-07-01".to_string(),
+                name: "Criterium".to_string(),
+                distance_meters: 50_000,
+                discipline: "crit".to_string(),
+                priority: "B".to_string(),
+            },
+        ],
+        ..TrainingContext::default()
+    };
+
+    let rendered = render_training_context(&context);
+
+    assert!(rendered
+        .stable_context
+        .contains("\"h\":[\"d\",\"n\",\"km\",\"pri\",\"disc\",\"id\"]"));
+    assert!(rendered.stable_context.contains("\"road\""));
+    assert!(rendered.stable_context.contains("\"crit\""));
+    assert!(!rendered.stable_context.contains("\"def_disc\""));
+}
+
+#[test]
+fn mixed_workout_activity_types_keep_per_row_ty_column() {
+    let context = TrainingContext {
+        history: HistoricalTrainingContext {
+            workouts: vec![
+                HistoricalWorkoutContext {
+                    date: "2026-03-01".to_string(),
+                    activity_id: "ride-1".to_string(),
+                    activity_type: Some("Ride".to_string()),
+                    ..HistoricalWorkoutContext::default()
+                },
+                HistoricalWorkoutContext {
+                    date: "2026-03-02".to_string(),
+                    activity_id: "run-1".to_string(),
+                    activity_type: Some("Run".to_string()),
+                    ..HistoricalWorkoutContext::default()
+                },
+            ],
+            ..HistoricalTrainingContext::default()
+        },
+        ..TrainingContext::default()
+    };
+
+    let rendered = render_training_context(&context);
+
+    assert!(rendered
+        .stable_context
+        .contains("\"h\":[\"d\",\"id\",\"ty\"]"));
+    assert!(rendered.stable_context.contains("\"Ride\""));
+    assert!(rendered.stable_context.contains("\"Run\""));
+    assert!(!rendered.stable_context.contains("\"def_ty\""));
+}
