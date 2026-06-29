@@ -147,10 +147,9 @@ async fn llm_workout_coach_describes_ps_cs_segments_in_system_prompt() {
     let prompt = &chat_port.requests()[0].system_prompt;
     assert!(prompt.contains("ps (executed power segments)"));
     assert!(prompt.contains("ps=power"));
-    assert!(prompt.contains("cs=executed cadence segments"));
-    assert!(prompt.contains("max==0 indicate no pedaling"));
-    assert!(prompt.contains("do not merge these with pedaling segments"));
-    assert!(prompt.contains("appear only in volatile rd.w entries, not in stable h.w"));
+    assert!(prompt.contains("cs=cadence"));
+    assert!(prompt.contains("cadence max=0=no pedaling"));
+    assert!(prompt.contains("volatile rd.w only; stable h.w is metadata"));
     assert!(prompt.contains("judge interval execution primarily from bl"));
     assert!(!prompt.contains("p3=power watts"));
     assert!(!prompt.contains("c5=cadence values"));
