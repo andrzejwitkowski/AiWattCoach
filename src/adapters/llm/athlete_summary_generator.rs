@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn athlete_summary_system_prompt_forbids_unconfigured_vacation_claims() {
         let prompt = super::athlete_summary_system_prompt();
-        assert!(prompt.contains("unless it appears in packed prd"));
+        assert!(prompt.contains("unless in prd"));
         assert!(prompt.contains("fr:true"));
     }
 

@@ -172,6 +172,6 @@ mod tests {
         assert!(prompt.contains("critical audit"));
         assert!(prompt.contains("simulate_forward_load"));
         assert!(prompt.contains("cannot rewrite pd"));
-        assert!(prompt.contains("unless prd confirms"));
+        assert!(prompt.contains("only if prd confirms"));
     }
 }
