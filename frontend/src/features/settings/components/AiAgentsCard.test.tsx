@@ -104,6 +104,33 @@ describe('AiAgentsCard', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
+  it('saves z.ai provider, model, and key', async () => {
+    updateAiAgentsMock.mockResolvedValue(buildTestSettings());
+    const onSave = vi.fn();
+
+    render(<AiAgentsCard settings={buildTestSettings({ aiAgents: { selectedProvider: null, selectedModel: null } })} apiBaseUrl="" onSave={onSave} />);
+
+    fireEvent.change(screen.getByLabelText(/active provider/i), {
+      target: { value: 'zai' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Model$/i), {
+      target: { value: 'glm-5.2' },
+    });
+    fireEvent.change(screen.getByLabelText(/z\.ai api key/i), {
+      target: { value: 'sk-zai-new-key' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    await waitFor(() => {
+      expect(updateAiAgentsMock).toHaveBeenCalledWith('', {
+        zaiApiKey: 'sk-zai-new-key',
+        selectedProvider: 'zai',
+        selectedModel: 'glm-5.2',
+      });
+    });
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
   it('clears plaintext api key fields after a successful save', async () => {
     updateAiAgentsMock.mockResolvedValue(buildTestSettings());
 
@@ -284,6 +311,6 @@ describe('AiAgentsCard', () => {
 
     expect(screen.getByText('Used by the active provider.')).toBeInTheDocument();
     expect(screen.getAllByText('Saved for quick provider switching.')).toHaveLength(1);
-    expect(screen.queryAllByText('Optional unless you switch to this provider.')).toHaveLength(2);
+    expect(screen.queryAllByText('Optional unless you switch to this provider.')).toHaveLength(3);
   });
 });

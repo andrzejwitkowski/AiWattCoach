@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use crate::domain::llm::{
     build_chat_request, conversation_timing_volatile_context,
-    packed_training_context_legend_with_guidance, LlmChatMessage, LlmChatRequest,
-    LlmChatRequestInput, LlmProviderConfig, LlmToolChoice,
+    packed_training_context_legend_with_guidance, reusable_context_cache_key, LlmChatMessage,
+    LlmChatRequest, LlmChatRequestInput, LlmProviderConfig, LlmToolChoice,
 };
 use crate::domain::llm_tools::{
     tool_definitions_for_scope, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
@@ -71,6 +71,7 @@ pub fn assemble_meso_cycle_coach_request(
         &input.config.provider,
         &tool_context,
     );
+    let cache_key = Some(reusable_context_cache_key(&system_prompt, &stable_context));
     let mut request = build_chat_request(LlmChatRequestInput {
         user_id: input.user_id,
         system_prompt,
@@ -78,7 +79,7 @@ pub fn assemble_meso_cycle_coach_request(
         volatile_context,
         conversation: vec![LlmChatMessage::user(user_prompt)],
         cache_scope_key: None,
-        cache_key: None,
+        cache_key,
         reusable_cache_id: None,
     });
     request.tools = tool_definitions_for_scope(

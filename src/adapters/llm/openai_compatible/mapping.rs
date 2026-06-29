@@ -118,7 +118,7 @@ pub fn map_response(
     })
 }
 
-fn map_message(message: LlmChatMessage) -> OpenAiMessage {
+pub(crate) fn map_message(message: LlmChatMessage) -> OpenAiMessage {
     OpenAiMessage {
         role: match message.role {
             LlmMessageRole::System => "system".to_string(),
@@ -137,7 +137,7 @@ fn map_message(message: LlmChatMessage) -> OpenAiMessage {
     }
 }
 
-fn map_tool_definition(
+pub(crate) fn map_tool_definition(
     tool: LlmToolDefinition,
 ) -> Result<OpenAiTool, crate::domain::llm::LlmError> {
     let parameters = serde_json::from_str(&tool.input_schema_json).map_err(|error| {
@@ -157,7 +157,7 @@ fn map_tool_definition(
     })
 }
 
-fn map_tool_choice(choice: LlmToolChoice) -> Option<OpenAiToolChoiceDto> {
+pub(crate) fn map_tool_choice(choice: LlmToolChoice) -> Option<OpenAiToolChoiceDto> {
     match choice {
         LlmToolChoice::None => Some(OpenAiToolChoiceDto::String("none".to_string())),
         LlmToolChoice::Auto => Some(OpenAiToolChoiceDto::String("auto".to_string())),

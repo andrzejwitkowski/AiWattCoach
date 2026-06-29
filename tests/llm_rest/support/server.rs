@@ -38,6 +38,7 @@ impl TestLlmUpstreamServer {
         let app = Router::new()
             .route("/v1/chat/completions", post(openai_handler))
             .route("/chat/completions", post(deepseek_handler))
+            .route("/api/paas/v4/chat/completions", post(zai_handler))
             .route("/api/v1/chat/completions", post(openrouter_handler))
             .route("/v1beta/cachedContents", post(gemini_cache_handler))
             .route(
@@ -61,6 +62,10 @@ impl TestLlmUpstreamServer {
 
     pub(crate) fn deepseek_base_url(&self) -> String {
         format!("http://{}", self.address)
+    }
+
+    pub(crate) fn zai_base_url(&self) -> String {
+        format!("http://{}/api/paas/v4", self.address)
     }
 
     pub(crate) fn openai_base_url(&self) -> String {
@@ -143,6 +148,26 @@ async fn deepseek_handler(
             "total_tokens": 120,
             "prompt_cache_hit_tokens": 80,
             "prompt_cache_miss_tokens": 20
+        }
+    }))
+    .into_response()
+}
+
+async fn zai_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    capture_request(&state, "/api/paas/v4/chat/completions", headers, body);
+    Json(json!({
+        "id": "zai-req-1",
+        "model": "glm-5.2",
+        "choices": [{ "message": { "content": "GLM says hi" } }],
+        "usage": {
+            "prompt_tokens": 120,
+            "completion_tokens": 20,
+            "total_tokens": 140,
+            "prompt_tokens_details": { "cached_tokens": 96 }
         }
     }))
     .into_response()

@@ -25,7 +25,7 @@ use aiwattcoach::{
             openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
             training_plan_generator::TrainingPlanLlmGenerator,
             update_planned_workout_data::UpdatePlannedWorkoutDataAdapter,
-            workout_summary_coach::LlmWorkoutCoach,
+            workout_summary_coach::LlmWorkoutCoach, zai::client::ZaiClient,
         },
         mongo::{
             activities::MongoActivityRepository,
@@ -238,6 +238,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             OpenAiCompatibleClient::new(llm_http_client.clone()),
             OpenAiCompatibleClient::new(llm_http_client.clone())
                 .with_base_url("https://api.deepseek.com"),
+            ZaiClient::new(llm_http_client.clone()),
             GeminiClient::new(llm_http_client.clone()),
             OpenRouterClient::new(llm_http_client),
         ))

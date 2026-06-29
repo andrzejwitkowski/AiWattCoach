@@ -7,8 +7,8 @@ use crate::domain::{
     identity::Clock,
     llm::{
         build_chat_request, conversation_timing_volatile_context,
-        merge_provider_transcript_entries, BoxFuture, LlmChatMessage, LlmChatPort,
-        LlmChatRequestInput, LlmChatResponse, LlmError, UserLlmConfigProvider,
+        merge_provider_transcript_entries, reusable_context_cache_key, BoxFuture, LlmChatMessage,
+        LlmChatPort, LlmChatRequestInput, LlmChatResponse, LlmError, UserLlmConfigProvider,
     },
     llm_tools::{
         run_tool_loop_with_checkpoint, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
@@ -105,17 +105,21 @@ where
             );
             let user_prompt = "Generate a concise workout recap for the completed workout. Focus on execution quality, response to the session, and what matters for planning the next training window.";
 
+            let system_prompt = training_plan_recap_system_prompt();
             let response = llm_chat_port
                 .chat(
                     config.clone(),
                     build_chat_request(LlmChatRequestInput {
                         user_id,
-                        system_prompt: training_plan_recap_system_prompt(),
-                        stable_context,
+                        system_prompt: system_prompt.clone(),
+                        stable_context: stable_context.clone(),
                         volatile_context,
                         conversation: vec![LlmChatMessage::user(user_prompt)],
                         cache_scope_key: None,
-                        cache_key: None,
+                        cache_key: Some(reusable_context_cache_key(
+                            &system_prompt,
+                            &stable_context,
+                        )),
                         reusable_cache_id: None,
                     }),
                 )
@@ -350,6 +354,7 @@ where
                 &tool_context,
             );
 
+            let cache_key = Some(reusable_context_cache_key(&system_prompt, &stable_context));
             let request = build_chat_request(LlmChatRequestInput {
                 user_id: tool_context.user_id.clone(),
                 system_prompt,
@@ -357,7 +362,7 @@ where
                 volatile_context,
                 conversation,
                 cache_scope_key: None,
-                cache_key: None,
+                cache_key,
                 reusable_cache_id: None,
             });
             let loop_checkpoint = checkpoint.clone().map(map_phase_checkpoint);
@@ -486,19 +491,20 @@ async fn request_training_plan_envelope_repair(
     user_id: &str,
     previous_assistant_content: &str,
 ) -> Result<LlmChatResponse, LlmError> {
+    let system_prompt = training_plan_envelope_repair_system_prompt();
     llm_chat_port
         .chat(
             config,
             build_chat_request(LlmChatRequestInput {
                 user_id: user_id.to_string(),
-                system_prompt: training_plan_envelope_repair_system_prompt(),
+                system_prompt: system_prompt.clone(),
                 stable_context: String::new(),
                 volatile_context: String::new(),
                 conversation: vec![LlmChatMessage::user(
                     training_plan_envelope_repair_user_prompt(previous_assistant_content),
                 )],
                 cache_scope_key: None,
-                cache_key: None,
+                cache_key: Some(reusable_context_cache_key(&system_prompt, "")),
                 reusable_cache_id: None,
             }),
         )

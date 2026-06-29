@@ -16,6 +16,8 @@ function buildSettings(
       openrouterApiKeySet: false,
       deepseekApiKey: null,
       deepseekApiKeySet: false,
+      zaiApiKey: null,
+      zaiApiKeySet: false,
       selectedProvider: 'openai',
       selectedModel: 'gpt-5',
       mesoCycleProvider: null,

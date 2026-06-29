@@ -67,6 +67,7 @@ async fn get_settings_returns_default_settings_for_authenticated_user() {
         .unwrap()
         .as_bool()
         .unwrap());
+    assert!(!ai_agents.get("zaiApiKeySet").unwrap().as_bool().unwrap());
 
     let intervals = body.get("intervals").unwrap();
     assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
@@ -813,6 +814,52 @@ async fn update_ai_agents_supports_deepseek_provider_and_model() {
 }
 
 #[tokio::test]
+async fn update_ai_agents_supports_zai_provider_and_model() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "zaiApiKey": "sk-zai-key-789012",
+        "selectedProvider": "zai",
+        "selectedModel": "glm-5.2"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/ai-agents")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    let ai_agents = response_body.get("aiAgents").unwrap();
+
+    assert!(ai_agents.get("zaiApiKeySet").unwrap().as_bool().unwrap());
+    let zai_key = ai_agents.get("zaiApiKey").unwrap().as_str().unwrap();
+    assert!(zai_key.starts_with("***..."));
+    assert_eq!(
+        ai_agents.get("selectedProvider").unwrap().as_str().unwrap(),
+        "zai"
+    );
+    assert_eq!(
+        ai_agents.get("selectedModel").unwrap().as_str().unwrap(),
+        "glm-5.2"
+    );
+    assert_eq!(zai_key, "***...9012");
+}
+
+#[tokio::test]
 async fn update_ai_agents_requires_model_when_provider_changes() {
     let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
     settings.ai_agents.selected_provider = Some(aiwattcoach::domain::llm::LlmProvider::OpenAi);
@@ -988,6 +1035,46 @@ async fn test_ai_agents_connection_returns_ok_for_deepseek_settings() {
         "deepseekApiKey": "sk-ds-key-789012",
         "selectedProvider": "deepseek",
         "selectedModel": "deepseek-v4-flash"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    assert!(response_body.get("connected").unwrap().as_bool().unwrap());
+    assert_eq!(
+        response_body.get("message").unwrap().as_str().unwrap(),
+        "Connection successful."
+    );
+}
+
+#[tokio::test]
+async fn test_ai_agents_connection_returns_ok_for_zai_settings() {
+    let app = settings_test_app_with_services(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        None,
+        Some(std::sync::Arc::new(MockLlmChatService::returning_ok())),
+        Some(std::sync::Arc::new(TestLlmConfigProvider)),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "zaiApiKey": "sk-zai-key-789012",
+        "selectedProvider": "zai",
+        "selectedModel": "glm-5.2"
     });
 
     let response = app
@@ -1282,6 +1369,7 @@ async fn test_ai_agents_connection_returns_bad_request_when_provider_changes_wit
         gemini_api_key: None,
         openrouter_api_key: Some("or-existing-openrouter".to_string()),
         deepseek_api_key: None,
+        zai_api_key: None,
         selected_provider: Some(aiwattcoach::domain::llm::LlmProvider::OpenAi),
         selected_model: Some("gpt-4o-mini".to_string()),
         meso_cycle_provider: None,

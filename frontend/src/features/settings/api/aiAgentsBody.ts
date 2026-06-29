@@ -3,6 +3,7 @@ type AiAgentsFieldKey =
   | 'geminiApiKey'
   | 'openrouterApiKey'
   | 'deepseekApiKey'
+  | 'zaiApiKey'
   | 'selectedProvider'
   | 'selectedModel';
 
@@ -68,6 +69,7 @@ export function buildAiAgentsConnectionBody(
     'geminiApiKey',
     'openrouterApiKey',
     'deepseekApiKey',
+    'zaiApiKey',
     'selectedProvider',
     'selectedModel',
   ];
