@@ -21,6 +21,7 @@ pub fn resolve_llm_config(
         LlmProvider::Gemini => ai_agents.gemini_api_key.clone(),
         LlmProvider::OpenRouter => ai_agents.openrouter_api_key.clone(),
         LlmProvider::DeepSeek => ai_agents.deepseek_api_key.clone(),
+        LlmProvider::Zai => ai_agents.zai_api_key.clone(),
     }
     .filter(|value| !value.trim().is_empty())
     .ok_or(LlmError::CredentialsNotConfigured)?;

@@ -141,6 +141,8 @@ describe('settings api', () => {
         openrouterApiKeySet: false,
         deepseekApiKey: null,
         deepseekApiKeySet: false,
+        zaiApiKey: null,
+        zaiApiKeySet: false,
         selectedProvider: null,
         selectedModel: null,
       },
@@ -339,6 +341,56 @@ describe('settings api', () => {
         deepseekApiKey: 'sk-ds-key',
         selectedProvider: 'deepseek',
         selectedModel: 'deepseek-v4-flash',
+      }),
+    });
+    expect(result).toEqual({
+      connected: true,
+      message: 'Connection successful.',
+      usedSavedApiKey: false,
+      usedSavedProvider: false,
+      usedSavedModel: false,
+    });
+  });
+
+  it('posts z.ai test credentials and parses a successful response', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            connected: true,
+            message: 'Connection successful.',
+            usedSavedApiKey: false,
+            usedSavedProvider: false,
+            usedSavedModel: false,
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    const result = await testAiAgentsConnection('', {
+      zaiApiKey: 'sk-zai-key',
+      selectedProvider: 'zai',
+      selectedModel: 'glm-5.2',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/ai-agents/test', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        zaiApiKey: 'sk-zai-key',
+        selectedProvider: 'zai',
+        selectedModel: 'glm-5.2',
       }),
     });
     expect(result).toEqual({

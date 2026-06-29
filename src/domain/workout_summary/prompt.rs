@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::domain::llm::{
     build_chat_request, coach_planning_literature_guidance, conversation_timing_volatile_context,
     packed_training_context_legend_with_guidance, rebuild_conversation_with_provider_transcript,
-    timestamped_message_content, LlmChatMessage, LlmChatRequest, LlmChatRequestInput,
-    LlmMessageRole, LlmProviderConfig, LlmToolChoice,
+    reusable_context_cache_key, timestamped_message_content, LlmChatMessage, LlmChatRequest,
+    LlmChatRequestInput, LlmMessageRole, LlmProviderConfig, LlmToolChoice,
 };
 use crate::domain::llm_tools::{
     tool_definitions_for_scope, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
@@ -80,6 +80,7 @@ pub fn assemble_workout_summary_coach_request(
         "workout-summary:{}:{}",
         input.user_id, input.summary.workout_id
     ));
+    let cache_key = Some(reusable_context_cache_key(&system_prompt, &stable_context));
     let mut request = build_chat_request(LlmChatRequestInput {
         user_id: input.user_id,
         system_prompt,
@@ -87,7 +88,7 @@ pub fn assemble_workout_summary_coach_request(
         volatile_context,
         conversation,
         cache_scope_key,
-        cache_key: None,
+        cache_key,
         reusable_cache_id: input.reusable_cache_id,
     });
     apply_tool_scope(

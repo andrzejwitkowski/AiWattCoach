@@ -4,7 +4,7 @@ use aiwattcoach::{
     adapters::llm::{
         gemini::client::GeminiClient,
         openai_compatible::client::OpenAiCompatibleClient as OpenAiClient,
-        openrouter::client::OpenRouterClient,
+        openrouter::client::OpenRouterClient, zai::client::ZaiClient,
     },
     domain::llm::{
         BoxFuture as LlmBoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse,
@@ -291,6 +291,7 @@ impl MockServer {
         let app = Router::new()
             .route("/v1/chat/completions", post(openai_handler))
             .route("/chat/completions", post(deepseek_handler))
+            .route("/api/paas/v4/chat/completions", post(zai_handler))
             .route(
                 "/v1-forbidden/chat/completions",
                 post(openai_forbidden_handler),
@@ -372,6 +373,10 @@ pub(crate) fn openai_client(base_url: &str) -> OpenAiClient {
 
 pub(crate) fn deepseek_client(base_url: &str) -> OpenAiClient {
     OpenAiClient::new(reqwest::Client::new()).with_base_url(base_url.to_string())
+}
+
+pub(crate) fn zai_client(base_url: &str) -> ZaiClient {
+    ZaiClient::new(reqwest::Client::new()).with_base_url(format!("{base_url}/api/paas/v4"))
 }
 
 pub(crate) fn openai_forbidden_client(base_url: &str) -> OpenAiClient {
@@ -465,6 +470,25 @@ async fn deepseek_handler(
             "total_tokens": 120,
             "prompt_cache_hit_tokens": 80,
             "prompt_cache_miss_tokens": 20
+        }
+    }))
+}
+
+async fn zai_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    capture_request(&state, "/api/paas/v4/chat/completions", headers, body);
+    Json(json!({
+        "id": "zai-req-1",
+        "model": "glm-5.2",
+        "choices": [{ "message": { "content": "GLM says hi" } }],
+        "usage": {
+            "prompt_tokens": 120,
+            "completion_tokens": 20,
+            "total_tokens": 140,
+            "prompt_tokens_details": { "cached_tokens": 96 }
         }
     }))
 }

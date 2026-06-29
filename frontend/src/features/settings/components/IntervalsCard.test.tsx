@@ -26,6 +26,8 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['intervals']>): 
       openrouterApiKeySet: false,
       deepseekApiKey: null,
       deepseekApiKeySet: false,
+      zaiApiKey: null,
+      zaiApiKeySet: false,
       selectedProvider: null,
       selectedModel: null,
       mesoCycleProvider: null,

@@ -15,6 +15,7 @@ export function AiAgentsApiKeyFields({ aiAgents, draft, onUpdate }: AiAgentsApiK
   const [showGemini, setShowGemini] = useState(false);
   const [showOpenrouter, setShowOpenrouter] = useState(false);
   const [showDeepseek, setShowDeepseek] = useState(false);
+  const [showZai, setShowZai] = useState(false);
 
   return (
     <div className="mt-6 space-y-4">
@@ -81,6 +82,22 @@ export function AiAgentsApiKeyFields({ aiAgents, draft, onUpdate }: AiAgentsApiK
         )}
         onVisibilityChange={() => setShowDeepseek((value) => !value)}
         onChange={(value) => onUpdate('deepseekApiKey', value)}
+      />
+      <ApiKeyField
+        id="zai-api-key"
+        label="z.ai API Key"
+        placeholder={aiAgents.zaiApiKeySet ? 'Already configured' : 'sk-...'}
+        value={draft.zaiApiKey}
+        visible={showZai}
+        configured={aiAgents.zaiApiKeySet}
+        emphasized={!draft.selectedProvider || draft.selectedProvider === 'zai'}
+        helperText={apiKeyHelperText(
+          draft.selectedProvider,
+          'zai',
+          aiAgents.zaiApiKeySet || draft.zaiApiKey.trim().length > 0,
+        )}
+        onVisibilityChange={() => setShowZai((value) => !value)}
+        onChange={(value) => onUpdate('zaiApiKey', value)}
       />
     </div>
   );

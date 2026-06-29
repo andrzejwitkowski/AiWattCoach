@@ -14,3 +14,4 @@ pub mod training_plan_generator;
 pub mod update_planned_workout_data;
 pub mod workout_llm_config;
 pub mod workout_summary_coach;
+pub mod zai;

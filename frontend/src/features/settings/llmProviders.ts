@@ -19,6 +19,11 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: 'DeepSeek',
     suggestedModels: ['deepseek-v4-flash', 'deepseek-v4-pro'],
   },
+  {
+    value: 'zai',
+    label: 'z.ai',
+    suggestedModels: ['glm-5.2'],
+  },
 ];
 
 export function getProviderOption(provider: string) {
@@ -40,6 +45,8 @@ export function isLlmProviderKeyConfigured(
       return aiAgents.openrouterApiKeySet;
     case 'deepseek':
       return aiAgents.deepseekApiKeySet;
+    case 'zai':
+      return aiAgents.zaiApiKeySet;
     default:
       return false;
   }
@@ -50,6 +57,7 @@ type ProviderDraftKeys = {
   geminiApiKey: string;
   openrouterApiKey: string;
   deepseekApiKey: string;
+  zaiApiKey: string;
 };
 
 export function getProviderKeyState(
@@ -81,6 +89,12 @@ export function getProviderKeyState(
         draftValue: draft.deepseekApiKey.trim(),
         hasPersistedKey: aiAgents.deepseekApiKeySet,
         label: 'DeepSeek',
+      };
+    case 'zai':
+      return {
+        draftValue: draft.zaiApiKey.trim(),
+        hasPersistedKey: aiAgents.zaiApiKeySet,
+        label: 'z.ai',
       };
     default:
       return { draftValue: '', hasPersistedKey: false, label: 'Provider' };

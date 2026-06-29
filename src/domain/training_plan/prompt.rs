@@ -6,8 +6,8 @@ use crate::domain::{
     llm::{
         build_chat_request, coach_planning_literature_guidance,
         conversation_timing_volatile_context, packed_training_context_legend_with_guidance,
-        timestamped_message_content, LlmChatMessage, LlmChatRequest, LlmChatRequestInput,
-        LlmMessageRole, LlmProviderConfig, LlmToolChoice,
+        reusable_context_cache_key, timestamped_message_content, LlmChatMessage, LlmChatRequest,
+        LlmChatRequestInput, LlmMessageRole, LlmProviderConfig, LlmToolChoice,
     },
     llm_tools::{
         tool_definitions_for_scope, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
@@ -80,6 +80,7 @@ pub fn assemble_training_plan_initial_window_request(
         &tool_context,
     );
 
+    let cache_key = Some(reusable_context_cache_key(&system_prompt, &stable_context));
     let mut request = build_chat_request(LlmChatRequestInput {
         user_id: input.user_id,
         system_prompt,
@@ -87,7 +88,7 @@ pub fn assemble_training_plan_initial_window_request(
         volatile_context,
         conversation,
         cache_scope_key: None,
-        cache_key: None,
+        cache_key,
         reusable_cache_id: None,
     });
     request.tools = tool_definitions_for_scope(

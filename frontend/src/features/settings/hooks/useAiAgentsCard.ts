@@ -230,6 +230,7 @@ function hasAnyPersistedConnectionValue(aiAgents: UserSettingsResponse['aiAgents
     aiAgents.geminiApiKeySet ||
     aiAgents.openrouterApiKeySet ||
     aiAgents.deepseekApiKeySet ||
+    aiAgents.zaiApiKeySet ||
     Boolean(aiAgents.selectedProvider) ||
     Boolean(aiAgents.selectedModel)
   );

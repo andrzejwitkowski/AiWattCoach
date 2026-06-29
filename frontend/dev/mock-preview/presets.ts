@@ -18,7 +18,9 @@ type UserSettings = {
     openrouterApiKeySet: boolean;
     deepseekApiKey: string | null;
     deepseekApiKeySet: boolean;
-    selectedProvider: 'openai' | 'gemini' | 'openrouter' | 'deepseek' | null;
+    zaiApiKey: string | null;
+    zaiApiKeySet: boolean;
+    selectedProvider: 'openai' | 'gemini' | 'openrouter' | 'deepseek' | 'zai' | null;
     selectedModel: string | null;
   };
   intervals: {
@@ -447,6 +449,8 @@ function makeSettings(now: Date): UserSettings {
       openrouterApiKeySet: false,
       deepseekApiKey: null,
       deepseekApiKeySet: false,
+      zaiApiKey: null,
+      zaiApiKeySet: false,
       selectedProvider: 'openai',
       selectedModel: 'gpt-5.4',
     },

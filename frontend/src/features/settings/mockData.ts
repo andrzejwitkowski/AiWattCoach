@@ -30,6 +30,8 @@ export function buildTestSettings(overrides: TestSettingsOverrides = {}): UserSe
       openrouterApiKeySet: true,
       deepseekApiKey: null,
       deepseekApiKeySet: false,
+      zaiApiKey: null,
+      zaiApiKeySet: false,
       selectedProvider: 'openrouter',
       selectedModel: 'openai/gpt-4o-mini',
       workoutChatProvider: null,
