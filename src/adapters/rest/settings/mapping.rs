@@ -1,3 +1,4 @@
+use crate::domain::llm::LlmProvider;
 use crate::domain::settings::{
     mask_sensitive, validation, AiAgentsConfig, AnalysisOptions, AvailabilityDay,
     AvailabilitySettings, CyclingSettings, IntervalsConfig, SettingsError, UserSettings, Weekday,
@@ -32,6 +33,18 @@ pub(super) fn map_settings_to_dto(
                 .as_ref()
                 .map(|provider| provider.as_str().to_string()),
             selected_model: settings.ai_agents.selected_model.clone(),
+            workout_chat_provider: settings
+                .ai_agents
+                .workout_chat_provider
+                .as_ref()
+                .map(|provider| provider.as_str().to_string()),
+            workout_chat_model: settings.ai_agents.workout_chat_model.clone(),
+            workout_planning_provider: settings
+                .ai_agents
+                .workout_planning_provider
+                .as_ref()
+                .map(|provider| provider.as_str().to_string()),
+            workout_planning_model: settings.ai_agents.workout_planning_model.clone(),
             meso_cycle_provider: settings
                 .ai_agents
                 .meso_cycle_provider
@@ -119,6 +132,11 @@ pub(super) fn map_ai_agents_update(
 ) -> Result<AiAgentsConfig, SettingsError> {
     let selected_provider_update = parse_provider_settings_input(body.selected_provider)?;
     let selected_model_update = normalize_string_input(body.selected_model);
+    let workout_chat_provider_update = parse_provider_settings_input(body.workout_chat_provider)?;
+    let workout_chat_model_update = normalize_string_input(body.workout_chat_model);
+    let workout_planning_provider_update =
+        parse_provider_settings_input(body.workout_planning_provider)?;
+    let workout_planning_model_update = normalize_string_input(body.workout_planning_model);
     let meso_cycle_provider_update = parse_provider_settings_input(body.meso_cycle_provider)?;
     let meso_cycle_model_update = normalize_string_input(body.meso_cycle_model);
     let openai_api_key = normalize_string_input(body.openai_api_key);
@@ -161,39 +179,30 @@ pub(super) fn map_ai_agents_update(
         _ => {}
     }
 
-    let meso_cycle_provider_changed = match &meso_cycle_provider_update {
-        FieldUpdate::Missing => false,
-        FieldUpdate::Clear => current.ai_agents.meso_cycle_provider.is_some(),
-        FieldUpdate::Set(provider) => {
-            current.ai_agents.meso_cycle_provider.as_ref() != Some(provider)
-        }
-    };
-    let meso_cycle_provider = apply_field_update(
+    let (workout_chat_provider, workout_chat_model) = map_optional_provider_override(
+        workout_chat_provider_update,
+        workout_chat_model_update,
+        &current.ai_agents.workout_chat_provider,
+        &current.ai_agents.workout_chat_model,
+        "workoutChatProvider",
+        "workoutChatModel",
+    )?;
+    let (workout_planning_provider, workout_planning_model) = map_optional_provider_override(
+        workout_planning_provider_update,
+        workout_planning_model_update,
+        &current.ai_agents.workout_planning_provider,
+        &current.ai_agents.workout_planning_model,
+        "workoutPlanningProvider",
+        "workoutPlanningModel",
+    )?;
+    let (meso_cycle_provider, meso_cycle_model) = map_optional_provider_override(
         meso_cycle_provider_update,
-        current.ai_agents.meso_cycle_provider.clone(),
-    );
-    let meso_cycle_model = validation::validate_ai_model(if meso_cycle_provider_changed {
-        apply_field_update(meso_cycle_model_update, None)
-    } else {
-        apply_field_update(
-            meso_cycle_model_update,
-            current.ai_agents.meso_cycle_model.clone(),
-        )
-    })?;
-
-    match (&meso_cycle_provider, &meso_cycle_model) {
-        (Some(_), None) => {
-            return Err(SettingsError::Validation(
-                "mesoCycleModel must not be empty".to_string(),
-            ))
-        }
-        (None, Some(_)) => {
-            return Err(SettingsError::Validation(
-                "mesoCycleProvider must not be empty".to_string(),
-            ))
-        }
-        _ => {}
-    }
+        meso_cycle_model_update,
+        &current.ai_agents.meso_cycle_provider,
+        &current.ai_agents.meso_cycle_model,
+        "mesoCycleProvider",
+        "mesoCycleModel",
+    )?;
 
     Ok(AiAgentsConfig {
         openai_api_key: apply_field_update(
@@ -214,9 +223,44 @@ pub(super) fn map_ai_agents_update(
         ),
         selected_provider: validation::validate_ai_provider(selected_provider)?,
         selected_model,
+        workout_chat_provider: validation::validate_ai_provider(workout_chat_provider)?,
+        workout_chat_model,
+        workout_planning_provider: validation::validate_ai_provider(workout_planning_provider)?,
+        workout_planning_model,
         meso_cycle_provider: validation::validate_ai_provider(meso_cycle_provider)?,
         meso_cycle_model,
     })
+}
+
+fn map_optional_provider_override(
+    provider_update: FieldUpdate<LlmProvider>,
+    model_update: FieldUpdate<String>,
+    current_provider: &Option<LlmProvider>,
+    current_model: &Option<String>,
+    provider_field_name: &str,
+    model_field_name: &str,
+) -> Result<(Option<LlmProvider>, Option<String>), SettingsError> {
+    let provider_changed = match &provider_update {
+        FieldUpdate::Missing => false,
+        FieldUpdate::Clear => current_provider.is_some(),
+        FieldUpdate::Set(provider) => current_provider.as_ref() != Some(provider),
+    };
+    let provider = apply_field_update(provider_update, current_provider.clone());
+    let model = validation::validate_ai_model(if provider_changed {
+        apply_field_update(model_update, None)
+    } else {
+        apply_field_update(model_update, current_model.clone())
+    })?;
+
+    match (&provider, &model) {
+        (Some(_), None) => Err(SettingsError::Validation(format!(
+            "{model_field_name} must not be empty"
+        ))),
+        (None, Some(_)) => Err(SettingsError::Validation(format!(
+            "{provider_field_name} must not be empty"
+        ))),
+        _ => Ok((validation::validate_ai_provider(provider)?, model)),
+    }
 }
 
 pub(super) fn map_intervals_update(

@@ -24,7 +24,7 @@ pub use planning_context::{map_workout_summary_to_planning_context, workout_reca
 pub use ports::{
     BoxFuture, TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
     TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
-    TrainingPlanToolLoopCheckpoint, TrainingPlanWorkoutSummaryPort,
+    TrainingPlanToolLoopCheckpoint, TrainingPlanWorkoutSummaryPort, WorkoutPlanningLlmConfigPort,
 };
 pub use prompt::{
     assemble_training_plan_initial_window_request, latest_training_plan_user_message_epoch_seconds,

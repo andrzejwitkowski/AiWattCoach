@@ -7,16 +7,27 @@ export type AiAgentsDraftState = {
   deepseekApiKey: string;
   selectedProvider: string;
   selectedModel: string;
+  workoutChatProvider: string;
+  workoutChatModel: string;
+  workoutPlanningProvider: string;
+  workoutPlanningModel: string;
   mesoCycleProvider: string;
   mesoCycleModel: string;
 };
 
-export function createEmptyAiAgentsDraft(
-  persisted: Pick<
-    AiAgentsDraftState,
-    'selectedProvider' | 'selectedModel' | 'mesoCycleProvider' | 'mesoCycleModel'
-  >,
-): AiAgentsDraftState {
+type PersistedAiAgentsDraft = Pick<
+  AiAgentsDraftState,
+  | 'selectedProvider'
+  | 'selectedModel'
+  | 'workoutChatProvider'
+  | 'workoutChatModel'
+  | 'workoutPlanningProvider'
+  | 'workoutPlanningModel'
+  | 'mesoCycleProvider'
+  | 'mesoCycleModel'
+>;
+
+export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiAgentsDraftState {
   return {
     openaiApiKey: '',
     geminiApiKey: '',
@@ -24,6 +35,10 @@ export function createEmptyAiAgentsDraft(
     deepseekApiKey: '',
     selectedProvider: persisted.selectedProvider,
     selectedModel: persisted.selectedModel,
+    workoutChatProvider: persisted.workoutChatProvider,
+    workoutChatModel: persisted.workoutChatModel,
+    workoutPlanningProvider: persisted.workoutPlanningProvider,
+    workoutPlanningModel: persisted.workoutPlanningModel,
     mesoCycleProvider: persisted.mesoCycleProvider,
     mesoCycleModel: persisted.mesoCycleModel,
   };
@@ -63,6 +78,22 @@ export function mergeDraftWithPersisted(
         : current.selectedProvider,
     selectedModel:
       current.selectedModel === previousPersisted.selectedModel ? persisted.selectedModel : current.selectedModel,
+    workoutChatProvider:
+      current.workoutChatProvider === previousPersisted.workoutChatProvider
+        ? persisted.workoutChatProvider
+        : current.workoutChatProvider,
+    workoutChatModel:
+      current.workoutChatModel === previousPersisted.workoutChatModel
+        ? persisted.workoutChatModel
+        : current.workoutChatModel,
+    workoutPlanningProvider:
+      current.workoutPlanningProvider === previousPersisted.workoutPlanningProvider
+        ? persisted.workoutPlanningProvider
+        : current.workoutPlanningProvider,
+    workoutPlanningModel:
+      current.workoutPlanningModel === previousPersisted.workoutPlanningModel
+        ? persisted.workoutPlanningModel
+        : current.workoutPlanningModel,
     mesoCycleProvider:
       current.mesoCycleProvider === previousPersisted.mesoCycleProvider
         ? persisted.mesoCycleProvider
@@ -82,6 +113,10 @@ export function isAiAgentsDraftDirty(current: AiAgentsDraftState, clean: AiAgent
     current.deepseekApiKey !== clean.deepseekApiKey ||
     current.selectedProvider !== clean.selectedProvider ||
     current.selectedModel !== clean.selectedModel ||
+    current.workoutChatProvider !== clean.workoutChatProvider ||
+    current.workoutChatModel !== clean.workoutChatModel ||
+    current.workoutPlanningProvider !== clean.workoutPlanningProvider ||
+    current.workoutPlanningModel !== clean.workoutPlanningModel ||
     current.mesoCycleProvider !== clean.mesoCycleProvider ||
     current.mesoCycleModel !== clean.mesoCycleModel
   );
@@ -133,6 +168,15 @@ export function buildVisibleAiAgentsRequest(
     request.selectedModel = trimmedModel.length > 0 ? trimmedModel : '';
   }
 
+  assignChangedStringField(request, 'workoutChatProvider', draft.workoutChatProvider, persisted.workoutChatProvider);
+  assignChangedStringField(request, 'workoutChatModel', draft.workoutChatModel, persisted.workoutChatModel);
+  assignChangedStringField(
+    request,
+    'workoutPlanningProvider',
+    draft.workoutPlanningProvider,
+    persisted.workoutPlanningProvider,
+  );
+  assignChangedStringField(request, 'workoutPlanningModel', draft.workoutPlanningModel, persisted.workoutPlanningModel);
   assignChangedStringField(request, 'mesoCycleProvider', draft.mesoCycleProvider, persisted.mesoCycleProvider);
   assignChangedStringField(request, 'mesoCycleModel', draft.mesoCycleModel, persisted.mesoCycleModel);
 

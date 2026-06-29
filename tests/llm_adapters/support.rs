@@ -18,8 +18,10 @@ use aiwattcoach::{
             TrainingContextBuildResult, TrainingContextBuilder, ATHLETE_SUMMARY_FOCUS_ID,
             CALENDAR_OVERVIEW_FOCUS_ID, MESO_CYCLE_FOCUS_ID,
         },
-        training_plan::training_plan_llm_envelope_json_schema,
-        workout_summary::WorkoutSummary,
+        training_plan::{
+            training_plan_llm_envelope_json_schema, TrainingPlanError, WorkoutPlanningLlmConfigPort,
+        },
+        workout_summary::{WorkoutChatLlmConfigPort, WorkoutSummary, WorkoutSummaryError},
     },
 };
 use axum::{
@@ -95,6 +97,42 @@ impl LlmChatPort for CapturingChatPort {
     }
 }
 
+macro_rules! impl_workout_ports_for_user_llm {
+    ($provider:ty) => {
+        impl WorkoutChatLlmConfigPort for $provider {
+            fn get_workout_chat_config(
+                &self,
+                user_id: &str,
+            ) -> LlmBoxFuture<Result<LlmProviderConfig, WorkoutSummaryError>> {
+                let provider = self.clone();
+                let user_id = user_id.to_string();
+                Box::pin(async move {
+                    provider
+                        .get_config(&user_id)
+                        .await
+                        .map_err(WorkoutSummaryError::Llm)
+                })
+            }
+        }
+
+        impl WorkoutPlanningLlmConfigPort for $provider {
+            fn get_workout_planning_config(
+                &self,
+                user_id: &str,
+            ) -> LlmBoxFuture<Result<LlmProviderConfig, TrainingPlanError>> {
+                let provider = self.clone();
+                let user_id = user_id.to_string();
+                Box::pin(async move {
+                    provider
+                        .get_config(&user_id)
+                        .await
+                        .map_err(|error| TrainingPlanError::Unavailable(error.to_string()))
+                })
+            }
+        }
+    };
+}
+
 #[derive(Clone)]
 pub(crate) struct FixedGeminiConfigProvider;
 
@@ -110,6 +148,8 @@ impl UserLlmConfigProvider for FixedGeminiConfigProvider {
     }
 }
 
+impl_workout_ports_for_user_llm!(FixedGeminiConfigProvider);
+
 #[derive(Clone)]
 pub(crate) struct FixedOpenAiConfigProvider;
 
@@ -124,6 +164,8 @@ impl UserLlmConfigProvider for FixedOpenAiConfigProvider {
         })
     }
 }
+
+impl_workout_ports_for_user_llm!(FixedOpenAiConfigProvider);
 
 #[derive(Clone)]
 pub(crate) struct FailingReusableCacheRepository;

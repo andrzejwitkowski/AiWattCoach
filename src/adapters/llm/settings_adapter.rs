@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use super::resolve_settings_llm_config::resolve_llm_config;
 use crate::domain::{
     llm::{BoxFuture, LlmError, LlmProviderConfig, UserLlmConfigProvider},
     settings::UserSettingsUseCases,
@@ -27,32 +28,7 @@ impl UserLlmConfigProvider for SettingsLlmConfigProvider {
                 .await
                 .map_err(|error| LlmError::Internal(error.to_string()))?;
 
-            let provider = settings
-                .ai_agents
-                .selected_provider
-                .ok_or(LlmError::ProviderNotConfigured)?;
-            let model = settings
-                .ai_agents
-                .selected_model
-                .filter(|value| !value.trim().is_empty())
-                .ok_or(LlmError::ModelNotConfigured)?;
-
-            let api_key = match provider {
-                crate::domain::llm::LlmProvider::OpenAi => settings.ai_agents.openai_api_key,
-                crate::domain::llm::LlmProvider::Gemini => settings.ai_agents.gemini_api_key,
-                crate::domain::llm::LlmProvider::OpenRouter => {
-                    settings.ai_agents.openrouter_api_key
-                }
-                crate::domain::llm::LlmProvider::DeepSeek => settings.ai_agents.deepseek_api_key,
-            }
-            .filter(|value| !value.trim().is_empty())
-            .ok_or(LlmError::CredentialsNotConfigured)?;
-
-            Ok(LlmProviderConfig {
-                provider,
-                model,
-                api_key,
-            })
+            resolve_llm_config(&settings.ai_agents, None, None)
         })
     }
 }

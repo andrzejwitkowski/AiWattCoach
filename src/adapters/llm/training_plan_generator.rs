@@ -8,7 +8,7 @@ use crate::domain::{
     llm::{
         build_chat_request, conversation_timing_volatile_context,
         merge_provider_transcript_entries, BoxFuture, LlmChatMessage, LlmChatPort,
-        LlmChatRequestInput, LlmChatResponse, LlmError, UserLlmConfigProvider,
+        LlmChatRequestInput, LlmChatResponse, LlmError,
     },
     llm_tools::{
         run_tool_loop_with_checkpoint, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
@@ -23,7 +23,7 @@ use crate::domain::{
         training_plan_output_grammar, training_plan_stable_context,
         training_plan_tool_context_today, TrainingPlanError, TrainingPlanGenerator,
         TrainingPlanInitialWindowPromptInput, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
-        TrainingPlanToolLoopCheckpoint,
+        TrainingPlanToolLoopCheckpoint, WorkoutPlanningLlmConfigPort,
     },
     workout_summary::WorkoutRecap,
 };
@@ -36,7 +36,7 @@ where
     Time: Clock,
 {
     llm_chat_port: Arc<dyn LlmChatPort>,
-    llm_config_provider: Arc<dyn UserLlmConfigProvider>,
+    llm_config_provider: Arc<dyn WorkoutPlanningLlmConfigPort>,
     training_context_builder: Arc<dyn TrainingContextBuilder>,
     data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
     clock: Time,
@@ -48,7 +48,7 @@ where
 {
     pub fn new(
         llm_chat_port: Arc<dyn LlmChatPort>,
-        llm_config_provider: Arc<dyn UserLlmConfigProvider>,
+        llm_config_provider: Arc<dyn WorkoutPlanningLlmConfigPort>,
         training_context_builder: Arc<dyn TrainingContextBuilder>,
         clock: Time,
     ) -> Self {
@@ -86,9 +86,8 @@ where
 
         Box::pin(async move {
             let config = llm_config_provider
-                .get_config(&user_id)
-                .await
-                .map_err(map_llm_error)?;
+                .get_workout_planning_config(&user_id)
+                .await?;
             let context = training_context_builder
                 .build(&user_id, &workout_id)
                 .await
@@ -214,9 +213,8 @@ where
 
         Box::pin(async move {
             let config = llm_config_provider
-                .get_config(&user_id)
-                .await
-                .map_err(map_llm_error)?;
+                .get_workout_planning_config(&user_id)
+                .await?;
             let context = training_context_builder
                 .build(&user_id, &workout_id)
                 .await
@@ -301,9 +299,8 @@ where
 
         Box::pin(async move {
             let config = llm_config_provider
-                .get_config(&user_id)
-                .await
-                .map_err(map_llm_error)?;
+                .get_workout_planning_config(&user_id)
+                .await?;
             let context = training_context_builder
                 .build(&user_id, &workout_id)
                 .await

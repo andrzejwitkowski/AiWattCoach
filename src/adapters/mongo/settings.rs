@@ -52,6 +52,14 @@ struct AiAgentsDocument {
     selected_provider: Option<String>,
     selected_model: Option<String>,
     #[serde(default)]
+    workout_chat_provider: Option<String>,
+    #[serde(default)]
+    workout_chat_model: Option<String>,
+    #[serde(default)]
+    workout_planning_provider: Option<String>,
+    #[serde(default)]
+    workout_planning_model: Option<String>,
+    #[serde(default)]
     meso_cycle_provider: Option<String>,
     #[serde(default)]
     meso_cycle_model: Option<String>,
@@ -529,6 +537,10 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "ai_agents.deepseek_api_key": &ai_agents.deepseek_api_key,
                             "ai_agents.selected_provider": ai_agents.selected_provider.as_ref().map(|provider| provider.as_str()),
                             "ai_agents.selected_model": &ai_agents.selected_model,
+                            "ai_agents.workout_chat_provider": ai_agents.workout_chat_provider.as_ref().map(|provider| provider.as_str()),
+                            "ai_agents.workout_chat_model": &ai_agents.workout_chat_model,
+                            "ai_agents.workout_planning_provider": ai_agents.workout_planning_provider.as_ref().map(|provider| provider.as_str()),
+                            "ai_agents.workout_planning_model": &ai_agents.workout_planning_model,
                             "ai_agents.meso_cycle_provider": ai_agents.meso_cycle_provider.as_ref().map(|provider| provider.as_str()),
                             "ai_agents.meso_cycle_model": &ai_agents.meso_cycle_model,
                             "updated_at_epoch_seconds": updated_at,
@@ -690,6 +702,18 @@ fn map_document_to_domain(doc: SettingsDocument) -> Result<UserSettings, Setting
                 .as_deref()
                 .and_then(LlmProvider::parse),
             selected_model: doc.ai_agents.selected_model,
+            workout_chat_provider: doc
+                .ai_agents
+                .workout_chat_provider
+                .as_deref()
+                .and_then(LlmProvider::parse),
+            workout_chat_model: doc.ai_agents.workout_chat_model,
+            workout_planning_provider: doc
+                .ai_agents
+                .workout_planning_provider
+                .as_deref()
+                .and_then(LlmProvider::parse),
+            workout_planning_model: doc.ai_agents.workout_planning_model,
             meso_cycle_provider: doc
                 .ai_agents
                 .meso_cycle_provider
@@ -751,6 +775,18 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
                 .as_ref()
                 .map(|provider| provider.as_str().to_string()),
             selected_model: settings.ai_agents.selected_model.clone(),
+            workout_chat_provider: settings
+                .ai_agents
+                .workout_chat_provider
+                .as_ref()
+                .map(|provider| provider.as_str().to_string()),
+            workout_chat_model: settings.ai_agents.workout_chat_model.clone(),
+            workout_planning_provider: settings
+                .ai_agents
+                .workout_planning_provider
+                .as_ref()
+                .map(|provider| provider.as_str().to_string()),
+            workout_planning_model: settings.ai_agents.workout_planning_model.clone(),
             meso_cycle_provider: settings
                 .ai_agents
                 .meso_cycle_provider

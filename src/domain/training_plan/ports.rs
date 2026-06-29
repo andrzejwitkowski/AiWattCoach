@@ -170,3 +170,10 @@ pub trait TrainingPlanWorkoutSummaryPort: Send + Sync + 'static {
         workout_id: &str,
     ) -> BoxFuture<Result<Option<TrainingPlanPlanningContext>, TrainingPlanError>>;
 }
+
+pub trait WorkoutPlanningLlmConfigPort: Send + Sync + 'static {
+    fn get_workout_planning_config(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<crate::domain::llm::LlmProviderConfig, TrainingPlanError>>;
+}

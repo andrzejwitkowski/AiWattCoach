@@ -14,7 +14,7 @@ use aiwattcoach::{
             adapter::LlmAdapter, gemini::client::GeminiClient,
             openai_compatible::client::OpenAiCompatibleClient as OpenAiClient,
             openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
-            workout_summary_coach::LlmWorkoutCoach,
+            workout_llm_config::WorkoutLlmConfigProvider, workout_summary_coach::LlmWorkoutCoach,
         },
         support::{SystemClock, UuidIdGenerator},
         workout_summary_completed_target::CompletedWorkoutTargetAdapter,
@@ -140,6 +140,8 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
             .with_llm_context_cache_repository(Arc::new(cache_repository.clone())),
     );
     let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
+    let workout_llm_config_provider =
+        Arc::new(WorkoutLlmConfigProvider::new(settings_service.clone()));
     let llm_http_client = reqwest::Client::new();
     let llm_adapter = Arc::new(LlmAdapter::live(
         OpenAiClient::new(llm_http_client.clone()).with_base_url(server.openai_base_url()),
@@ -170,7 +172,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
                     );
                     LlmWorkoutCoach::new(
                         llm_adapter.clone(),
-                        llm_config_provider.clone(),
+                        workout_llm_config_provider.clone(),
                         training_context_builder,
                         SystemClock,
                     )

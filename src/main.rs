@@ -25,7 +25,7 @@ use aiwattcoach::{
             openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
             training_plan_generator::TrainingPlanLlmGenerator,
             update_planned_workout_data::UpdatePlannedWorkoutDataAdapter,
-            workout_summary_coach::LlmWorkoutCoach,
+            workout_llm_config::WorkoutLlmConfigProvider, workout_summary_coach::LlmWorkoutCoach,
         },
         mongo::{
             activities::MongoActivityRepository,
@@ -424,6 +424,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .await?;
     }
     let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
+    let workout_llm_config_provider =
+        Arc::new(WorkoutLlmConfigProvider::new(settings_service.clone()));
     let special_day_repository =
         MongoSpecialDayRepository::new(mongo_client.clone(), &mongo_database);
     special_day_repository.ensure_indexes().await?;
@@ -621,7 +623,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             Arc::new(
                 LlmWorkoutCoach::new(
                     llm_adapter.clone(),
-                    llm_config_provider.clone(),
+                    workout_llm_config_provider.clone(),
                     training_context_builder.clone(),
                     SystemClock,
                 )
@@ -662,7 +664,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             training_plan_generation_operation_repository,
             TrainingPlanLlmGenerator::new(
                 llm_adapter.clone(),
-                llm_config_provider.clone(),
+                workout_llm_config_provider.clone(),
                 training_context_builder.clone(),
                 SystemClock,
             )
@@ -807,6 +809,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Arc::new(AdminPromptPreviewService::new(
             training_context_builder.clone(),
             llm_config_provider.clone(),
+            workout_llm_config_provider.clone(),
+            workout_llm_config_provider.clone(),
             completed_workout_service.clone(),
             Some(planned_workout_repository.clone()),
             Some(special_day_repository.clone()),

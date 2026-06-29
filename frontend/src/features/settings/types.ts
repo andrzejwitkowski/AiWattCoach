@@ -16,6 +16,10 @@ const aiAgentsSettingsSchema = z.object({
   selectedModel: z.string().nullable().optional(),
   mesoCycleProvider: llmProviderSchema.nullable().optional(),
   mesoCycleModel: z.string().nullable().optional(),
+  workoutChatProvider: llmProviderSchema.nullable().optional(),
+  workoutChatModel: z.string().nullable().optional(),
+  workoutPlanningProvider: llmProviderSchema.nullable().optional(),
+  workoutPlanningModel: z.string().nullable().optional(),
 });
 
 const intervalsSettingsSchema = z.object({
@@ -152,6 +156,10 @@ export const updateAiAgentsRequestSchema = z.object({
   selectedModel: z.string().nullable().optional(),
   mesoCycleProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
   mesoCycleModel: z.string().nullable().optional(),
+  workoutChatProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
+  workoutChatModel: z.string().nullable().optional(),
+  workoutPlanningProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
+  workoutPlanningModel: z.string().nullable().optional(),
 });
 
 export type LlmProvider = z.infer<typeof llmProviderSchema>;

@@ -23,12 +23,14 @@ use crate::domain::{
     training_context::{pick_representative_completed_workout_for_day, TrainingContextBuilder},
     training_plan::{
         assemble_training_plan_initial_window_request, map_workout_summary_to_planning_context,
-        workout_recap_from_summary, TrainingPlanInitialWindowPromptInput,
+        workout_recap_from_summary, TrainingPlanError, TrainingPlanInitialWindowPromptInput,
+        WorkoutPlanningLlmConfigPort,
     },
     workout_summary::{
         assemble_workout_summary_coach_request, try_load_meso_roadmap_stable_context,
-        CompletedWorkoutTargetUseCases, WorkoutSummary, WorkoutSummaryCoachPromptInput,
-        WorkoutSummaryRepository, ADMIN_PREVIEW_USER_MESSAGE,
+        CompletedWorkoutTargetUseCases, WorkoutChatLlmConfigPort, WorkoutSummary,
+        WorkoutSummaryCoachPromptInput, WorkoutSummaryError, WorkoutSummaryRepository,
+        ADMIN_PREVIEW_USER_MESSAGE,
     },
 };
 
@@ -46,6 +48,8 @@ where
 {
     training_context_builder: Arc<dyn TrainingContextBuilder>,
     llm_config_provider: Arc<dyn UserLlmConfigProvider>,
+    workout_chat_llm_config_provider: Arc<dyn WorkoutChatLlmConfigPort>,
+    workout_planning_llm_config_provider: Arc<dyn WorkoutPlanningLlmConfigPort>,
     completed_workout_read: Arc<dyn CompletedWorkoutReadUseCases>,
     planned_workout_repository: Option<Planned>,
     special_day_repository: Option<Special>,
@@ -74,6 +78,8 @@ where
     pub fn new(
         training_context_builder: Arc<dyn TrainingContextBuilder>,
         llm_config_provider: Arc<dyn UserLlmConfigProvider>,
+        workout_chat_llm_config_provider: Arc<dyn WorkoutChatLlmConfigPort>,
+        workout_planning_llm_config_provider: Arc<dyn WorkoutPlanningLlmConfigPort>,
         completed_workout_read: Arc<dyn CompletedWorkoutReadUseCases>,
         planned_workout_repository: Option<Planned>,
         special_day_repository: Option<Special>,
@@ -91,6 +97,8 @@ where
         Self {
             training_context_builder,
             llm_config_provider,
+            workout_chat_llm_config_provider,
+            workout_planning_llm_config_provider,
             completed_workout_read,
             planned_workout_repository,
             special_day_repository,
@@ -348,10 +356,10 @@ where
 
         let athlete_summary_text = self.load_athlete_summary_text(user_id).await?;
         let config = self
-            .llm_config_provider
-            .get_config(user_id)
+            .workout_chat_llm_config_provider
+            .get_workout_chat_config(user_id)
             .await
-            .map_err(AdminPromptPreviewError::Llm)?;
+            .map_err(map_workout_chat_preview_error)?;
 
         let meso_roadmap_stable_context =
             if let Some(repository) = self.meso_projection_repository.as_deref() {
@@ -539,10 +547,10 @@ where
             .unwrap_or_else(|| preview_workout_summary(user_id, &workout_id, preview_epoch));
 
         let config = self
-            .llm_config_provider
-            .get_config(user_id)
+            .workout_planning_llm_config_provider
+            .get_workout_planning_config(user_id)
             .await
-            .map_err(AdminPromptPreviewError::Llm)?;
+            .map_err(map_workout_planning_preview_error)?;
 
         let workout_recap = workout_recap_from_summary(&summary, preview_epoch);
         let planning_context = map_workout_summary_to_planning_context(summary);
@@ -616,6 +624,24 @@ fn preview_workout_summary(user_id: &str, workout_id: &str, now: i64) -> Workout
         workout_recap_generated_at_epoch_seconds: None,
         created_at_epoch_seconds: now,
         updated_at_epoch_seconds: now,
+    }
+}
+
+fn map_workout_chat_preview_error(error: WorkoutSummaryError) -> AdminPromptPreviewError {
+    match error {
+        WorkoutSummaryError::Llm(error) => AdminPromptPreviewError::Llm(error),
+        WorkoutSummaryError::Repository(message) => AdminPromptPreviewError::Repository(message),
+        other => AdminPromptPreviewError::Repository(other.to_string()),
+    }
+}
+
+fn map_workout_planning_preview_error(error: TrainingPlanError) -> AdminPromptPreviewError {
+    match error {
+        TrainingPlanError::Unavailable(message) => {
+            AdminPromptPreviewError::Llm(crate::domain::llm::LlmError::Internal(message))
+        }
+        TrainingPlanError::Repository(message) => AdminPromptPreviewError::Repository(message),
+        TrainingPlanError::Validation(message) => AdminPromptPreviewError::Settings(message),
     }
 }
 

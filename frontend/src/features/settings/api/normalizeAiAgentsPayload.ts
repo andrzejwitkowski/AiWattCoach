@@ -5,6 +5,10 @@ const TRIMMED_STRING_FIELDS = [
   'deepseekApiKey',
   'selectedProvider',
   'selectedModel',
+  'workoutChatProvider',
+  'workoutChatModel',
+  'workoutPlanningProvider',
+  'workoutPlanningModel',
   'mesoCycleProvider',
   'mesoCycleModel',
 ] as const;

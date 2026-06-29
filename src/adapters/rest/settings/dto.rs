@@ -53,6 +53,14 @@ pub(super) struct AiAgentsDto {
     pub(super) selected_provider: Option<String>,
     #[serde(rename = "selectedModel")]
     pub(super) selected_model: Option<String>,
+    #[serde(rename = "workoutChatProvider")]
+    pub(super) workout_chat_provider: Option<String>,
+    #[serde(rename = "workoutChatModel")]
+    pub(super) workout_chat_model: Option<String>,
+    #[serde(rename = "workoutPlanningProvider")]
+    pub(super) workout_planning_provider: Option<String>,
+    #[serde(rename = "workoutPlanningModel")]
+    pub(super) workout_planning_model: Option<String>,
     #[serde(rename = "mesoCycleProvider")]
     pub(super) meso_cycle_provider: Option<String>,
     #[serde(rename = "mesoCycleModel")]
@@ -142,6 +150,14 @@ pub(crate) struct UpdateAiAgentsRequest {
     pub(super) selected_provider: OptionalStringInput,
     #[serde(default, rename = "selectedModel")]
     pub(super) selected_model: OptionalStringInput,
+    #[serde(default, rename = "workoutChatProvider")]
+    pub(super) workout_chat_provider: OptionalStringInput,
+    #[serde(default, rename = "workoutChatModel")]
+    pub(super) workout_chat_model: OptionalStringInput,
+    #[serde(default, rename = "workoutPlanningProvider")]
+    pub(super) workout_planning_provider: OptionalStringInput,
+    #[serde(default, rename = "workoutPlanningModel")]
+    pub(super) workout_planning_model: OptionalStringInput,
     #[serde(default, rename = "mesoCycleProvider")]
     pub(super) meso_cycle_provider: OptionalStringInput,
     #[serde(default, rename = "mesoCycleModel")]
