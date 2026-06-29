@@ -288,10 +288,8 @@ mod tests {
             "For completed interval workouts, judge interval execution primarily from bl"
         ));
         assert!(prompt.contains("ps (executed power segments)"));
-        assert!(prompt.contains("ps=executed power segments"));
-        assert!(
-            prompt.contains("cs ([minRPM,maxRPM,durationSec]) as supporting cadence evidence only")
-        );
+        assert!(prompt.contains("ps=power"));
+        assert!(prompt.contains("cs=cadence"));
         assert!(prompt.contains("Never tell the athlete they have free time, vacation, or a rest block unless prd confirms it"));
         assert!(!prompt.contains("p3 as executed power"));
         assert!(!prompt.contains("p3=power watts"));
@@ -305,7 +303,7 @@ mod tests {
             "Do not conclude poor interval execution just because whole-workout averages were lowered by recovery valleys, coasting, zeros, terrain, or wind"
         ));
         assert!(prompt.contains("When workout tools are available, use them for that fallback"));
-        assert!(prompt.contains("Seiler polarized training model"));
+        assert!(prompt.contains("Seiler 2010"));
         assert!(prompt.contains("Do not use this block to justify extra follow-up questions"));
         assert!(
             prompt.contains("Use the provided selected workout date as the active workout context")

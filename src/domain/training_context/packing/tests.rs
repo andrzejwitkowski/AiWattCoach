@@ -10,7 +10,66 @@ use crate::domain::training_context::model::{
 
 #[test]
 fn compact_render_is_non_empty_and_estimates_tokens() {
-    let context = TrainingContext {
+    let context = rich_training_context();
+    let rendered = render_training_context(&context);
+
+    assert!(rendered
+        .stable_context
+        .contains("\"ap\":\"Climb-focused athlete\""));
+    assert!(rendered.stable_context.contains("\"acfg\":true"));
+    assert!(rendered
+        .stable_context
+        .contains("\"av\":{\"h\":[\"wd\",\"a\",\"mdm\"]"));
+    assert!(rendered
+        .stable_context
+        .contains("\"lt\":{\"h\":[\"d\",\"tss\"],\"r\":[[\"2026-03-31\",42]]}"));
+    assert!(rendered.stable_context.contains("480,90.0,95.0,270,285"));
+    assert!(!rendered.stable_context.contains("\"ps\":"));
+    assert!(!rendered.stable_context.contains("\"cs\":"));
+    assert!(rendered.stable_context.contains("\"def_disc\":\"road\""));
+    assert!(rendered
+        .stable_context
+        .contains("\"h\":[\"d\",\"n\",\"km\",\"pri\",\"id\"]"));
+    assert!(rendered
+        .stable_context
+        .contains("\"fe\":{\"h\":[\"id\",\"sd\",\"c\""));
+    assert!(rendered.volatile_context.contains("\"sick\":true"));
+    assert!(rendered
+        .volatile_context
+        .contains("\"sickn\":\"felt unwell\""));
+    assert!(rendered.volatile_context.contains("\"v\":3"));
+    assert!(rendered
+        .volatile_context
+        .contains("[[220,220,3],[270,270,3]]"));
+    assert!(rendered.volatile_context.contains("[[87,87,5]]"));
+    assert!(!rendered.volatile_context.contains("\"pc\":"));
+    assert!(!rendered.volatile_context.contains("\"p3\":"));
+    assert!(rendered
+        .volatile_context
+        .contains("Held power well and finished controlled"));
+    assert!(rendered
+        .volatile_context
+        .contains("\"wr\":{\"h\":[\"d\",\"id\",\"rpe\",\"recap\"]"));
+    assert!(rendered.volatile_context.contains("\"pd\":[{"));
+    assert!(rendered.volatile_context.contains("\"workout-1\""));
+    assert!(!rendered.volatile_context.contains("\"p5\":"));
+    assert!(rendered.approximate_tokens > 0);
+}
+
+#[test]
+fn v3_payload_is_smaller_than_object_array_baseline() {
+    let context = rich_training_context();
+    let rendered = render_training_context(&context);
+    let combined_len = rendered.stable_context.len() + rendered.volatile_context.len();
+    // v2 object-array encoding for the same fixture was ~2.9k chars; v3 should save materially.
+    assert!(
+        combined_len < 2400,
+        "expected compressed payload under 2400 chars, got {combined_len}"
+    );
+}
+
+fn rich_training_context() -> TrainingContext {
+    TrainingContext {
         generated_at_epoch_seconds: 1,
         focus_workout_id: Some("workout-1".to_string()),
         focus_kind: "activity".to_string(),
@@ -130,52 +189,7 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
                 rest_day_reason: None,
             }],
         }],
-    };
-
-    let rendered = render_training_context(&context);
-
-    assert!(rendered
-        .stable_context
-        .contains("\"ap\":\"Climb-focused athlete\""));
-    assert!(rendered.stable_context.contains("\"acfg\":true"));
-    assert!(rendered
-        .stable_context
-        .contains("\"av\":[{\"wd\":\"mon\",\"a\":true,\"mdm\":90}]"));
-    assert!(rendered
-        .stable_context
-        .contains("\"lt\":[{\"d\":\"2026-03-31\",\"days\":1,\"tss\":42,\"t7\":37.5,\"t28\":51.3"));
-    assert!(rendered
-        .stable_context
-        .contains("\"bl\":[{\"dur\":480,\"minp\":90.0,\"maxp\":95.0,\"minw\":270,\"maxw\":285}]"));
-    assert!(!rendered.stable_context.contains("\"ps\":"));
-    assert!(!rendered.stable_context.contains("\"cs\":"));
-    assert!(rendered
-        .stable_context
-        .contains("\"rc\":[{\"id\":\"race-1\",\"d\":\"2026-05-10\",\"n\":\"Spring Classic\",\"km\":123.0,\"disc\":\"road\",\"pri\":\"A\"}]"));
-    assert!(rendered
-        .stable_context
-        .contains("\"fe\":[{\"id\":303,\"sd\":\"2026-04-12T07:00:00\",\"c\":\"WORKOUT\",\"ty\":\"Ride\",\"n\":\"Long Tempo\",\"desc\":\"Endurance with tempo finish\",\"dur\":5400,\"tss\":92.5,\"ifv\":0.81,\"np\":243}]"));
-    assert!(rendered.volatile_context.contains("\"sick\":true"));
-    assert!(rendered
-        .volatile_context
-        .contains("\"sickn\":\"felt unwell\""));
-    assert!(rendered.volatile_context.contains("\"v\":2"));
-    assert!(rendered
-        .volatile_context
-        .contains("\"ps\":[[220,220,3],[270,270,3]]"));
-    assert!(rendered.volatile_context.contains("\"cs\":[[87,87,5]]"));
-    assert!(!rendered.volatile_context.contains("\"pc\":"));
-    assert!(!rendered.volatile_context.contains("\"p3\":"));
-    assert!(rendered
-        .volatile_context
-        .contains("\"recap\":\"Held power well and finished controlled\""));
-    assert!(rendered.volatile_context.contains(
-        "\"wr\":[{\"d\":\"2026-04-01\",\"id\":\"ride-1\",\"rpe\":7,\"recap\":\"Held power well and finished controlled\"}]"
-    ));
-    assert!(rendered.volatile_context.contains("\"pd\":[{"));
-    assert!(rendered.volatile_context.contains("\"swid\":\"workout-1\""));
-    assert!(!rendered.volatile_context.contains("\"p5\":"));
-    assert!(rendered.approximate_tokens > 0);
+    }
 }
 
 #[test]
@@ -206,7 +220,7 @@ fn compact_render_omits_nulls_and_empty_lists() {
     });
 
     assert!(!rendered.stable_context.contains(":null"));
-    assert!(!rendered.stable_context.contains("\"lt\":[]"));
+    assert!(!rendered.stable_context.contains("\"lt\":"));
     assert!(!rendered.volatile_context.contains("\"rd\":[]"));
     assert!(!rendered.volatile_context.contains("\"ud\":[]"));
     assert!(!rendered.volatile_context.contains("\"pd\":[]"));
@@ -261,9 +275,12 @@ fn compact_render_includes_race_strategy_window_for_next_14_days() {
 
     let rendered = render_training_context(&context);
 
-    assert!(rendered.volatile_context.contains(
-        "\"rs\":[{\"d\":\"2026-06-20\",\"pri\":\"B\",\"disc\":\"road\",\"n\":\"Target Road Race\",\"days_out\":10}]"
-    ));
+    assert!(rendered
+        .volatile_context
+        .contains("\"rs\":{\"h\":[\"d\",\"pri\",\"disc\",\"n\",\"days_out\"]"));
+    assert!(rendered
+        .volatile_context
+        .contains("[\"2026-06-20\",\"B\",\"road\",\"Target Road Race\",10]"));
     assert!(!rendered.volatile_context.contains("Past Crit"));
     assert!(!rendered.volatile_context.contains("Later Stage"));
 }
@@ -361,12 +378,11 @@ fn recent_workout_streams_omitted_from_stable_h_w() {
 
     let rendered = render_training_context(&context);
 
-    assert!(rendered.stable_context.contains("\"id\":\"ride-recent\""));
-    assert!(!rendered.stable_context.contains("\"ps\":[[220,220,3]]"));
-    assert!(rendered
-        .stable_context
-        .contains("\"id\":\"ride-old\",\"ps\":[[180,180,3]],\"cs\":[[90,90,5]]"));
+    assert!(rendered.stable_context.contains("\"ride-recent\""));
+    assert!(rendered.stable_context.contains("\"ride-old\""));
+    assert!(!rendered.stable_context.contains("\"ps\":"));
     assert!(rendered
         .volatile_context
-        .contains("\"id\":\"ride-recent\",\"sd\":\"2026-04-01T08:00:00\",\"ps\":[[220,220,3]],\"cs\":[[88,88,5]]"));
+        .contains("\"w\":{\"h\":[\"id\",\"sd\",\"ps\",\"cs\"]"));
+    assert!(rendered.volatile_context.contains("[[220,220,3]]"));
 }

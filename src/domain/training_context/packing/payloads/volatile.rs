@@ -1,8 +1,12 @@
 use chrono::{Duration, NaiveDate};
 use serde::Serialize;
+use serde_json::{json, Value};
 
-use super::super::is_empty_slice;
-use super::stable::CompactPlannedWorkoutBlock;
+use super::super::header_table::{
+    cell_bool, cell_i32, cell_i64, cell_opt_f64, cell_opt_i32, cell_opt_json, cell_opt_segments,
+    cell_opt_str, cell_opt_u8, cell_opt_value, cell_str, interval_blocks_table, HeaderTable,
+    TableBuilder,
+};
 use crate::domain::training_context::model::{
     PlannedWorkoutContext, PlannedWorkoutReference, ProjectedDayContext, ProjectedWorkoutContext,
     RaceContext, RecentDayContext, RecentWorkoutContext, RecentWorkoutRecapContext,
@@ -18,20 +22,20 @@ pub(crate) struct VolatilePayload<'a> {
     fx: CompactFocus<'a>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     rd: Vec<CompactRecentDay<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    wr: Vec<CompactWorkoutRecap<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    wr: Option<HeaderTable>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     ud: Vec<CompactUpcomingDay<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pd: Vec<CompactProjectedDay<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    rs: Vec<CompactRaceStrategyWindow<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rs: Option<HeaderTable>,
 }
 
 impl<'a> VolatilePayload<'a> {
     pub(crate) fn from_context(context: &'a TrainingContext) -> Self {
         Self {
-            v: 2,
+            v: 3,
             g: context.generated_at_epoch_seconds,
             fx: CompactFocus {
                 id: context.focus_workout_id.as_deref(),
@@ -42,11 +46,7 @@ impl<'a> VolatilePayload<'a> {
                 .iter()
                 .map(CompactRecentDay::from_recent_day)
                 .collect(),
-            wr: context
-                .recent_workout_recaps
-                .iter()
-                .map(CompactWorkoutRecap::from_recap)
-                .collect(),
+            wr: build_workout_recaps_table(&context.recent_workout_recaps),
             ud: context
                 .upcoming_days
                 .iter()
@@ -57,55 +57,78 @@ impl<'a> VolatilePayload<'a> {
                 .iter()
                 .map(CompactProjectedDay::from_projected_day)
                 .collect(),
-            rs: build_race_strategy_window(context),
+            rs: build_race_strategy_table(context),
         }
     }
 }
 
-#[derive(Serialize)]
-struct CompactRaceStrategyWindow<'a> {
-    d: &'a str,
-    pri: &'a str,
-    disc: &'a str,
-    n: &'a str,
-    days_out: i32,
+fn build_workout_recaps_table(recaps: &[RecentWorkoutRecapContext]) -> Option<HeaderTable> {
+    if recaps.is_empty() {
+        return None;
+    }
+    let mut builder =
+        TableBuilder::new(&[("d", false), ("id", false), ("rpe", true), ("recap", false)]);
+    for recap in recaps {
+        builder = builder.push_row(vec![
+            cell_str(&recap.date),
+            cell_str(&recap.workout_id),
+            cell_opt_u8(recap.rpe),
+            cell_str(&recap.recap),
+        ]);
+    }
+    builder.build()
 }
 
-fn build_race_strategy_window(context: &TrainingContext) -> Vec<CompactRaceStrategyWindow<'_>> {
+fn build_race_strategy_table(context: &TrainingContext) -> Option<HeaderTable> {
     if context.races.is_empty() {
-        return Vec::new();
+        return None;
     }
-
-    let Some(focus_date) = infer_packed_focus_date(context) else {
-        return Vec::new();
-    };
+    let focus_date = infer_packed_focus_date(context)?;
     let window_end = focus_date + Duration::days(RACE_STRATEGY_WINDOW_DAYS);
-    let mut entries = context
+    let mut rows = context
         .races
         .iter()
-        .filter_map(|race| compact_race_strategy_window_entry(race, focus_date, window_end))
+        .filter_map(|race| race_strategy_row(race, focus_date, window_end))
         .collect::<Vec<_>>();
-    entries.sort_by(|left, right| left.d.cmp(right.d));
-    entries
+    if rows.is_empty() {
+        return None;
+    }
+    rows.sort_by_key(|row| row.0);
+    let mut builder = TableBuilder::new(&[
+        ("d", false),
+        ("pri", false),
+        ("disc", false),
+        ("n", false),
+        ("days_out", false),
+    ]);
+    for (date, pri, disc, name, days_out) in rows {
+        builder = builder.push_row(vec![
+            cell_str(date),
+            cell_str(pri),
+            cell_str(disc),
+            cell_str(name),
+            cell_i32(days_out),
+        ]);
+    }
+    builder.build()
 }
 
-fn compact_race_strategy_window_entry<'a>(
-    race: &'a RaceContext,
+fn race_strategy_row(
+    race: &RaceContext,
     focus_date: NaiveDate,
     window_end: NaiveDate,
-) -> Option<CompactRaceStrategyWindow<'a>> {
+) -> Option<(&str, &str, &str, &str, i32)> {
     let race_date = NaiveDate::parse_from_str(&race.date, "%Y-%m-%d").ok()?;
     if race_date < focus_date || race_date > window_end {
         return None;
     }
-
-    Some(CompactRaceStrategyWindow {
-        d: &race.date,
-        pri: &race.priority,
-        disc: &race.discipline,
-        n: &race.name,
-        days_out: (race_date - focus_date).num_days() as i32,
-    })
+    Some((
+        &race.date,
+        &race.priority,
+        &race.discipline,
+        &race.name,
+        (race_date - focus_date).num_days() as i32,
+    ))
 }
 
 fn infer_packed_focus_date(context: &TrainingContext) -> Option<NaiveDate> {
@@ -117,7 +140,6 @@ fn infer_packed_focus_date(context: &TrainingContext) -> Option<NaiveDate> {
     {
         return Some(latest_recent_day);
     }
-
     if let Some(earliest_upcoming_day) = context
         .upcoming_days
         .iter()
@@ -126,7 +148,6 @@ fn infer_packed_focus_date(context: &TrainingContext) -> Option<NaiveDate> {
     {
         return earliest_upcoming_day.pred_opt();
     }
-
     if let Some(earliest_projected_day) = context
         .projected_days
         .iter()
@@ -135,9 +156,161 @@ fn infer_packed_focus_date(context: &TrainingContext) -> Option<NaiveDate> {
     {
         return earliest_projected_day.pred_opt();
     }
-
     chrono::DateTime::from_timestamp(context.generated_at_epoch_seconds, 0)
         .map(|timestamp| timestamp.date_naive())
+}
+
+fn planned_workout_ref_json(reference: &PlannedWorkoutReference) -> Value {
+    let mut value = json!({
+        "id": reference.event_id,
+        "sd": reference.start_date_local,
+        "c": reference.category,
+        "done": reference.completed,
+    });
+    if let Some(name) = reference.name.as_deref() {
+        value["n"] = json!(name);
+    }
+    if let Some(doc) = reference.raw_workout_doc.as_deref() {
+        value["doc"] = json!(doc);
+    }
+    if let Some(tss) = reference.estimated_training_stress_score {
+        value["tss"] = json!(tss);
+    }
+    if let Some(ifv) = reference.estimated_intensity_factor {
+        value["ifv"] = json!(ifv);
+    }
+    if let Some(np) = reference.estimated_normalized_power_watts {
+        value["np"] = json!(np);
+    }
+    if let Some(bl) = interval_blocks_table(&reference.interval_blocks) {
+        if let Ok(bl) = serde_json::to_value(bl) {
+            value["bl"] = bl;
+        }
+    }
+    value
+}
+
+fn build_recent_workouts_table(workouts: &[RecentWorkoutContext]) -> Option<HeaderTable> {
+    if workouts.is_empty() {
+        return None;
+    }
+    let mut builder = TableBuilder::new(&[
+        ("id", false),
+        ("sd", false),
+        ("n", true),
+        ("tss", true),
+        ("np", true),
+        ("ftp", true),
+        ("rpe", true),
+        ("recap", true),
+        ("ps", true),
+        ("cs", true),
+        ("pw", true),
+    ]);
+    for workout in workouts {
+        builder = builder.push_row(vec![
+            cell_str(&workout.activity_id),
+            cell_str(&workout.start_date_local),
+            cell_opt_str(workout.name.as_deref()),
+            cell_opt_i32(workout.training_stress_score),
+            cell_opt_i32(workout.normalized_power_watts),
+            cell_opt_i32(workout.ftp_watts),
+            cell_opt_u8(workout.rpe),
+            cell_opt_str(workout.workout_recap.as_deref()),
+            cell_opt_segments(&workout.power_segments),
+            cell_opt_segments(&workout.cadence_segments),
+            cell_opt_value(
+                workout
+                    .planned_workout
+                    .as_ref()
+                    .map(planned_workout_ref_json),
+            ),
+        ]);
+    }
+    builder.build()
+}
+
+fn build_planned_workouts_table(planned: &[PlannedWorkoutContext]) -> Option<HeaderTable> {
+    if planned.is_empty() {
+        return None;
+    }
+    let mut builder = TableBuilder::new(&[
+        ("id", false),
+        ("sd", false),
+        ("n", true),
+        ("c", false),
+        ("bl", true),
+        ("doc", true),
+        ("tss", true),
+        ("ifv", true),
+        ("np", true),
+        ("done", false),
+    ]);
+    for workout in planned {
+        builder = builder.push_row(vec![
+            cell_i64(workout.event_id),
+            cell_str(&workout.start_date_local),
+            cell_opt_str(workout.name.as_deref()),
+            cell_str(&workout.category),
+            cell_opt_json(interval_blocks_table(&workout.interval_blocks)),
+            cell_opt_str(workout.raw_workout_doc.as_deref()),
+            cell_opt_f64(workout.estimated_training_stress_score),
+            cell_opt_f64(workout.estimated_intensity_factor),
+            cell_opt_i32(workout.estimated_normalized_power_watts),
+            cell_bool(workout.completed),
+        ]);
+    }
+    builder.build()
+}
+
+fn build_special_days_table(special_days: &[SpecialDayContext]) -> Option<HeaderTable> {
+    if special_days.is_empty() {
+        return None;
+    }
+    let mut builder = TableBuilder::new(&[
+        ("id", false),
+        ("sd", false),
+        ("n", true),
+        ("c", false),
+        ("desc", true),
+    ]);
+    for special in special_days {
+        builder = builder.push_row(vec![
+            cell_i64(special.event_id),
+            cell_str(&special.start_date_local),
+            cell_opt_str(special.name.as_deref()),
+            cell_str(&special.category),
+            cell_opt_str(special.description.as_deref()),
+        ]);
+    }
+    builder.build()
+}
+
+fn build_projected_workouts_table(workouts: &[ProjectedWorkoutContext]) -> Option<HeaderTable> {
+    if workouts.is_empty() {
+        return None;
+    }
+    let mut builder = TableBuilder::new(&[
+        ("swid", false),
+        ("sd", false),
+        ("n", true),
+        ("bl", true),
+        ("doc", true),
+        ("rest", false),
+        ("rr", true),
+    ]);
+    for workout in workouts {
+        builder = builder.push_row(vec![
+            cell_str(&workout.source_workout_id),
+            cell_str(&workout.start_date_local),
+            cell_opt_str(workout.name.as_deref()),
+            cell_opt_json(interval_blocks_table(&workout.interval_blocks)),
+            cell_opt_str(workout.raw_workout_doc.as_deref()),
+            cell_bool(workout.rest_day),
+            cell_opt_str(workout.rest_day_reason.as_deref()),
+        ]);
+    }
+    builder.build()
 }
 
 #[derive(Serialize)]
@@ -148,38 +321,18 @@ struct CompactFocus<'a> {
 }
 
 #[derive(Serialize)]
-struct CompactWorkoutRecap<'a> {
-    d: &'a str,
-    id: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    rpe: Option<u8>,
-    recap: &'a str,
-}
-
-impl<'a> CompactWorkoutRecap<'a> {
-    fn from_recap(recap: &'a RecentWorkoutRecapContext) -> Self {
-        Self {
-            d: &recap.date,
-            id: &recap.workout_id,
-            rpe: recap.rpe,
-            recap: &recap.recap,
-        }
-    }
-}
-
-#[derive(Serialize)]
 struct CompactRecentDay<'a> {
     d: &'a str,
     fr: bool,
     sick: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     sickn: Option<&'a str>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    w: Vec<CompactRecentWorkout<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pw: Vec<CompactPlannedWorkout<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    sd: Vec<CompactSpecialDay<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    w: Option<HeaderTable>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pw: Option<HeaderTable>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sd: Option<HeaderTable>,
 }
 
 impl<'a> CompactRecentDay<'a> {
@@ -189,183 +342,9 @@ impl<'a> CompactRecentDay<'a> {
             fr: day.free_day,
             sick: day.sick_day,
             sickn: day.sick_note.as_deref(),
-            w: day
-                .workouts
-                .iter()
-                .map(CompactRecentWorkout::from_workout)
-                .collect(),
-            pw: day
-                .planned_workouts
-                .iter()
-                .map(CompactPlannedWorkout::from_planned)
-                .collect(),
-            sd: day
-                .special_days
-                .iter()
-                .map(CompactSpecialDay::from_special)
-                .collect(),
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct CompactRecentWorkout<'a> {
-    id: &'a str,
-    sd: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    n: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    ty: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tss: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    ef: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    ifv: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    np: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    ftp: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    rpe: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    recap: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    vi: Option<f64>,
-    #[serde(skip_serializing_if = "is_empty_slice")]
-    ps: &'a [[i32; 3]],
-    #[serde(skip_serializing_if = "is_empty_slice")]
-    cs: &'a [[i32; 3]],
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pw: Option<CompactPlannedWorkoutRef<'a>>,
-}
-
-impl<'a> CompactRecentWorkout<'a> {
-    fn from_workout(workout: &'a RecentWorkoutContext) -> Self {
-        Self {
-            id: &workout.activity_id,
-            sd: &workout.start_date_local,
-            n: workout.name.as_deref(),
-            ty: workout.activity_type.as_deref(),
-            tss: workout.training_stress_score,
-            ef: workout.efficiency_factor,
-            ifv: workout.intensity_factor,
-            np: workout.normalized_power_watts,
-            ftp: workout.ftp_watts,
-            rpe: workout.rpe,
-            recap: workout.workout_recap.as_deref(),
-            vi: workout.variability_index,
-            ps: &workout.power_segments,
-            cs: &workout.cadence_segments,
-            pw: workout
-                .planned_workout
-                .as_ref()
-                .map(CompactPlannedWorkoutRef::from_reference),
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct CompactPlannedWorkoutRef<'a> {
-    id: i64,
-    sd: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    n: Option<&'a str>,
-    c: &'a str,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    bl: Vec<CompactPlannedWorkoutBlock>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    doc: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tss: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    ifv: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    np: Option<i32>,
-    done: bool,
-}
-
-impl<'a> CompactPlannedWorkoutRef<'a> {
-    fn from_reference(reference: &'a PlannedWorkoutReference) -> Self {
-        Self {
-            id: reference.event_id,
-            sd: &reference.start_date_local,
-            n: reference.name.as_deref(),
-            c: &reference.category,
-            bl: reference
-                .interval_blocks
-                .iter()
-                .map(CompactPlannedWorkoutBlock::from_block)
-                .collect(),
-            doc: reference.raw_workout_doc.as_deref(),
-            tss: reference.estimated_training_stress_score,
-            ifv: reference.estimated_intensity_factor,
-            np: reference.estimated_normalized_power_watts,
-            done: reference.completed,
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct CompactPlannedWorkout<'a> {
-    id: i64,
-    sd: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    n: Option<&'a str>,
-    c: &'a str,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    bl: Vec<CompactPlannedWorkoutBlock>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    doc: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tss: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    ifv: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    np: Option<i32>,
-    done: bool,
-}
-
-impl<'a> CompactPlannedWorkout<'a> {
-    fn from_planned(planned: &'a PlannedWorkoutContext) -> Self {
-        Self {
-            id: planned.event_id,
-            sd: &planned.start_date_local,
-            n: planned.name.as_deref(),
-            c: &planned.category,
-            bl: planned
-                .interval_blocks
-                .iter()
-                .map(CompactPlannedWorkoutBlock::from_block)
-                .collect(),
-            doc: planned.raw_workout_doc.as_deref(),
-            tss: planned.estimated_training_stress_score,
-            ifv: planned.estimated_intensity_factor,
-            np: planned.estimated_normalized_power_watts,
-            done: planned.completed,
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct CompactSpecialDay<'a> {
-    id: i64,
-    sd: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    n: Option<&'a str>,
-    c: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    desc: Option<&'a str>,
-}
-
-impl<'a> CompactSpecialDay<'a> {
-    fn from_special(special: &'a SpecialDayContext) -> Self {
-        Self {
-            id: special.event_id,
-            sd: &special.start_date_local,
-            n: special.name.as_deref(),
-            c: &special.category,
-            desc: special.description.as_deref(),
+            w: build_recent_workouts_table(&day.workouts),
+            pw: build_planned_workouts_table(&day.planned_workouts),
+            sd: build_special_days_table(&day.special_days),
         }
     }
 }
@@ -374,10 +353,10 @@ impl<'a> CompactSpecialDay<'a> {
 struct CompactUpcomingDay<'a> {
     d: &'a str,
     fr: bool,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pw: Vec<CompactPlannedWorkout<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    sd: Vec<CompactSpecialDay<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pw: Option<HeaderTable>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sd: Option<HeaderTable>,
 }
 
 impl<'a> CompactUpcomingDay<'a> {
@@ -385,16 +364,8 @@ impl<'a> CompactUpcomingDay<'a> {
         Self {
             d: &day.date,
             fr: day.free_day,
-            pw: day
-                .planned_workouts
-                .iter()
-                .map(CompactPlannedWorkout::from_planned)
-                .collect(),
-            sd: day
-                .special_days
-                .iter()
-                .map(CompactSpecialDay::from_special)
-                .collect(),
+            pw: build_planned_workouts_table(&day.planned_workouts),
+            sd: build_special_days_table(&day.special_days),
         }
     }
 }
@@ -402,52 +373,15 @@ impl<'a> CompactUpcomingDay<'a> {
 #[derive(Serialize)]
 struct CompactProjectedDay<'a> {
     d: &'a str,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    w: Vec<CompactProjectedWorkout<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    w: Option<HeaderTable>,
 }
 
 impl<'a> CompactProjectedDay<'a> {
     fn from_projected_day(day: &'a ProjectedDayContext) -> Self {
         Self {
             d: &day.date,
-            w: day
-                .workouts
-                .iter()
-                .map(CompactProjectedWorkout::from_projected_workout)
-                .collect(),
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct CompactProjectedWorkout<'a> {
-    swid: &'a str,
-    sd: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    n: Option<&'a str>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    bl: Vec<CompactPlannedWorkoutBlock>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    doc: Option<&'a str>,
-    rest: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    rr: Option<&'a str>,
-}
-
-impl<'a> CompactProjectedWorkout<'a> {
-    fn from_projected_workout(workout: &'a ProjectedWorkoutContext) -> Self {
-        Self {
-            swid: &workout.source_workout_id,
-            sd: &workout.start_date_local,
-            n: workout.name.as_deref(),
-            bl: workout
-                .interval_blocks
-                .iter()
-                .map(CompactPlannedWorkoutBlock::from_block)
-                .collect(),
-            doc: workout.raw_workout_doc.as_deref(),
-            rest: workout.rest_day,
-            rr: workout.rest_day_reason.as_deref(),
+            w: build_projected_workouts_table(&day.workouts),
         }
     }
 }

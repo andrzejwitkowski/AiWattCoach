@@ -224,7 +224,7 @@ mod tests {
             ));
             assert!(prompt.contains("include a short concrete reason after `Rest Day:`"));
             assert!(prompt.contains("part of a coherent mesocycle with a clear phase progression"));
-            assert!(prompt.contains("when rc.pri is missing or ambiguous, default Category C"));
+            assert!(prompt.contains("Missing pri→default C"));
             assert!(prompt
                 .contains("Earlier assistant-role messages are your own earlier coach statements"));
             assert!(
@@ -232,7 +232,7 @@ mod tests {
             );
             assert!(prompt.contains("Treat previously projected planned days (`pd`) as already planned/completed inputs"));
             assert!(prompt.contains("Weekly availability is mandatory and must be respected"));
-            assert!(prompt.contains("Seiler polarized training model"));
+            assert!(prompt.contains("Seiler 2010"));
         }
     }
 
