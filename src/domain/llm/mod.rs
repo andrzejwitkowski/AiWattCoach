@@ -11,7 +11,10 @@ mod preview_messages;
 mod request_builder;
 mod transcript;
 
-pub use coach_planning_literature::coach_planning_literature_guidance;
+pub use coach_planning_literature::{
+    coach_planning_literature_guidance, COACH_SCIENTIFIC_FOUNDATIONS,
+    RACING_STRATEGIST_APP_EVIDENCE_CONTRACT, RACING_STRATEGIST_OPERATIONAL_GUIDELINES,
+};
 pub use context_prelude::{
     packed_training_context_legend_with_guidance, ATHLETE_SUMMARY_CALENDAR_GUARD,
     PACKED_CALENDAR_AUTHORITY_GUIDANCE, PACKED_TRAINING_CONTEXT_LEGEND,

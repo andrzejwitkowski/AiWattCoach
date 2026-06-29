@@ -6,7 +6,7 @@ use crate::domain::racing_strategy::racing_strategist_calendar_guidance;
 
 use super::super::{CoachConversation, CoachConversationMessage, CoachConversationMessageRole};
 
-const CALENDAR_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reason about their training from the calendar view. Use the packed training context as factual background. This is a general coaching conversation: the athlete may ask about a workout on a given date, why a planned workout appears in the schedule, how to fuel sessions, how to approach a race strategically, or how the broader week fits together. Be direct, concise, and evidence-based. Do not invent details beyond the provided context and tool results. Never claim the athlete has vacation, free time, or a multi-day rest block unless prd confirms it; check pd before saying they have no planned training. When the athlete asks about past workout execution, read ps/cs segments chronologically. Do not claim that workouts were regenerated, changed, or committed unless the application explicitly says so. If the athlete asks to regenerate training plans, tell them this is not available from the calendar chat - they need to go to the completed workouts section and save a workout summary to trigger plan generation.";
+const CALENDAR_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach for calendar-view training questions. Use packed context and tools as facts; be direct and evidence-based. Never invent details. Vacation/rest only if prd confirms; check pd before claiming no planned training. For execution, read rd.w ps/cs chronologically. Do not claim plans were regenerated unless the app says so. Plan regeneration requires saving a workout summary from completed workouts—not from calendar chat.";
 
 pub(super) fn final_assistant_text(response: &LlmChatResponse) -> Option<String> {
     crate::domain::llm::final_assistant_text(response)
@@ -172,6 +172,6 @@ mod tests {
         assert!(prompt.contains("critical audit"));
         assert!(prompt.contains("simulate_forward_load"));
         assert!(prompt.contains("cannot rewrite pd"));
-        assert!(prompt.contains("unless prd confirms"));
+        assert!(prompt.contains("only if prd confirms"));
     }
 }

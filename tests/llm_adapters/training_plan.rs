@@ -271,19 +271,18 @@ async fn training_plan_generator_describes_packed_context_legend_in_system_promp
         .unwrap();
 
     let prompt = &chat_port.requests()[0].system_prompt;
-    assert!(prompt.contains("Packed context legend"));
-    assert!(prompt.contains("v=schema version"));
-    assert!(prompt.contains("rc=race calendar"));
-    assert!(prompt.contains("fe=future planned calendar events"));
+    assert!(prompt.contains("Packed context v3"));
+    assert!(prompt.contains("header-mapped"));
+    assert!(prompt.contains("rc=races"));
+    assert!(prompt.contains("fe=future Intervals events"));
     assert!(prompt.contains("fx=focus"));
     assert!(prompt.contains("rd=recent days"));
-    assert!(prompt.contains("ud=upcoming days"));
-    assert!(prompt.contains("pd=projected days"));
-    assert!(prompt.contains("ps=executed power segments"));
+    assert!(prompt.contains("ud=upcoming"));
+    assert!(prompt.contains("pd=projected plan"));
+    assert!(prompt.contains("ps=power"));
     assert!(prompt.contains("[minW,maxW,durationSec]"));
-    assert!(prompt.contains("max==0 indicate no pedaling"));
-    assert!(prompt.contains("do not merge these with pedaling segments"));
-    assert!(prompt.contains("appear only in volatile rd.w entries, not in stable h.w"));
+    assert!(prompt.contains("max=0=no pedaling"));
+    assert!(prompt.contains("volatile rd.w only; stable h.w is metadata"));
     assert!(!prompt.contains("p3=power watts in 3-second buckets"));
 }
 
