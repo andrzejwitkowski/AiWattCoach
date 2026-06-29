@@ -94,3 +94,10 @@ pub trait CoachReplyOperationRepository: Send + Sync + 'static {
         operation: CoachReplyOperation,
     ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>>;
 }
+
+pub trait WorkoutChatLlmConfigPort: Send + Sync + 'static {
+    fn get_workout_chat_config(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<crate::domain::llm::LlmProviderConfig, WorkoutSummaryError>>;
+}

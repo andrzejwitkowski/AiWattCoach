@@ -6,6 +6,10 @@ const TRIMMED_STRING_FIELDS = [
   'zaiApiKey',
   'selectedProvider',
   'selectedModel',
+  'workoutChatProvider',
+  'workoutChatModel',
+  'workoutPlanningProvider',
+  'workoutPlanningModel',
   'mesoCycleProvider',
   'mesoCycleModel',
 ] as const;

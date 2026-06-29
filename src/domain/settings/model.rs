@@ -28,6 +28,10 @@ pub struct AiAgentsConfig {
     pub zai_api_key: Option<String>,
     pub selected_provider: Option<LlmProvider>,
     pub selected_model: Option<String>,
+    pub workout_chat_provider: Option<LlmProvider>,
+    pub workout_chat_model: Option<String>,
+    pub workout_planning_provider: Option<LlmProvider>,
+    pub workout_planning_model: Option<String>,
     pub meso_cycle_provider: Option<LlmProvider>,
     pub meso_cycle_model: Option<String>,
 }

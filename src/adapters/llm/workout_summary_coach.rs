@@ -5,14 +5,15 @@ use crate::domain::{
     llm::{
         current_date_string, find_reusable_context_cache, persist_reusable_context_cache,
         reusable_context_cache_key, BoxFuture, LlmChatPort, LlmContextCacheRepository, LlmError,
-        LlmProvider, ReusableContextCacheLookup, ReusableContextCacheUpsert, UserLlmConfigProvider,
+        LlmProvider, ReusableContextCacheLookup, ReusableContextCacheUpsert,
     },
     llm_tools::{run_tool_loop, GetSelectedWorkoutDataPort, LlmToolLoopOutput, ToolScope},
     meso_cycle::MesoCycleProjectionRepository,
     training_context::TrainingContextBuilder,
     workout_summary::{
-        assemble_workout_summary_coach_request, try_load_meso_roadmap_stable_context, WorkoutCoach,
-        WorkoutSummary, WorkoutSummaryCoachPromptInput,
+        assemble_workout_summary_coach_request, try_load_meso_roadmap_stable_context,
+        WorkoutChatLlmConfigPort, WorkoutCoach, WorkoutSummary, WorkoutSummaryCoachPromptInput,
+        WorkoutSummaryError,
     },
 };
 
@@ -22,7 +23,7 @@ where
     Time: Clock,
 {
     llm_chat_port: Arc<dyn LlmChatPort>,
-    config_provider: Arc<dyn UserLlmConfigProvider>,
+    config_provider: Arc<dyn WorkoutChatLlmConfigPort>,
     training_context_builder: Arc<dyn TrainingContextBuilder>,
     context_cache_repository: Option<Arc<dyn LlmContextCacheRepository>>,
     data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
@@ -36,7 +37,7 @@ where
 {
     pub fn new(
         llm_chat_port: Arc<dyn LlmChatPort>,
-        config_provider: Arc<dyn UserLlmConfigProvider>,
+        config_provider: Arc<dyn WorkoutChatLlmConfigPort>,
         training_context_builder: Arc<dyn TrainingContextBuilder>,
         clock: Time,
     ) -> Self {
@@ -97,7 +98,13 @@ where
         let athlete_summary_text = athlete_summary_text.map(str::to_string);
 
         Box::pin(async move {
-            let config = config_provider.get_config(&user_id).await?;
+            let config = config_provider
+                .get_workout_chat_config(&user_id)
+                .await
+                .map_err(|error| match error {
+                    WorkoutSummaryError::Llm(error) => error,
+                    other => LlmError::Internal(other.to_string()),
+                })?;
             tracing::info!(
                 user_id = %user_id,
                 provider = %config.provider,

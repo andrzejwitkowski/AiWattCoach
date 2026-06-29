@@ -585,6 +585,12 @@ fn epoch_seconds_to_utc_date(epoch_seconds: i64) -> String {
 fn should_invalidate_llm_cache(previous: &AiAgentsConfig, updated: &AiAgentsConfig) -> bool {
     previous.selected_provider != updated.selected_provider
         || previous.selected_model != updated.selected_model
+        || previous.workout_chat_provider != updated.workout_chat_provider
+        || previous.workout_chat_model != updated.workout_chat_model
+        || previous.workout_planning_provider != updated.workout_planning_provider
+        || previous.workout_planning_model != updated.workout_planning_model
+        || previous.meso_cycle_provider != updated.meso_cycle_provider
+        || previous.meso_cycle_model != updated.meso_cycle_model
         || previous.openai_api_key != updated.openai_api_key
         || previous.gemini_api_key != updated.gemini_api_key
         || previous.openrouter_api_key != updated.openrouter_api_key
@@ -1058,6 +1064,37 @@ mod tests {
             updated.ai_agents.selected_model.as_deref(),
             Some("openai/gpt-4o-mini")
         );
+        assert_eq!(cache_repository.deleted_users(), vec!["user-1".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn update_ai_agents_invalidates_llm_cache_when_workout_override_changes() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_699_999_000);
+        settings.ai_agents.selected_provider = Some(crate::domain::llm::LlmProvider::OpenAi);
+        settings.ai_agents.selected_model = Some("gpt-4o-mini".to_string());
+        settings.ai_agents.openai_api_key = Some("sk-openai".to_string());
+
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let cache_repository = Arc::new(RecordingCacheRepository::default());
+        let service = UserSettingsService::new(repository, TestClock)
+            .with_llm_context_cache_repository(cache_repository.clone());
+
+        service
+            .update_ai_agents(
+                "user-1",
+                AiAgentsConfig {
+                    selected_provider: Some(crate::domain::llm::LlmProvider::OpenAi),
+                    selected_model: Some("gpt-4o-mini".to_string()),
+                    openai_api_key: Some("sk-openai".to_string()),
+                    workout_chat_provider: Some(crate::domain::llm::LlmProvider::DeepSeek),
+                    workout_chat_model: Some("deepseek-v4-flash".to_string()),
+                    deepseek_api_key: Some("sk-deepseek".to_string()),
+                    ..AiAgentsConfig::default()
+                },
+            )
+            .await
+            .unwrap();
+
         assert_eq!(cache_repository.deleted_users(), vec!["user-1".to_string()]);
     }
 

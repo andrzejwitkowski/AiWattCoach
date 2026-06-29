@@ -21,7 +21,9 @@ pub use model::{
     PersistedUserMessage, PublicToolCall, SendMessageResult, WorkoutRecap, WorkoutSummary,
     WorkoutSummaryError,
 };
-pub use ports::{BoxFuture, CoachReplyOperationRepository, WorkoutSummaryRepository};
+pub use ports::{
+    BoxFuture, CoachReplyOperationRepository, WorkoutChatLlmConfigPort, WorkoutSummaryRepository,
+};
 pub use prompt::{
     assemble_workout_summary_coach_request, build_conversation, build_stable_context,
     build_volatile_context, workout_coach_system_prompt, WorkoutSummaryCoachPromptInput,

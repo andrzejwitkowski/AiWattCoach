@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
+use super::resolve_settings_llm_config::resolve_llm_config;
 use crate::domain::{
-    llm::{LlmProvider, LlmProviderConfig},
+    llm::{LlmError, LlmProviderConfig},
     meso_cycle::{BoxFuture, MesoCycleError, MesoCycleLlmConfigPort},
     settings::UserSettingsUseCases,
 };
@@ -30,33 +31,22 @@ impl MesoCycleLlmConfigPort for MesoCycleLlmConfigProvider {
                 .await
                 .map_err(|error| MesoCycleError::Repository(error.to_string()))?;
 
-            let provider = settings
-                .ai_agents
-                .meso_cycle_provider
-                .or(settings.ai_agents.selected_provider)
-                .ok_or(MesoCycleError::NotConfigured)?;
-            let model = settings
-                .ai_agents
-                .meso_cycle_model
-                .or(settings.ai_agents.selected_model)
-                .filter(|value| !value.trim().is_empty())
-                .ok_or(MesoCycleError::NotConfigured)?;
-
-            let api_key = match provider {
-                LlmProvider::OpenAi => settings.ai_agents.openai_api_key,
-                LlmProvider::Gemini => settings.ai_agents.gemini_api_key,
-                LlmProvider::OpenRouter => settings.ai_agents.openrouter_api_key,
-                LlmProvider::DeepSeek => settings.ai_agents.deepseek_api_key,
-                LlmProvider::Zai => settings.ai_agents.zai_api_key,
-            }
-            .filter(|value| !value.trim().is_empty())
-            .ok_or(MesoCycleError::NotConfigured)?;
-
-            Ok(LlmProviderConfig {
-                provider,
-                model,
-                api_key,
-            })
+            resolve_llm_config(
+                &settings.ai_agents,
+                settings.ai_agents.meso_cycle_provider.clone(),
+                settings.ai_agents.meso_cycle_model.clone(),
+            )
+            .map_err(map_llm_error)
         })
+    }
+}
+
+fn map_llm_error(error: LlmError) -> MesoCycleError {
+    match error {
+        LlmError::ProviderNotConfigured | LlmError::ModelNotConfigured => {
+            MesoCycleError::NotConfigured
+        }
+        LlmError::CredentialsNotConfigured => MesoCycleError::NotConfigured,
+        other => MesoCycleError::Repository(other.to_string()),
     }
 }

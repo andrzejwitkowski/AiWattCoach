@@ -3,7 +3,7 @@ import { Bot, RefreshCw, Save } from 'lucide-react';
 import { useAiAgentsCard } from '../hooks/useAiAgentsCard';
 import type { UserSettingsResponse } from '../types';
 import { AiAgentsApiKeyFields } from './AiAgentsApiKeyFields';
-import { MesoCycleCoachFields } from './MesoCycleCoachFields';
+import { OptionalProviderOverrideFields } from './OptionalProviderOverrideFields';
 import { ProviderModelFields } from './ProviderModelFields';
 import { SettingsStatusBanner } from './SettingsStatusBanner';
 
@@ -24,10 +24,12 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     hasDirtyDraft,
     validationMessage,
     selectedProviderOption,
+    workoutChatProviderOption,
+    workoutPlanningProviderOption,
     mesoProviderOption,
     updateDraft,
     updateProvider,
-    updateMesoProvider,
+    updateOverrideProvider,
     handleSave,
     handleTest,
   } = useAiAgentsCard({ settings, apiBaseUrl, onSave });
@@ -53,7 +55,8 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
 
       <p className="mt-4 text-sm leading-relaxed text-slate-300">
         Choose the active provider, start from a recommended model, and keep only the matching API key in
-        focus while you test the visible draft.
+        focus while you test the visible draft. The active provider remains the default for calendar coach
+        and other agents unless you set a feature-specific override below.
       </p>
 
       <p className="mt-2 text-xs text-slate-500">
@@ -70,10 +73,45 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         onModelChange={(value) => updateDraft('selectedModel', value)}
       />
 
-      <MesoCycleCoachFields
-        draft={draft}
-        mesoProviderOption={mesoProviderOption}
-        onProviderChange={updateMesoProvider}
+      <OptionalProviderOverrideFields
+        title="Post-Workout Conversation"
+        description="Optional override for workout chat. Leave empty to use the active provider and model above."
+        providerId="workout-chat-provider"
+        modelId="workout-chat-model"
+        providerValue={draft.workoutChatProvider}
+        modelValue={draft.workoutChatModel}
+        providerOption={workoutChatProviderOption}
+        onProviderChange={(value) =>
+          updateOverrideProvider('workoutChatProvider', 'workoutChatModel', value)
+        }
+        onModelChange={(value) => updateDraft('workoutChatModel', value)}
+      />
+
+      <OptionalProviderOverrideFields
+        title="Post-Workout Planning"
+        description="Optional override for workout recap and 14-day schedule generation. Leave empty to use the active provider and model above."
+        providerId="workout-planning-provider"
+        modelId="workout-planning-model"
+        providerValue={draft.workoutPlanningProvider}
+        modelValue={draft.workoutPlanningModel}
+        providerOption={workoutPlanningProviderOption}
+        onProviderChange={(value) =>
+          updateOverrideProvider('workoutPlanningProvider', 'workoutPlanningModel', value)
+        }
+        onModelChange={(value) => updateDraft('workoutPlanningModel', value)}
+      />
+
+      <OptionalProviderOverrideFields
+        title="Meso Cycle Coach"
+        description="Optional override for 30-day meso plan generation. Leave empty to use the active provider and model above."
+        providerId="meso-cycle-provider"
+        modelId="meso-cycle-model"
+        providerValue={draft.mesoCycleProvider}
+        modelValue={draft.mesoCycleModel}
+        providerOption={mesoProviderOption}
+        onProviderChange={(value) =>
+          updateOverrideProvider('mesoCycleProvider', 'mesoCycleModel', value)
+        }
         onModelChange={(value) => updateDraft('mesoCycleModel', value)}
       />
 

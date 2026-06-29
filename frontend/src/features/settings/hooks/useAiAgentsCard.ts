@@ -21,6 +21,24 @@ type UseAiAgentsCardOptions = {
   onSave: () => void;
 };
 
+type OptionalOverrideField =
+  | 'workoutChatProvider'
+  | 'workoutChatModel'
+  | 'workoutPlanningProvider'
+  | 'workoutPlanningModel'
+  | 'mesoCycleProvider'
+  | 'mesoCycleModel';
+
+const OPTIONAL_OVERRIDE_CHECKS: Array<{
+  provider: OptionalOverrideField;
+  model: OptionalOverrideField;
+  label: string;
+}> = [
+  { provider: 'workoutChatProvider', model: 'workoutChatModel', label: 'post-workout conversation' },
+  { provider: 'workoutPlanningProvider', model: 'workoutPlanningModel', label: 'post-workout planning' },
+  { provider: 'mesoCycleProvider', model: 'mesoCycleModel', label: 'meso cycle' },
+];
+
 export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCardOptions) {
   const aiAgents = settings.aiAgents;
   const persistedDraft = useMemo(
@@ -28,6 +46,10 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
       createEmptyAiAgentsDraft({
         selectedProvider: aiAgents.selectedProvider ?? '',
         selectedModel: aiAgents.selectedModel ?? '',
+        workoutChatProvider: aiAgents.workoutChatProvider ?? '',
+        workoutChatModel: aiAgents.workoutChatModel ?? '',
+        workoutPlanningProvider: aiAgents.workoutPlanningProvider ?? '',
+        workoutPlanningModel: aiAgents.workoutPlanningModel ?? '',
         mesoCycleProvider: aiAgents.mesoCycleProvider ?? '',
         mesoCycleModel: aiAgents.mesoCycleModel ?? '',
       }),
@@ -36,6 +58,10 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
       aiAgents.mesoCycleProvider,
       aiAgents.selectedModel,
       aiAgents.selectedProvider,
+      aiAgents.workoutChatModel,
+      aiAgents.workoutChatProvider,
+      aiAgents.workoutPlanningModel,
+      aiAgents.workoutPlanningProvider,
     ],
   );
   const [draft, setDraft] = useState<AiAgentsDraftState>(persistedDraft);
@@ -60,11 +86,16 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
   );
 
   const selectedProviderOption = getProviderOption(draft.selectedProvider);
+  const workoutChatProviderOption = getProviderOption(draft.workoutChatProvider);
+  const workoutPlanningProviderOption = getProviderOption(draft.workoutPlanningProvider);
   const mesoProviderOption = getProviderOption(draft.mesoCycleProvider);
   const providerKeyState = getProviderKeyState(draft.selectedProvider, draft, aiAgents);
   const validationMessage =
     resolveProviderValidationMessage(draft, providerKeyState) ??
-    resolveMesoValidationMessage(draft);
+    OPTIONAL_OVERRIDE_CHECKS.map(({ provider, model, label }) =>
+      resolveOptionalOverrideValidationMessage(draft[provider], draft[model], label),
+    ).find(Boolean) ??
+    null;
   const canSave = hasDirtyDraft && !validationMessage;
   const canTest =
     !validationMessage &&
@@ -88,9 +119,13 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
     setDraft((current) => updateProviderDraft(current, 'selectedProvider', 'selectedModel', value));
   };
 
-  const updateMesoProvider = (value: string) => {
+  const updateOverrideProvider = (
+    providerField: OptionalOverrideField,
+    modelField: OptionalOverrideField,
+    value: string,
+  ) => {
     clearTestStatus();
-    setDraft((current) => updateProviderDraft(current, 'mesoCycleProvider', 'mesoCycleModel', value));
+    setDraft((current) => updateProviderDraft(current, providerField, modelField, value));
   };
 
   const handleSave = async () => {
@@ -178,10 +213,12 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
     hasDirtyDraft,
     validationMessage,
     selectedProviderOption,
+    workoutChatProviderOption,
+    workoutPlanningProviderOption,
     mesoProviderOption,
     updateDraft,
     updateProvider,
-    updateMesoProvider,
+    updateOverrideProvider,
     handleSave,
     handleTest,
   };
@@ -199,14 +236,18 @@ function hasAnyPersistedConnectionValue(aiAgents: UserSettingsResponse['aiAgents
   );
 }
 
-function resolveMesoValidationMessage(draft: AiAgentsDraftState) {
-  const hasProvider = Boolean(draft.mesoCycleProvider.trim());
-  const hasModel = Boolean(draft.mesoCycleModel.trim());
+function resolveOptionalOverrideValidationMessage(
+  provider: string,
+  model: string,
+  label: string,
+) {
+  const hasProvider = Boolean(provider.trim());
+  const hasModel = Boolean(model.trim());
   if (hasProvider && !hasModel) {
-    return 'Choose a model for the meso cycle provider.';
+    return `Choose a model for the ${label} provider.`;
   }
   if (hasModel && !hasProvider) {
-    return 'Choose a provider for the meso cycle model.';
+    return `Choose a provider for the ${label} model.`;
   }
   return null;
 }
@@ -231,8 +272,8 @@ function resolveProviderValidationMessage(
 
 function updateProviderDraft(
   current: AiAgentsDraftState,
-  providerField: 'selectedProvider' | 'mesoCycleProvider',
-  modelField: 'selectedModel' | 'mesoCycleModel',
+  providerField: 'selectedProvider' | OptionalOverrideField,
+  modelField: 'selectedModel' | OptionalOverrideField,
   value: string,
 ): AiAgentsDraftState {
   const previousOption = getProviderOption(current[providerField]);
