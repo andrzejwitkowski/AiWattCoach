@@ -14,6 +14,13 @@ import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 
 const originalFetch = global.fetch;
 
+function mockSettingsResponse(settings = buildTestSettings()) {
+  return new Response(JSON.stringify(settings), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
 afterEach(() => {
   global.fetch = originalFetch;
   vi.restoreAllMocks();
@@ -437,12 +444,7 @@ describe('settings api', () => {
   it('omits whitespace-only ai settings fields from update requests', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-      .mockResolvedValue(
-        new Response('{}', {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-      );
+      .mockResolvedValue(mockSettingsResponse());
 
     global.fetch = fetchMock as typeof fetch;
 
@@ -471,12 +473,7 @@ describe('settings api', () => {
   it('includes deepseek api key in update requests', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-      .mockResolvedValue(
-        new Response('{}', {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-      );
+      .mockResolvedValue(mockSettingsResponse());
 
     global.fetch = fetchMock as typeof fetch;
 
@@ -505,12 +502,7 @@ describe('settings api', () => {
   it('preserves explicit provider and model clears in update requests', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-      .mockResolvedValue(
-        new Response('{}', {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-      );
+      .mockResolvedValue(mockSettingsResponse());
 
     global.fetch = fetchMock as typeof fetch;
 
@@ -530,6 +522,41 @@ describe('settings api', () => {
       body: JSON.stringify({
         selectedProvider: null,
         selectedModel: null,
+      }),
+    });
+  });
+
+  it('includes feature-specific provider overrides in update requests', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(mockSettingsResponse());
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateAiAgents('', {
+      workoutChatProvider: 'gemini',
+      workoutChatModel: 'gemini-2.5-flash',
+      workoutPlanningProvider: 'openrouter',
+      workoutPlanningModel: 'anthropic/claude-sonnet-4.5',
+      mesoCycleProvider: 'openrouter',
+      mesoCycleModel: 'openai/gpt-5',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/ai-agents', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        workoutChatProvider: 'gemini',
+        workoutChatModel: 'gemini-2.5-flash',
+        workoutPlanningProvider: 'openrouter',
+        workoutPlanningModel: 'anthropic/claude-sonnet-4.5',
+        mesoCycleProvider: 'openrouter',
+        mesoCycleModel: 'openai/gpt-5',
       }),
     });
   });

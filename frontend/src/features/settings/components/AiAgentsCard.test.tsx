@@ -78,7 +78,7 @@ describe('AiAgentsCard', () => {
         selectedModel: 'openai/gpt-4.1-mini',
       });
     });
-    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith(buildTestSettings());
   });
 
   it('saves deepseek provider, model, and key', async () => {
@@ -318,6 +318,45 @@ describe('AiAgentsCard', () => {
       });
     });
     expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('rehydrates saved provider overrides after remount', async () => {
+    const savedSettings = buildTestSettings({
+      aiAgents: {
+        selectedProvider: 'openrouter',
+        selectedModel: 'anthropic/claude-sonnet-4.5',
+        mesoCycleProvider: 'openrouter',
+        mesoCycleModel: 'anthropic/claude-sonnet-4.5',
+      },
+    });
+    updateAiAgentsMock.mockResolvedValue(savedSettings);
+    const onSave = vi.fn();
+
+    const { unmount } = render(
+      <AiAgentsCard settings={buildTestSettings()} apiBaseUrl="" onSave={onSave} />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/^Provider$/i, { selector: '#meso-cycle-provider' }), {
+      target: { value: 'openrouter' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Model$/i, { selector: '#meso-cycle-model' }), {
+      target: { value: 'anthropic/claude-sonnet-4.5' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(savedSettings);
+    });
+
+    unmount();
+    render(<AiAgentsCard settings={savedSettings} apiBaseUrl="" onSave={() => {}} />);
+
+    expect(screen.getByLabelText(/^Provider$/i, { selector: '#meso-cycle-provider' })).toHaveValue(
+      'openrouter',
+    );
+    expect(screen.getByLabelText(/^Model$/i, { selector: '#meso-cycle-model' })).toHaveValue(
+      'anthropic/claude-sonnet-4.5',
+    );
   });
 
   it('does not claim an inactive provider key is saved when none exists', () => {
