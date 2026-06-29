@@ -117,7 +117,7 @@ describe('AiAgentsCard', () => {
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'zai' },
     });
-    fireEvent.change(screen.getByLabelText(/^Model$/i), {
+    fireEvent.change(activeModelField(), {
       target: { value: 'glm-5.2' },
     });
     fireEvent.change(screen.getByLabelText(/z\.ai api key/i), {
