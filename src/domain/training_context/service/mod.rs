@@ -475,10 +475,6 @@ where
                 .await
                 .unwrap_or(today)
         };
-        let align_id = matched_completed
-            .as_ref()
-            .map(|workout| legacy_activity_id(&workout.completed_workout_id).to_string())
-            .unwrap_or_else(|| workout_id.to_string());
         let history_trend_days = 24 * 7;
         let history_warmup_days = 120;
         let history_start =
@@ -515,6 +511,17 @@ where
             ),
             Err(_) => (Vec::new(), "internal_error".to_string()),
         };
+        // Align against the packed row: Intervals+Wahoo share source_activity_id but different legacy ids.
+        let align_id = history_completed_workouts
+            .iter()
+            .find(|workout| completed_workout_matches_selection(workout, workout_id))
+            .map(|workout| legacy_activity_id(&workout.completed_workout_id).to_string())
+            .or_else(|| {
+                matched_completed
+                    .as_ref()
+                    .map(|workout| legacy_activity_id(&workout.completed_workout_id).to_string())
+            })
+            .unwrap_or_else(|| workout_id.to_string());
         let history_activities = history_completed_workouts
             .iter()
             .map(map_completed_workout_to_activity)
@@ -924,7 +931,14 @@ where
         let workouts = repository.list_by_user_id(user_id).await.ok()?;
         workouts
             .into_iter()
-            .find(|workout| completed_workout_matches_selection(workout, workout_id))
+            .filter(|workout| completed_workout_matches_selection(workout, workout_id))
+            .reduce(|best, next| {
+                if prefer_completed_workout_for_prompt(&next, &best) {
+                    next
+                } else {
+                    best
+                }
+            })
     }
 
     async fn list_completed_workouts(

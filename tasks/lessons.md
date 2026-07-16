@@ -70,6 +70,7 @@
 - If a provider intermittently returns neither text nor tool calls, contain it at the adapter boundary with a narrow retry for that exact shape. Do not broaden downstream validation.
 - For multi-provider shared clients, every provider identifier (response metadata, logs, errors) must use the runtime config, not hardcoded literals.
 - When adding a new provider field to cache invalidation or config comparisons, add it everywhere.
+- **Plan→actual alignment IDs**: Resolve `align_id` / focus matching against the **post-dedupe** packed activity set, not the first Mongo list match. Intervals+Wahoo share `source_activity_id` but pack different legacy `activity_id`s; pre-dedupe first-match makes `focus_kind=summary` and leaves raw `ps`/`cs`.
 
 ## Testing
 
