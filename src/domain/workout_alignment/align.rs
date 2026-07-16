@@ -31,6 +31,7 @@ pub fn align(planned: &[PlannedStep], power: &[i32]) -> StepSlices {
 
     let n = power.len();
     let s = planned.len();
+    let power_prefix = prefix_sums(power);
 
     let cumulative_planned = cumulative_durations(planned);
     let total_planned = cumulative_planned[s];
@@ -40,17 +41,17 @@ pub fn align(planned: &[PlannedStep], power: &[i32]) -> StepSlices {
     let mut layers: Vec<(Vec<f64>, Vec<Option<usize>>)> = Vec::with_capacity(s);
 
     // Step 0: leading warmup absorbed, no prior boundary.
-    let mut dp = vec![f64::MAX; n + 1];
+    let mut dp = vec![f64::INFINITY; n + 1];
     let mut back: Vec<Option<usize>> = vec![None; n + 1];
     for j in 1..=n {
-        dp[j] = step_cost(&planned[0], &power[0..j]);
+        dp[j] = step_cost(&planned[0], &power_prefix, 0, j);
         back[j] = Some(0);
     }
     layers.push((dp, back));
 
     for step in 1..s {
         let (prev_dp, _) = &layers[step - 1];
-        let mut cur_dp = vec![f64::MAX; n + 1];
+        let mut cur_dp = vec![f64::INFINITY; n + 1];
         let mut cur_back: Vec<Option<usize>> = vec![None; n + 1];
         let band = band_seconds(planned[step].planned_duration_seconds);
 
@@ -63,7 +64,7 @@ pub fn align(planned: &[PlannedStep], power: &[i32]) -> StepSlices {
                 .filter_map(|i| {
                     let prior = prev_dp[i];
                     if prior.is_finite() && i < j {
-                        Some((prior + step_cost(&planned[step], &power[i..j]), i))
+                        Some((prior + step_cost(&planned[step], &power_prefix, i, j), i))
                     } else {
                         None
                     }
@@ -106,14 +107,30 @@ fn cumulative_durations(planned: &[PlannedStep]) -> Vec<usize> {
     out
 }
 
-fn step_cost(step: &PlannedStep, block: &[i32]) -> f64 {
-    if block.is_empty() {
+fn prefix_sums(power: &[i32]) -> Vec<i64> {
+    let mut prefix = vec![0i64; power.len() + 1];
+    for (index, value) in power.iter().enumerate() {
+        prefix[index + 1] = prefix[index] + i64::from(*value);
+    }
+    prefix
+}
+
+fn slice_mean(prefix: &[i64], start: usize, end: usize) -> f64 {
+    if start >= end {
+        return 0.0;
+    }
+    let sum = prefix[end] - prefix[start];
+    sum as f64 / (end - start) as f64
+}
+
+fn step_cost(step: &PlannedStep, power_prefix: &[i64], start: usize, end: usize) -> f64 {
+    if start >= end {
         return 1.0;
     }
     let expected_watts = expected_power(step);
-    let block_mean = mean(block);
+    let block_mean = slice_mean(power_prefix, start, end);
     let power_sim = similarity(block_mean, expected_watts);
-    let dur_sim = similarity(block.len() as f64, step.planned_duration_seconds as f64);
+    let dur_sim = similarity((end - start) as f64, step.planned_duration_seconds as f64);
     1.0 - (POWER_WEIGHT * power_sim + DURATION_WEIGHT * dur_sim)
 }
 
@@ -126,14 +143,6 @@ fn similarity(actual: f64, expected: f64) -> f64 {
         return 0.0;
     }
     (1.0 - ((actual - expected).abs() / expected)).clamp(0.0, 1.0)
-}
-
-fn mean(block: &[i32]) -> f64 {
-    if block.is_empty() {
-        return 0.0;
-    }
-    let sum: i64 = block.iter().map(|&v| i64::from(v)).sum();
-    sum as f64 / block.len() as f64
 }
 
 fn backtrack_layers(

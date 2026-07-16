@@ -130,7 +130,7 @@ async fn llm_workout_coach_includes_current_workout_recap_in_stable_context() {
 }
 
 #[tokio::test]
-async fn llm_workout_coach_describes_ps_cs_segments_in_system_prompt() {
+async fn llm_workout_coach_describes_aligned_intervals_in_system_prompt() {
     let chat_port = Arc::new(CapturingChatPort::default());
     let coach = LlmWorkoutCoach::new(
         chat_port.clone(),
@@ -145,12 +145,13 @@ async fn llm_workout_coach_describes_ps_cs_segments_in_system_prompt() {
         .unwrap();
 
     let prompt = &chat_port.requests()[0].system_prompt;
-    assert!(prompt.contains("ps (executed power segments)"));
-    assert!(prompt.contains("ps=power"));
-    assert!(prompt.contains("cs=cadence"));
-    assert!(prompt.contains("cadence max=0=no pedaling"));
-    assert!(prompt.contains("volatile rd.w only; stable h.w is metadata"));
-    assert!(prompt.contains("judge interval execution primarily from bl"));
+    assert!(prompt.contains("aligned_intervals"));
+    assert!(prompt.contains("coasting_stop"));
+    assert!(prompt.contains("normalized_power"));
+    assert!(prompt.contains("get_selected_workout"));
+    assert!(!prompt.contains("ps=power"));
+    assert!(!prompt.contains("cs=cadence"));
+    assert!(!prompt.contains("header-mapped"));
     assert!(!prompt.contains("p3=power watts"));
     assert!(!prompt.contains("c5=cadence values"));
     assert!(!prompt.contains("level:seconds"));

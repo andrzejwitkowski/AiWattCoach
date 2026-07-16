@@ -271,19 +271,10 @@ async fn training_plan_generator_describes_packed_context_legend_in_system_promp
         .unwrap();
 
     let prompt = &chat_port.requests()[0].system_prompt;
-    assert!(prompt.contains("Packed context v3"));
-    assert!(prompt.contains("header-mapped"));
-    assert!(prompt.contains("rc=races"));
-    assert!(prompt.contains("fe=future Intervals events"));
-    assert!(prompt.contains("fx=focus"));
-    assert!(prompt.contains("rd=recent days"));
-    assert!(prompt.contains("ud=upcoming"));
-    assert!(prompt.contains("pd=projected plan"));
-    assert!(prompt.contains("ps=power"));
-    assert!(prompt.contains("[minW,maxW,durationSec]"));
-    assert!(prompt.contains("max=0=no pedaling"));
-    assert!(prompt.contains("volatile rd.w only; stable h.w is metadata"));
-    assert!(!prompt.contains("p3=power watts in 3-second buckets"));
+    assert!(prompt.contains("aligned_intervals"));
+    assert!(prompt.contains("coasting_stop"));
+    assert!(!prompt.contains("ps=power"));
+    assert!(!prompt.contains("header-mapped"));
 }
 
 #[tokio::test]

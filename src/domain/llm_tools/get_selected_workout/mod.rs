@@ -40,7 +40,7 @@ impl LlmTool for GetSelectedWorkout {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Get detailed workout data for a specific date. Returns completed workouts with statistics and aligned_intervals when a linked planned workout exists (primary plan-vs-actual evidence). Heartrate stream at 1s resolution when present. Also returns planned workouts (if future or not completed) and basic race info if no completed workout exists for that day.".to_string(),
+            description: "Get detailed workout data for a specific date. Returns completed workouts with statistics and aligned_intervals when a linked planned workout has parseable blocks and a non-empty power stream (primary plan-vs-actual evidence). Heartrate stream at 1s resolution when present. Also returns planned workouts (if future or not completed) and basic race info if no completed workout exists for that day.".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,
@@ -58,7 +58,7 @@ impl LlmTool for GetSelectedWorkout {
 
     fn prompt_guidance(&self) -> Option<&'static str> {
         Some(
-            "use when aligned_intervals in context are insufficient or you need heartrate streams; returns aligned_intervals for linked planned workouts",
+            "use when aligned_intervals in context are insufficient or you need heartrate streams; returns aligned_intervals only when linked plan blocks parse and power stream is non-empty",
         )
     }
 

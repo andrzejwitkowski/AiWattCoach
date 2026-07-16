@@ -72,7 +72,7 @@ fn planned_step_from_block(
     block: &PlannedBlockInput,
     ftp: Option<i32>,
 ) -> PlannedStep {
-    let step_type = step_type_from_percent(block.min_percent_ftp);
+    let step_type = step_type_from_percent(block.min_percent_ftp, block.max_percent_ftp);
     let (target_power_min, target_power_max) = resolve_watts(block, ftp);
     PlannedStep {
         name: block
@@ -86,8 +86,9 @@ fn planned_step_from_block(
     }
 }
 
-fn step_type_from_percent(min_percent_ftp: Option<f64>) -> StepType {
-    match min_percent_ftp {
+fn step_type_from_percent(min_percent_ftp: Option<f64>, max_percent_ftp: Option<f64>) -> StepType {
+    let upper_bound = max_percent_ftp.or(min_percent_ftp);
+    match upper_bound {
         Some(pct) if pct <= model::RECOVERY_PERCENT_FTP => StepType::Recovery,
         _ => StepType::Work,
     }
@@ -198,5 +199,19 @@ mod tests {
     #[test]
     fn no_planned_steps_returns_empty() {
         assert!(align_workout(&[], &[250; 60], &[85; 60]).is_empty());
+    }
+
+    #[test]
+    fn ramp_with_high_upper_bound_is_work_not_recovery() {
+        let block = PlannedBlockInput {
+            name: Some("ramp".into()),
+            duration_seconds: 300,
+            min_percent_ftp: Some(50.0),
+            max_percent_ftp: Some(100.0),
+            min_target_watts: Some(125),
+            max_target_watts: Some(250),
+        };
+        let step = planned_step_from_block(0, &block, Some(250));
+        assert_eq!(step.step_type, StepType::Work);
     }
 }

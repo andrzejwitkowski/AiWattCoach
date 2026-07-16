@@ -50,8 +50,8 @@ mod tests;
 
 use context::{
     build_event_activity_matches, build_future_planned_event_contexts, build_historical_context,
-    build_recent_day_contexts, build_upcoming_day_contexts, infer_focus_kind,
-    projected_interval_blocks, projected_raw_workout_doc, projected_workout_name,
+    build_recent_day_contexts, build_upcoming_day_contexts, compute_aligned_intervals,
+    infer_focus_kind, projected_interval_blocks, projected_raw_workout_doc, projected_workout_name,
     HistoricalLoadSources, HistoricalWorkoutSources, RecentWorkoutSummaryLookup,
 };
 use dates::{activity_date, epoch_seconds_to_date, event_date};
@@ -685,6 +685,18 @@ where
         );
         let focus_kind = infer_focus_kind(workout_id, &recent_days, &upcoming_days);
 
+        let mut recent_days = recent_days;
+        if focus_kind != "summary" {
+            if let Some(aligned) = compute_selected_aligned_intervals(
+                workout_id,
+                &recent_days,
+                &detailed_recent_activities,
+                configured_ftp,
+            ) {
+                attach_aligned_intervals(&mut recent_days, workout_id, &aligned);
+            }
+        }
+
         let context = TrainingContext {
             generated_at_epoch_seconds: self.clock.now_epoch_seconds(),
             focus_workout_id: if focus_kind == "summary" {
@@ -960,6 +972,38 @@ where
         };
 
         repository.list_by_user_id(user_id).await
+    }
+}
+
+fn compute_selected_aligned_intervals(
+    workout_id: &str,
+    recent_days: &[RecentDayContext],
+    detailed_activities: &[Activity],
+    configured_ftp: Option<i32>,
+) -> Option<Vec<crate::domain::workout_alignment::AlignedInterval>> {
+    let workout = recent_days
+        .iter()
+        .flat_map(|day| day.workouts.iter())
+        .find(|w| w.activity_id == workout_id)?;
+    let planned = workout.planned_workout.as_ref()?;
+    let activity = detailed_activities.iter().find(|a| a.id == workout_id)?;
+    compute_aligned_intervals(activity, planned, configured_ftp)
+}
+
+fn attach_aligned_intervals(
+    recent_days: &mut [RecentDayContext],
+    workout_id: &str,
+    aligned: &[crate::domain::workout_alignment::AlignedInterval],
+) {
+    for day in recent_days.iter_mut() {
+        for workout in day.workouts.iter_mut() {
+            if workout.activity_id == workout_id {
+                workout.aligned_intervals = Some(aligned.to_vec());
+                workout.power_segments.clear();
+                workout.cadence_segments.clear();
+                return;
+            }
+        }
     }
 }
 

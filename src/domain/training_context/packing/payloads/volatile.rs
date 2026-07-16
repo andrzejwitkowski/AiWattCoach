@@ -23,6 +23,8 @@ pub(crate) struct VolatilePayload<'a> {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     rd: Vec<CompactRecentDay<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    sa: Option<&'a [crate::domain::workout_alignment::AlignedInterval]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     wr: Option<HeaderTable>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     ud: Vec<CompactUpcomingDay<'a>>,
@@ -46,6 +48,11 @@ impl<'a> VolatilePayload<'a> {
                 .iter()
                 .map(CompactRecentDay::from_recent_day)
                 .collect(),
+            sa: context
+                .recent_days
+                .iter()
+                .flat_map(|day| day.workouts.iter())
+                .find_map(|w| w.aligned_intervals.as_deref()),
             wr: build_workout_recaps_table(&context.recent_workout_recaps),
             ud: context
                 .upcoming_days

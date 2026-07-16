@@ -14,5 +14,6 @@
 **/.fallow/
 /.sisyphus/
 /.pup/
+/.fastcontext/
 /docker-compose-sandbox.yml
 /sandbox-auth-cookie.txt

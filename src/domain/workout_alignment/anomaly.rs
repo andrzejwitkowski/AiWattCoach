@@ -15,12 +15,13 @@ pub fn detect_anomalies(step: &PlannedStep, power: &[i32], cadence: &[i32]) -> V
         return Vec::new();
     }
     let threshold = (f64::from(step.target_power_min) * 0.5) as i32;
+    let has_cadence = !cadence.is_empty();
     let trigger_indices: Vec<usize> = power
         .iter()
         .enumerate()
         .filter_map(|(i, &p)| {
-            let cad = cad_at(cadence, i);
-            (p < threshold || p == 0 || cad == 0).then_some(i)
+            let cadence_zero = has_cadence && cadence.get(i).copied() == Some(0);
+            (p < threshold || p == 0 || cadence_zero).then_some(i)
         })
         .collect();
 
@@ -30,7 +31,7 @@ pub fn detect_anomalies(step: &PlannedStep, power: &[i32], cadence: &[i32]) -> V
             continue;
         }
         let offset = group[0] as i32;
-        let duration = group.len() as i32;
+        let duration = (group[group.len() - 1] - group[0] + 1) as i32;
         let avg_power = mean_at(power, &group);
         let avg_cadence = mean_at(cadence, &group);
         anomalies.push(WorkoutAnomaly {
@@ -59,10 +60,6 @@ fn classify(avg_power: i32, avg_cadence: i32, power_drop_threshold: i32) -> Anom
         // Cadence-zero brief blip with otherwise on-target power: treat as turn.
         AnomalyType::CoastingTurn
     }
-}
-
-fn cad_at(cadence: &[i32], i: usize) -> i32 {
-    cadence.get(i).copied().unwrap_or(0)
 }
 
 fn mean_at(values: &[i32], indices: &[usize]) -> i32 {
@@ -191,7 +188,16 @@ mod tests {
         cadence[23] = 0;
         let anomalies = detect_anomalies(&step, &power, &cadence);
         assert_eq!(anomalies.len(), 1);
-        assert!(anomalies[0].duration_seconds >= 2);
+        assert_eq!(anomalies[0].offset_seconds, 20);
+        assert_eq!(anomalies[0].duration_seconds, 4);
+    }
+
+    #[test]
+    fn missing_cadence_stream_does_not_trigger_cadence_zero() {
+        let step = work(250);
+        let power = vec![250; 60];
+        let cadence: Vec<i32> = vec![];
+        assert!(detect_anomalies(&step, &power, &cadence).is_empty());
     }
 
     #[test]

@@ -18,7 +18,10 @@ use aiwattcoach::domain::{
         DateRange, Event, IntervalsError, IntervalsUseCases,
     },
     llm::{BoxFuture as LlmBoxFuture, LlmContextCache, LlmContextCacheRepository, LlmError},
-    planned_workouts::{PlannedWorkout, PlannedWorkoutRepository},
+    planned_workouts::{
+        PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine, PlannedWorkoutRepository,
+        PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
+    },
     settings::{
         AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings,
         BoxFuture as SettingsBoxFuture, CyclingSettings, IntervalsConfig, SettingsError,
@@ -194,27 +197,55 @@ impl CompletedWorkoutRepository for InMemoryCompletedWorkoutRepository {
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct InMemoryPlannedWorkoutRepository;
+pub(crate) struct InMemoryPlannedWorkoutRepository {
+    workouts: Arc<Mutex<Vec<PlannedWorkout>>>,
+}
+
+impl InMemoryPlannedWorkoutRepository {
+    pub(crate) fn seed(&self, workouts: Vec<PlannedWorkout>) {
+        let mut stored = self.workouts.lock().unwrap();
+        stored.clear();
+        stored.extend(workouts);
+    }
+}
 
 impl PlannedWorkoutRepository for InMemoryPlannedWorkoutRepository {
     fn list_by_user_id(
         &self,
-        _user_id: &str,
+        user_id: &str,
     ) -> aiwattcoach::domain::planned_workouts::BoxFuture<
         Result<Vec<PlannedWorkout>, aiwattcoach::domain::planned_workouts::PlannedWorkoutError>,
     > {
-        Box::pin(async { Ok(Vec::new()) })
+        let user_id = user_id.to_string();
+        let workouts = self.workouts.lock().unwrap().clone();
+        Box::pin(async move {
+            Ok(workouts
+                .into_iter()
+                .filter(|workout| workout.user_id == user_id)
+                .collect())
+        })
     }
 
     fn list_by_user_id_and_date_range(
         &self,
-        _user_id: &str,
-        _oldest: &str,
-        _newest: &str,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
     ) -> aiwattcoach::domain::planned_workouts::BoxFuture<
         Result<Vec<PlannedWorkout>, aiwattcoach::domain::planned_workouts::PlannedWorkoutError>,
     > {
-        Box::pin(async { Ok(Vec::new()) })
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        let workouts = self.workouts.lock().unwrap().clone();
+        Box::pin(async move {
+            Ok(workouts
+                .into_iter()
+                .filter(|workout| {
+                    workout.user_id == user_id && workout.date >= oldest && workout.date <= newest
+                })
+                .collect())
+        })
     }
 
     fn upsert(
@@ -259,6 +290,29 @@ impl SpecialDayRepository for InMemorySpecialDayRepository {
     > {
         Box::pin(async move { Ok(special_day) })
     }
+}
+
+pub(crate) fn sample_planned_workout_for_activity(
+    user_id: &str,
+    planned_workout_id: &str,
+    date: &str,
+) -> PlannedWorkout {
+    PlannedWorkout::new(
+        planned_workout_id.to_string(),
+        user_id.to_string(),
+        date.to_string(),
+        PlannedWorkoutContent {
+            lines: vec![PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                duration_seconds: 3,
+                kind: PlannedWorkoutStepKind::Steady,
+                target: PlannedWorkoutTarget::PercentFtp {
+                    min: 100.0,
+                    max: 100.0,
+                },
+            })],
+        },
+    )
+    .with_event_metadata(Some("Sweet Spot".to_string()), None, None)
 }
 
 pub(crate) fn canonical_completed_workout_from_activity(activity: &Activity) -> CompletedWorkout {
