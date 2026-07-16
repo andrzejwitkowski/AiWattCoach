@@ -151,11 +151,14 @@ async fn builder_renders_recent_and_historical_context() {
         result.context.recent_workout_recaps[0].recap,
         "Strong sweet spot execution with steady control"
     );
-    assert_eq!(
-        recent_day.workouts[0].power_segments,
-        vec![[220, 220, 3], [270, 270, 3]]
-    );
-    assert_eq!(recent_day.workouts[0].cadence_segments, vec![[84, 84, 5]]);
+    assert!(recent_day.workouts[0].power_segments.is_empty());
+    assert!(recent_day.workouts[0].cadence_segments.is_empty());
+    let aligned = recent_day.workouts[0]
+        .aligned_intervals
+        .as_ref()
+        .expect("focus workout should expose aligned intervals");
+    assert_eq!(aligned.len(), 1);
+    assert_eq!(aligned[0].planned_step.planned_duration_seconds, 1200);
     assert_eq!(
         recent_day.workouts[0]
             .planned_workout
@@ -245,10 +248,15 @@ async fn builder_renders_recent_and_historical_context() {
         .rendered
         .volatile_context
         .contains("Strong sweet spot execution with steady control"));
-    assert!(result.rendered.volatile_context.contains("[[220,220,3]"));
+    assert!(result.rendered.volatile_context.contains("\"sa\""));
+    assert!(result
+        .rendered
+        .volatile_context
+        .contains("\"interval_index\""));
+    assert!(!result.rendered.volatile_context.contains("[[220,220,3]"));
     assert!(!result.rendered.volatile_context.contains("\"pc\":"));
     assert!(!result.rendered.volatile_context.contains("\"p3\":"));
-    assert!(result.rendered.volatile_context.contains("[[84,84,5]]"));
+    assert!(!result.rendered.volatile_context.contains("[[84,84,5]]"));
     assert!(result.rendered.volatile_context.contains("80"));
     assert!(result.rendered.volatile_context.contains("\"pd\":["));
     assert!(result.rendered.volatile_context.contains("\"ride-1\""));

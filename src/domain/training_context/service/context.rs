@@ -21,7 +21,7 @@ use super::{
         average_metric, average_recent_tss, build_daily_tss_map, build_load_trend, ewma_latest,
         recent_slice,
     },
-    power::{extract_cadence_segments_5s, extract_power_segments_3s},
+    power::{extract_cadence_segments_5s, extract_power_segments_3s, raw_stream},
 };
 
 pub(super) fn build_historical_context(
@@ -466,7 +466,36 @@ fn build_recent_workout(
         power_segments,
         cadence_segments,
         planned_workout,
+        aligned_intervals: None,
     }
+}
+
+pub(super) fn compute_aligned_intervals(
+    activity: &Activity,
+    planned: &PlannedWorkoutReference,
+    configured_ftp: Option<i32>,
+) -> Option<Vec<crate::domain::workout_alignment::AlignedInterval>> {
+    if planned.interval_blocks.is_empty() {
+        return None;
+    }
+    let ftp = activity.metrics.ftp_watts.or(configured_ftp);
+    let blocks: Vec<crate::domain::workout_alignment::PlannedBlockInput> = planned
+        .interval_blocks
+        .iter()
+        .map(
+            |block| crate::domain::workout_alignment::PlannedBlockInput {
+                name: None,
+                duration_seconds: block.duration_seconds,
+                min_percent_ftp: block.min_percent_ftp,
+                max_percent_ftp: block.max_percent_ftp,
+                min_target_watts: block.min_target_watts,
+                max_target_watts: block.max_target_watts,
+            },
+        )
+        .collect();
+    let power = raw_stream(&activity.details.streams, "watts");
+    let cadence = raw_stream(&activity.details.streams, "cadence");
+    crate::domain::workout_alignment::align_workout_from_blocks(&blocks, ftp, &power, &cadence)
 }
 
 pub(super) fn projected_workout_name(workout: &PlannedWorkout) -> Option<String> {

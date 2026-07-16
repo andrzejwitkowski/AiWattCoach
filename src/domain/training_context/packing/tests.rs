@@ -388,6 +388,37 @@ fn recent_workout_streams_omitted_from_stable_h_w() {
 }
 
 #[test]
+fn selected_workout_aligned_intervals_emit_sa_and_clear_ps_cs() {
+    use crate::domain::workout_alignment::{AlignedInterval, CadenceRange, PlannedStep, StepType};
+
+    let mut context = rich_training_context();
+    context.recent_days[0].workouts[0].aligned_intervals = Some(vec![AlignedInterval {
+        interval_index: 0,
+        planned_step: PlannedStep {
+            name: "work".into(),
+            step_type: StepType::Work,
+            target_power_min: 270,
+            target_power_max: 285,
+            planned_duration_seconds: 480,
+        },
+        actual_duration_seconds: 480,
+        avg_power: 275,
+        normalized_power: 278,
+        avg_cadence: 88,
+        cadence_range: CadenceRange { min: 85, max: 92 },
+        anomalies: Vec::new(),
+    }]);
+    context.recent_days[0].workouts[0].power_segments.clear();
+    context.recent_days[0].workouts[0].cadence_segments.clear();
+
+    let rendered = render_training_context(&context);
+
+    assert!(rendered.volatile_context.contains("\"sa\""));
+    assert!(rendered.volatile_context.contains("\"interval_index\""));
+    assert!(!rendered.volatile_context.contains("[[220,220,3]]"));
+}
+
+#[test]
 fn mixed_race_disciplines_keep_per_row_disc_column() {
     let context = TrainingContext {
         races: vec![

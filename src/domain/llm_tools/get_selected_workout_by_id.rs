@@ -29,7 +29,7 @@ impl LlmTool for GetSelectedWorkoutById {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Get detailed workout data for a specific frontend-visible workout id. Use this for the currently selected workout instead of inferring a date from nearby history. Returns completed workouts with full statistics, streams limited to watts and cadence as [min,max,durationSec] segment triplets and heartrate (1-second resolution); total distance is in distance_meters, not as a stream, plus AI conversation history and related plan/race context for that workout date.".to_string(),
+            description: "Get detailed workout data for a specific frontend-visible workout id. Use this for the currently selected workout instead of inferring a date from nearby history. Returns completed workouts with statistics and aligned_intervals when a linked planned workout has parseable blocks and a non-empty power stream, heartrate at 1-second resolution when present, plus AI conversation history and related plan/race context for that workout date.".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,
@@ -47,7 +47,7 @@ impl LlmTool for GetSelectedWorkoutById {
 
     fn prompt_guidance(&self) -> Option<&'static str> {
         Some(
-            "use for the currently selected workout when you need exact workout details without guessing the date from packed context",
+            "use for the currently selected workout when you need exact workout details or aligned_intervals without guessing the date; aligned_intervals require parseable linked plan blocks and a non-empty power stream",
         )
     }
 

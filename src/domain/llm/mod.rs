@@ -16,8 +16,8 @@ pub use coach_planning_literature::{
     RACING_STRATEGIST_APP_EVIDENCE_CONTRACT, RACING_STRATEGIST_OPERATIONAL_GUIDELINES,
 };
 pub use context_prelude::{
-    packed_training_context_legend_with_guidance, ATHLETE_SUMMARY_CALENDAR_GUARD,
-    PACKED_CALENDAR_AUTHORITY_GUIDANCE, PACKED_TRAINING_CONTEXT_LEGEND,
+    packed_training_context_legend_with_guidance, ALIGNED_INTERVAL_GUIDANCE,
+    ATHLETE_SUMMARY_CALENDAR_GUARD, PACKED_CALENDAR_AUTHORITY_GUIDANCE,
 };
 pub(crate) use transcript::{
     final_assistant_text, last_nonempty_assistant_content, merge_provider_transcript_entries,

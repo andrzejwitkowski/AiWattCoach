@@ -211,6 +211,10 @@ pub struct RecentWorkoutContext {
     pub power_segments: Vec<[i32; 3]>,
     pub cadence_segments: Vec<[i32; 3]>,
     pub planned_workout: Option<PlannedWorkoutReference>,
+    /// Plan-vs-Actual aligned intervals for the selected workout only.
+    /// When present, `power_segments`/`cadence_segments` are empty so the packed
+    /// `rd.w` row emits null `ps`/`cs` and the LLM reads `sa` instead.
+    pub aligned_intervals: Option<Vec<crate::domain::workout_alignment::AlignedInterval>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
