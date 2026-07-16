@@ -284,12 +284,10 @@ mod tests {
         assert!(prompt.contains(r#""questions""#));
         assert!(prompt.contains(r#""freeTextLabel""#));
         assert!(prompt.contains(r#""additionalProperties": false"#));
-        assert!(prompt.contains(
-            "For completed interval workouts, judge interval execution primarily from bl"
-        ));
-        assert!(prompt.contains("ps (executed power segments)"));
-        assert!(prompt.contains("ps=power"));
-        assert!(prompt.contains("cs=cadence"));
+        assert!(prompt.contains("aligned_intervals"));
+        assert!(prompt.contains("coasting_stop"));
+        assert!(!prompt.contains("ps=power"));
+        assert!(!prompt.contains("cs=cadence"));
         assert!(prompt.contains("Never tell the athlete they have free time, vacation, or a rest block unless prd confirms it"));
         assert!(!prompt.contains("p3 as executed power"));
         assert!(!prompt.contains("p3=power watts"));
@@ -299,18 +297,13 @@ mod tests {
         assert!(prompt.contains(
             "are not sufficient proof that interval blocks were or were not executed correctly"
         ));
-        assert!(prompt.contains(
-            "Do not conclude poor interval execution just because whole-workout averages were lowered by recovery valleys, coasting, zeros, terrain, or wind"
-        ));
-        assert!(prompt.contains("When workout tools are available, use them for that fallback"));
+        assert!(prompt.contains("call get_selected_workout before making a strong claim"));
         assert!(prompt.contains("Seiler 2010"));
         assert!(prompt.contains("Do not use this block to justify extra follow-up questions"));
         assert!(
             prompt.contains("Use the provided selected workout date as the active workout context")
         );
-        assert!(!prompt.contains(
-            "If the packed evidence is insufficient for a confident execution judgment, use the available workout tools to inspect higher-fidelity data before making a strong claim"
-        ));
+        assert!(!prompt.contains("header-mapped"));
     }
 
     #[test]

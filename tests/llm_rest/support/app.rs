@@ -56,6 +56,7 @@ pub(crate) struct LlmRestTestContext {
     athlete_summary_service: InMemoryAthleteSummaryService,
     intervals_service: InMemoryIntervalsService,
     completed_workout_repository: InMemoryCompletedWorkoutRepository,
+    planned_workout_repository: InMemoryPlannedWorkoutRepository,
     _fixture: FrontendFixture,
 }
 
@@ -95,11 +96,23 @@ impl LlmRestTestContext {
         self.athlete_summary_service.seed(user_id, summary, stale);
     }
 
-    pub(crate) fn seed_activity(&self, activity: aiwattcoach::domain::intervals::Activity) {
+    pub(crate) fn seed_activity(
+        &self,
+        activity: aiwattcoach::domain::intervals::Activity,
+        planned_workout_id: Option<&str>,
+    ) {
         self.intervals_service
             .seed_activities(vec![activity.clone()]);
-        self.completed_workout_repository
-            .seed(vec![canonical_completed_workout_from_activity(&activity)]);
+        let mut completed = canonical_completed_workout_from_activity(&activity);
+        completed.planned_workout_id = planned_workout_id.map(str::to_string);
+        self.completed_workout_repository.seed(vec![completed]);
+    }
+
+    pub(crate) fn seed_planned_workout(
+        &self,
+        workout: aiwattcoach::domain::planned_workouts::PlannedWorkout,
+    ) {
+        self.planned_workout_repository.seed(vec![workout]);
     }
 
     pub(crate) fn default_activity(
@@ -133,7 +146,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
     let athlete_summary_service = InMemoryAthleteSummaryService::default();
     let intervals_service = InMemoryIntervalsService::default();
     let completed_workout_repository = InMemoryCompletedWorkoutRepository::default();
-    let planned_workout_repository = InMemoryPlannedWorkoutRepository;
+    let planned_workout_repository = InMemoryPlannedWorkoutRepository::default();
     let special_day_repository = InMemorySpecialDayRepository;
 
     let settings_service = Arc::new(
@@ -217,6 +230,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
         athlete_summary_service,
         intervals_service,
         completed_workout_repository,
+        planned_workout_repository,
         _fixture: fixture,
     }
 }

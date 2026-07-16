@@ -67,6 +67,27 @@ fn get_selected_workout_returns_completed_data_and_hides_race() {
 }
 
 #[test]
+fn get_selected_workout_returns_aligned_intervals_when_planned_workout_linked() {
+    let tool = GetSelectedWorkout;
+    let context = sample_context(TestDataPort {
+        completed: vec![sample_completed_workout(Some("planned-1"))],
+        planned: vec![sample_planned_workout("planned-1", "2026-05-05")],
+        races: Vec::new(),
+        summaries: Vec::new(),
+    });
+
+    let response = futures::executor::block_on(tool.execute(r#"{"date":"2026-05-05"}"#, &context));
+    let json: serde_json::Value =
+        serde_json::from_str(&response).expect("response should be valid json");
+    let aligned = &json["workouts"][0]["aligned_intervals"];
+
+    assert!(aligned.is_array());
+    assert!(!aligned.as_array().expect("aligned intervals").is_empty());
+    assert_eq!(aligned[0]["interval_index"], 0);
+    assert_eq!(aligned[0]["planned_step"]["step_type"], "work");
+}
+
+#[test]
 fn get_selected_workout_returns_watts_segments_for_long_stream() {
     let tool = GetSelectedWorkout;
     let mut workout = sample_completed_workout(None);

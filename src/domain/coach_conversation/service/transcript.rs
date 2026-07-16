@@ -6,7 +6,7 @@ use crate::domain::racing_strategy::racing_strategist_calendar_guidance;
 
 use super::super::{CoachConversation, CoachConversationMessage, CoachConversationMessageRole};
 
-const CALENDAR_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach for calendar-view training questions. Use packed context and tools as facts; be direct and evidence-based. Never invent details. Vacation/rest only if prd confirms; check pd before claiming no planned training. For execution, read rd.w ps/cs chronologically. Do not claim plans were regenerated unless the app says so. Plan regeneration requires saving a workout summary from completed workouts—not from calendar chat.";
+const CALENDAR_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach for calendar-view training questions. Use provided context and tools as facts; be direct and evidence-based. Never invent details. Vacation/rest only if prd confirms; check pd before claiming no planned training. For workout execution on the selected session, use aligned_intervals when present; do not judge training quality or interval execution from the power curve—power-duration shape is supplemental only. Do not claim plans were regenerated unless the app says so. Plan regeneration requires saving a workout summary from completed workouts—not from calendar chat.";
 
 pub(super) fn final_assistant_text(response: &LlmChatResponse) -> Option<String> {
     crate::domain::llm::final_assistant_text(response)
@@ -173,5 +173,7 @@ mod tests {
         assert!(prompt.contains("simulate_forward_load"));
         assert!(prompt.contains("cannot rewrite pd"));
         assert!(prompt.contains("only if prd confirms"));
+        assert!(prompt
+            .contains("do not judge training quality or interval execution from the power curve"));
     }
 }
