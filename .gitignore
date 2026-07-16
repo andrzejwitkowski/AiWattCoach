@@ -17,3 +17,4 @@
 /.fastcontext/
 /docker-compose-sandbox.yml
 /sandbox-auth-cookie.txt
+.adjutant/
