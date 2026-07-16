@@ -364,10 +364,12 @@ async fn builder_uses_configured_ftp_when_activity_ftp_is_missing() {
         .find(|day| day.date == "2026-04-03")
         .expect("recent day should exist");
 
-    assert_eq!(
-        recent_day.workouts[0].power_segments,
-        vec![[220, 220, 3], [270, 270, 3]]
-    );
+    assert!(recent_day.workouts[0].power_segments.is_empty());
+    let aligned = recent_day.workouts[0]
+        .aligned_intervals
+        .as_ref()
+        .expect("focus workout should expose aligned intervals");
+    assert_eq!(aligned.len(), 1);
     assert_eq!(
         recent_day.workouts[0]
             .planned_workout
