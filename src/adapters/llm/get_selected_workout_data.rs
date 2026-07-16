@@ -109,6 +109,10 @@ where
                     .list_by_user_id_and_date_range(&user_id, &date, &date)
                     .await
                     .map_err(|err| WorkoutSummaryError::Repository(err.to_string()))?;
+                let planned =
+                    ensure_linked_planned_workout(&planned_repo, &user_id, &completed, planned)
+                        .await
+                        .map_err(|err| WorkoutSummaryError::Repository(err.to_string()))?;
                 let races = races_repo
                     .list_by_user_id_and_range(
                         &user_id,
@@ -238,6 +242,32 @@ where
         .find(|workout| workout.planned_workout_id == workout_id))
 }
 
+async fn ensure_linked_planned_workout<Planned>(
+    repository: &Planned,
+    user_id: &str,
+    completed: &CompletedWorkout,
+    mut planned: Vec<PlannedWorkout>,
+) -> Result<Vec<PlannedWorkout>, PlannedWorkoutError>
+where
+    Planned: PlannedWorkoutRepository,
+{
+    let Some(planned_workout_id) = completed.planned_workout_id.as_ref() else {
+        return Ok(planned);
+    };
+    if planned
+        .iter()
+        .any(|plan| &plan.planned_workout_id == planned_workout_id)
+    {
+        return Ok(planned);
+    }
+    if let Some(linked) =
+        load_planned_by_frontend_id(repository, user_id, planned_workout_id).await?
+    {
+        planned.push(linked);
+    }
+    Ok(planned)
+}
+
 fn summary_lookup_ids_for_completed(workout: &CompletedWorkout) -> Vec<String> {
     let mut ids = vec![workout.completed_workout_id.clone()];
 
@@ -254,4 +284,124 @@ fn summary_lookup_ids_for_completed(workout: &CompletedWorkout) -> Vec<String> {
     }
 
     ids
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::completed_workouts::{CompletedWorkoutDetails, CompletedWorkoutMetrics};
+
+    #[derive(Clone)]
+    struct StubPlannedRepo {
+        workouts: Vec<PlannedWorkout>,
+    }
+
+    impl PlannedWorkoutRepository for StubPlannedRepo {
+        fn list_by_user_id(
+            &self,
+            user_id: &str,
+        ) -> crate::domain::planned_workouts::BoxFuture<
+            Result<Vec<PlannedWorkout>, PlannedWorkoutError>,
+        > {
+            let workouts = self.workouts.clone();
+            let user_id = user_id.to_string();
+            Box::pin(async move {
+                Ok(workouts
+                    .into_iter()
+                    .filter(|workout| workout.user_id == user_id)
+                    .collect())
+            })
+        }
+
+        fn list_by_user_id_and_date_range(
+            &self,
+            user_id: &str,
+            _oldest: &str,
+            _newest: &str,
+        ) -> crate::domain::planned_workouts::BoxFuture<
+            Result<Vec<PlannedWorkout>, PlannedWorkoutError>,
+        > {
+            self.list_by_user_id(user_id)
+        }
+
+        fn upsert(
+            &self,
+            _workout: PlannedWorkout,
+        ) -> crate::domain::planned_workouts::BoxFuture<Result<PlannedWorkout, PlannedWorkoutError>>
+        {
+            unreachable!()
+        }
+    }
+
+    fn completed_with_plan(planned_workout_id: &str, start_date_local: &str) -> CompletedWorkout {
+        CompletedWorkout::new(
+            "wahoo-workout:476396735".to_string(),
+            "user-1".to_string(),
+            start_date_local.to_string(),
+            Some("i166368784".to_string()),
+            Some(planned_workout_id.to_string()),
+            None,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            CompletedWorkoutMetrics::default(),
+            CompletedWorkoutDetails {
+                intervals: Vec::new(),
+                interval_groups: Vec::new(),
+                streams: Vec::new(),
+                interval_summary: Vec::new(),
+                skyline_chart: Vec::new(),
+                power_zone_times: Vec::new(),
+                heart_rate_zone_times: Vec::new(),
+                pace_zone_times: Vec::new(),
+                gap_zone_times: Vec::new(),
+            },
+            None,
+        )
+    }
+
+    #[tokio::test]
+    async fn ensure_linked_planned_workout_merges_plan_when_same_date_list_misses() {
+        let planned_on_other_day = PlannedWorkout::new(
+            "plan-off-date".to_string(),
+            "user-1".to_string(),
+            "2026-04-01".to_string(),
+            crate::domain::planned_workouts::PlannedWorkoutContent { lines: Vec::new() },
+        );
+        let repo = StubPlannedRepo {
+            workouts: vec![planned_on_other_day],
+        };
+        let completed = completed_with_plan("plan-off-date", "2026-04-03T08:00:00");
+
+        let merged = ensure_linked_planned_workout(&repo, "user-1", &completed, Vec::new())
+            .await
+            .unwrap();
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].planned_workout_id, "plan-off-date");
+    }
+
+    #[tokio::test]
+    async fn ensure_linked_planned_workout_keeps_same_date_plan_without_duplicate() {
+        let planned_same_day = PlannedWorkout::new(
+            "plan-same-day".to_string(),
+            "user-1".to_string(),
+            "2026-04-03".to_string(),
+            crate::domain::planned_workouts::PlannedWorkoutContent { lines: Vec::new() },
+        );
+        let repo = StubPlannedRepo {
+            workouts: vec![planned_same_day.clone()],
+        };
+        let completed = completed_with_plan("plan-same-day", "2026-04-03T08:00:00");
+
+        let merged =
+            ensure_linked_planned_workout(&repo, "user-1", &completed, vec![planned_same_day])
+                .await
+                .unwrap();
+
+        assert_eq!(merged.len(), 1);
+    }
 }
