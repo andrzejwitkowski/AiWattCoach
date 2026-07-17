@@ -1,7 +1,7 @@
 # Graph Report - AiWattCoach  (2026-07-17)
 
 ## Corpus Check
-- 1005 files · ~592,995 words
+- 1005 files · ~592,986 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
