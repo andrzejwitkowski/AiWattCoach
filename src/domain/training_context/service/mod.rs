@@ -934,9 +934,9 @@ where
             .filter(|workout| completed_workout_matches_selection(workout, workout_id))
             .reduce(|best, next| {
                 if prefer_completed_workout_for_prompt(&next, &best) {
-                    next
+                    merge_plan_link_for_prompt(next, best)
                 } else {
-                    best
+                    merge_plan_link_for_prompt(best, next)
                 }
             })
     }
@@ -1092,15 +1092,34 @@ fn dedup_completed_workouts_for_prompt(workouts: Vec<CompletedWorkout>) -> Vec<C
             .unwrap_or_else(|| legacy_activity_id(&workout.completed_workout_id).to_string());
         let key = (date, activity_id);
 
-        match best_by_key.get(&key) {
-            Some(existing) if !prefer_completed_workout_for_prompt(&workout, existing) => {}
-            _ => {
+        match best_by_key.remove(&key) {
+            Some(existing) => {
+                let preferred = if prefer_completed_workout_for_prompt(&workout, &existing) {
+                    merge_plan_link_for_prompt(workout, existing)
+                } else {
+                    merge_plan_link_for_prompt(existing, workout)
+                };
+                best_by_key.insert(key, preferred);
+            }
+            None => {
                 best_by_key.insert(key, workout);
             }
         }
     }
 
     best_by_key.into_values().collect()
+}
+
+/// Wahoo wins Intervals+Wahoo prompt dedupe for FIT, but the plan link often lives only on
+/// the Intervals sibling (plans sync to Intervals). Keep the loser's planned_workout_id.
+fn merge_plan_link_for_prompt(
+    preferred: CompletedWorkout,
+    other: CompletedWorkout,
+) -> CompletedWorkout {
+    CompletedWorkout {
+        planned_workout_id: preferred.planned_workout_id.or(other.planned_workout_id),
+        ..preferred
+    }
 }
 
 fn prefer_completed_workout_for_prompt(
@@ -1493,5 +1512,43 @@ mod dedup_tests {
 
         assert_eq!(deduped.len(), 1);
         assert_eq!(deduped[0].completed_workout_id, wahoo.completed_workout_id);
+    }
+
+    #[test]
+    fn dedup_completed_workouts_for_prompt_keeps_intervals_plan_link_on_wahoo_winner() {
+        // Plans sync to Intervals → Intervals completed carries planned_workout_id.
+        // Real FIT lives on Wahoo → prompt prefers Wahoo but must not drop the plan link.
+        let mut intervals = sample_workout("intervals-activity:i166", "2026-07-16T18:00:00");
+        intervals.source_activity_id = Some("i166368784".to_string());
+        intervals.planned_workout_id = Some("intervals-event:101".to_string());
+        let mut wahoo = sample_workout("wahoo-workout:476396735", "2026-07-16T18:10:00");
+        wahoo.source_activity_id = Some("i166368784".to_string());
+        wahoo.planned_workout_id = None;
+
+        let deduped = dedup_completed_workouts_for_prompt(vec![intervals, wahoo.clone()]);
+
+        assert_eq!(deduped.len(), 1);
+        assert_eq!(deduped[0].completed_workout_id, wahoo.completed_workout_id);
+        assert_eq!(
+            deduped[0].planned_workout_id.as_deref(),
+            Some("intervals-event:101")
+        );
+    }
+
+    #[test]
+    fn dedup_completed_workouts_for_prompt_keeps_winner_plan_when_both_linked() {
+        let mut intervals = sample_workout("intervals-activity:i166", "2026-07-16T18:00:00");
+        intervals.source_activity_id = Some("i166368784".to_string());
+        intervals.planned_workout_id = Some("intervals-event:101".to_string());
+        let mut wahoo = sample_workout("wahoo-workout:476396735", "2026-07-16T18:10:00");
+        wahoo.source_activity_id = Some("i166368784".to_string());
+        wahoo.planned_workout_id = Some("intervals-event:202".to_string());
+
+        let deduped = dedup_completed_workouts_for_prompt(vec![intervals, wahoo]);
+
+        assert_eq!(
+            deduped[0].planned_workout_id.as_deref(),
+            Some("intervals-event:202")
+        );
     }
 }
