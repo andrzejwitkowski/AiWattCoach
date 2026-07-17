@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use chrono::{Duration, NaiveDate};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -22,8 +24,8 @@ pub(crate) struct VolatilePayload<'a> {
     fx: CompactFocus<'a>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     rd: Vec<CompactRecentDay<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    sa: Option<&'a [crate::domain::workout_alignment::AlignedInterval]>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    sa: BTreeMap<&'a str, &'a [crate::domain::workout_alignment::AlignedInterval]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     wr: Option<HeaderTable>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -52,7 +54,13 @@ impl<'a> VolatilePayload<'a> {
                 .recent_days
                 .iter()
                 .flat_map(|day| day.workouts.iter())
-                .find_map(|w| w.aligned_intervals.as_deref()),
+                .filter_map(|workout| {
+                    workout
+                        .aligned_intervals
+                        .as_deref()
+                        .map(|intervals| (workout.activity_id.as_str(), intervals))
+                })
+                .collect(),
             wr: build_workout_recaps_table(&context.recent_workout_recaps),
             ud: context
                 .upcoming_days

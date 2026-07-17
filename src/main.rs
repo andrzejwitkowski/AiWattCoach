@@ -593,6 +593,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )
         .with_completed_workout_repository(authoritative_completed_workout_repository.clone())
         .with_planned_workout_repository(authoritative_planned_workout_repository.clone())
+        .with_unfiltered_planned_workout_repository(planned_workout_repository.clone())
         .with_special_day_repository(authoritative_special_day_repository.clone())
         .with_ftp_history_repository(ftp_history_repository.clone())
         .with_training_load_daily_snapshot_repository(

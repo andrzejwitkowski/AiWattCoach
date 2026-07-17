@@ -480,6 +480,55 @@ async fn builder_aligns_when_intervals_sibling_listed_before_wahoo_for_same_sour
 }
 
 #[tokio::test]
+async fn builder_aligns_when_plan_link_only_on_intervals_sibling() {
+    // Production: plan synced to Intervals → Intervals completed has planned_workout_id.
+    // Wahoo wins prompt dedupe with FIT but often has no plan link yet.
+    let mut intervals = sample_completed_workout_on_date_with_ftp(
+        "i166368784",
+        "2026-04-03T08:00:00",
+        None,
+        Some("intervals-event:101".to_string()),
+    );
+    intervals.source_activity_id = Some("i166368784".to_string());
+
+    let mut wahoo =
+        sample_completed_workout_on_date_with_ftp("476396735", "2026-04-03T08:00:00", None, None);
+    wahoo.completed_workout_id = "wahoo-workout:476396735".to_string();
+    wahoo.source_activity_id = Some("i166368784".to_string());
+
+    let builder = DefaultTrainingContextBuilder::new(
+        Arc::new(TestSettingsService),
+        Arc::new(TestWorkoutSummaryRepository),
+        Arc::new(DirectCompletedWorkoutTargetService),
+        FixedClock,
+    )
+    .with_completed_workout_repository(TestCompletedWorkoutRepository::with_workouts(vec![
+        intervals, wahoo,
+    ]))
+    .with_planned_workout_repository(TestPlannedWorkoutRepository::default())
+    .with_special_day_repository(TestSpecialDayRepository::default());
+
+    let result = builder.build("user-1", "i166368784").await.unwrap();
+
+    let recent_day = result
+        .context
+        .recent_days
+        .iter()
+        .find(|day| day.date == "2026-04-03")
+        .expect("recent day should exist");
+    assert_eq!(recent_day.workouts[0].activity_id, "476396735");
+    assert!(
+        recent_day.workouts[0].planned_workout.is_some(),
+        "Wahoo winner must inherit Intervals planned_workout_id for plan→actual attach"
+    );
+    let aligned = recent_day.workouts[0]
+        .aligned_intervals
+        .as_ref()
+        .expect("inherited plan link should produce aligned_intervals");
+    assert_eq!(aligned.len(), 1);
+}
+
+#[tokio::test]
 async fn builder_marks_event_status_when_stable_future_fetch_fails() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),

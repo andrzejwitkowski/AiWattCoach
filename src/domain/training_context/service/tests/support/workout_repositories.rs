@@ -151,6 +151,12 @@ impl Default for TestPlannedWorkoutRepository {
     }
 }
 
+impl TestPlannedWorkoutRepository {
+    pub(crate) fn with_workouts(workouts: Vec<CanonicalPlannedWorkout>) -> Self {
+        Self { workouts }
+    }
+}
+
 impl PlannedWorkoutRepository for TestPlannedWorkoutRepository {
     fn list_by_user_id(
         &self,

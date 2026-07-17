@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use chrono::{Duration, NaiveDate};
+use tracing::info;
 
 use crate::domain::{
     intervals::{
@@ -476,6 +477,10 @@ pub(super) fn compute_aligned_intervals(
     configured_ftp: Option<i32>,
 ) -> Option<Vec<crate::domain::workout_alignment::AlignedInterval>> {
     if planned.interval_blocks.is_empty() {
+        info!(
+            activity_id = %activity.id,
+            "training_context alignment: planned workout has zero interval blocks"
+        );
         return None;
     }
     let ftp = activity.metrics.ftp_watts.or(configured_ftp);
@@ -495,7 +500,22 @@ pub(super) fn compute_aligned_intervals(
         .collect();
     let power = raw_stream(&activity.details.streams, "watts");
     let cadence = raw_stream(&activity.details.streams, "cadence");
-    crate::domain::workout_alignment::align_workout_from_blocks(&blocks, ftp, &power, &cadence)
+    info!(
+        activity_id = %activity.id,
+        planned_block_count = blocks.len(),
+        power_points = power.len(),
+        cadence_points = cadence.len(),
+        resolved_ftp = ftp,
+        "training_context alignment: running align_workout_from_blocks"
+    );
+    let aligned =
+        crate::domain::workout_alignment::align_workout_from_blocks(&blocks, ftp, &power, &cadence);
+    info!(
+        activity_id = %activity.id,
+        aligned_interval_count = aligned.as_ref().map(|items| items.len()).unwrap_or(0),
+        "training_context alignment: align_workout_from_blocks result"
+    );
+    aligned
 }
 
 pub(super) fn projected_workout_name(workout: &PlannedWorkout) -> Option<String> {

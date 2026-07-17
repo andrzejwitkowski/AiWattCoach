@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { decodeShortKey, formatSeconds, formatSegmentTriplets } from '../utils/decodePackedContext';
+import { decodeShortKey, formatSeconds, formatSegmentTriplets, parseHeaderTable } from '../utils/decodePackedContext';
 
 type DecodedPackedContextProps = {
   label: string;
@@ -123,15 +123,34 @@ function buildSections(data: Record<string, unknown>): React.ReactNode[] {
   if (data.rd && Array.isArray(data.rd)) {
     sections.push(buildRecentDays(data.rd));
   }
-  if (data.wr && Array.isArray(data.wr)) {
-    sections.push(buildWorkoutRecaps(data.wr));
+  if (data.sa != null) {
+    const aligned = buildAlignedIntervals(data.sa);
+    if (aligned) sections.push(aligned);
+  }
+  if (data.wr != null) {
+    const recaps = buildWorkoutRecaps(data.wr);
+    if (recaps) sections.push(recaps);
+  }
+  if (data.rs != null) {
+    const races = buildRaceStrategy(data.rs);
+    if (races) sections.push(races);
+  }
+  if (data.ud && Array.isArray(data.ud)) {
+    sections.push(buildUpcomingDays(data.ud));
+  }
+  if (data.pd && Array.isArray(data.pd)) {
+    sections.push(buildProjectedDays(data.pd));
+  }
+  if (data.fx && isObject(data.fx)) {
+    sections.push(buildFocus(data.fx));
   }
 
+  const known = new Set([
+    'p', 'rc', 'prd', 'h', 'rd', 'wr', 'ud', 'pd', 'fe', 'v', 'g', 'fx', 'i', 'sa', 'rs',
+  ]);
   const rest: Record<string, unknown> = {};
   for (const key of Object.keys(data)) {
-    if (!['p', 'rc', 'prd', 'h', 'rd', 'wr', 'ud', 'pd', 'fe', 'v', 'g', 'fx', 'i'].includes(key)) {
-      rest[key] = data[key];
-    }
+    if (!known.has(key)) rest[key] = data[key];
   }
 
   const rawSection = buildRawTable(rest);
@@ -405,29 +424,236 @@ function SegmentList({ label, segments }: { label: string; segments: string[] })
   );
 }
 
-function buildWorkoutRecaps(wr: unknown[]) {
+function buildWorkoutRecaps(wr: unknown) {
+  const recaps = parseHeaderTable(wr);
+  if (recaps.length === 0) return null;
   return (
     <div>
       <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
         Workout Recaps
       </div>
       <div className="space-y-2">
-        {(wr as unknown[]).map((item, i) => {
-          const recap = item as Record<string, unknown>;
-          return (
-            <details key={i} className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
-              <summary className="cursor-pointer text-sm text-slate-300">
-                <span>{String(recap.d ?? '')}</span>
-                {recap.rpe != null ? (
-                  <span className="ml-2 text-xs text-slate-500">RPE {String(recap.rpe)}</span>
-                ) : null}
-              </summary>
-              {typeof recap.recap === 'string' && recap.recap.length > 0 ? (
-                <div className="prompt-preview-text mt-2 text-xs leading-5 text-slate-400">
-                  {(recap.recap as string).slice(0, 400)}
-                  {(recap.recap as string).length > 400 ? '…' : ''}
-                </div>
+        {recaps.map((recap, i) => (
+          <details key={i} className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+            <summary className="cursor-pointer text-sm text-slate-300">
+              <span>{String(recap.d ?? '')}</span>
+              {recap.rpe != null ? (
+                <span className="ml-2 text-xs text-slate-500">RPE {String(recap.rpe)}</span>
               ) : null}
+            </summary>
+            {typeof recap.recap === 'string' && recap.recap.length > 0 ? (
+              <div className="prompt-preview-text mt-2 text-xs leading-5 text-slate-400">
+                {recap.recap.slice(0, 400)}
+                {recap.recap.length > 400 ? '…' : ''}
+              </div>
+            ) : null}
+          </details>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function buildAlignedIntervals(sa: unknown): React.ReactNode {
+  const entries = normalizeAlignedIntervalEntries(sa);
+  if (entries.length === 0) return null;
+
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        Aligned Intervals ({entries.length} workout{entries.length === 1 ? '' : 's'})
+      </div>
+      <div className="space-y-3">
+        {entries.map(({ workoutId, intervals }) => (
+          <details key={workoutId} className="rounded-lg border border-cyan-400/20 bg-cyan-500/5 px-3 py-2">
+            <summary className="cursor-pointer text-sm text-cyan-100">
+              {workoutId}
+              <span className="ml-2 text-xs text-cyan-300/80">
+                {intervals.length} interval{intervals.length === 1 ? '' : 's'}
+              </span>
+            </summary>
+            <div className="mt-2 max-h-64 overflow-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-left text-slate-500">
+                    <th className="pb-1 pr-2">#</th>
+                    <th className="pb-1 pr-2">Step</th>
+                    <th className="pb-1 pr-2">Planned</th>
+                    <th className="pb-1 pr-2">Actual</th>
+                    <th className="pb-1 pr-2">NP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {intervals.map((interval, index) => {
+                    const planned = isObject(interval.planned_step) ? interval.planned_step : null;
+                    return (
+                      <tr key={index} className="border-b border-white/5 text-slate-300">
+                        <td className="py-0.5 pr-2">{String(interval.interval_index ?? index)}</td>
+                        <td className="py-0.5 pr-2">{String(planned?.step_type ?? '')}</td>
+                        <td className="py-0.5 pr-2">
+                          {planned ? `${planned.target_power_min ?? '?'}-${planned.target_power_max ?? '?'}W · ${formatSeconds(Number(planned.planned_duration_seconds ?? 0))}` : '—'}
+                        </td>
+                        <td className="py-0.5 pr-2">{formatSeconds(Number(interval.actual_duration_seconds ?? 0))}</td>
+                        <td className="py-0.5 pr-2">{interval.normalized_power != null ? `${interval.normalized_power}W` : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function normalizeAlignedIntervalEntries(
+  sa: unknown,
+): { workoutId: string; intervals: Record<string, unknown>[] }[] {
+  if (Array.isArray(sa)) {
+    return sa.length > 0 ? [{ workoutId: 'selected', intervals: sa.filter(isObject) }] : [];
+  }
+  if (!isObject(sa)) return [];
+
+  return Object.entries(sa).flatMap(([workoutId, intervals]) =>
+    Array.isArray(intervals) ? [{ workoutId, intervals: intervals.filter(isObject) }] : [],
+  );
+}
+
+function buildFocus(fx: Record<string, unknown>) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Focus</div>
+      <div className="flex flex-wrap gap-3 text-sm text-slate-300">
+        {fx.k != null ? (
+          <span>
+            Kind: <span className="font-mono text-cyan-300">{String(fx.k)}</span>
+          </span>
+        ) : null}
+        {fx.id != null ? (
+          <span>
+            Id: <span className="font-mono text-slate-200">{String(fx.id)}</span>
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function buildRaceStrategy(rs: unknown): React.ReactNode {
+  const rows = parseHeaderTable(rs);
+  if (rows.length === 0) return null;
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        Race Strategy ({rows.length})
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-white/10 text-left text-xs uppercase text-slate-500">
+            <th className="pb-1 pr-3">Date</th>
+            <th className="pb-1 pr-3">Name</th>
+            <th className="pb-1 pr-3">Priority</th>
+            <th className="pb-1 pr-3">Discipline</th>
+            <th className="pb-1 pr-3">Days out</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} className="border-b border-white/5 text-slate-200">
+              <td className="py-1 pr-3 text-slate-400">{String(row.d ?? '')}</td>
+              <td className="py-1 pr-3">{String(row.n ?? '')}</td>
+              <td className="py-1 pr-3">
+                <PriorityBadge priority={String(row.pri ?? '')} />
+              </td>
+              <td className="py-1 pr-3">{String(row.disc ?? '')}</td>
+              <td className="py-1 pr-3">{row.days_out != null ? String(row.days_out) : ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function buildUpcomingDays(ud: unknown[]) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        Upcoming Days
+      </div>
+      <div className="space-y-2">
+        {ud.map((item, i) => {
+          const d = item as Record<string, unknown>;
+          const planned = parseHeaderTable(d.pw);
+          return (
+            <details key={i}>
+              <summary className="cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm">
+                <span className="text-slate-300">{String(d.d ?? '')}</span>
+                {d.fr ? <span className="ml-2 text-xs text-cyan-400">Calendar Empty</span> : null}
+                {planned.length > 0 ? (
+                  <span className="ml-2 text-xs text-slate-500">
+                    {planned.length} planned
+                  </span>
+                ) : (
+                  <span className="ml-2 text-xs text-slate-500">Rest</span>
+                )}
+              </summary>
+              {planned.length > 0 && (
+                <div className="mt-2 space-y-1 pl-2 text-sm text-slate-300">
+                  {planned.map((workout, j) => (
+                    <div key={j}>
+                      {String(workout.n ?? workout.id ?? 'Planned')}
+                      {workout.tss != null ? (
+                        <span className="ml-2 text-xs text-slate-500">{String(workout.tss)} TSS</span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </details>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function buildProjectedDays(pd: unknown[]) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        Projected Days
+      </div>
+      <div className="space-y-2">
+        {pd.map((item, i) => {
+          const d = item as Record<string, unknown>;
+          const workouts = parseHeaderTable(d.w);
+          return (
+            <details key={i}>
+              <summary className="cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm">
+                <span className="text-slate-300">{String(d.d ?? '')}</span>
+                <span className="ml-2 text-xs text-slate-500">
+                  {workouts.length > 0
+                    ? `${workouts.length} workout${workouts.length > 1 ? 's' : ''}`
+                    : 'empty'}
+                </span>
+              </summary>
+              {workouts.length > 0 && (
+                <div className="mt-2 space-y-1 pl-2 text-sm text-slate-300">
+                  {workouts.map((workout, j) => (
+                    <div key={j}>
+                      {String(workout.n ?? workout.swid ?? 'Projected')}
+                      {workout.rest ? (
+                        <span className="ml-2 text-xs text-slate-500">
+                          Rest{workout.rr ? `: ${String(workout.rr)}` : ''}
+                        </span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
             </details>
           );
         })}
@@ -443,46 +669,51 @@ function buildRecentDays(rd: unknown[]) {
       <div className="space-y-2">
         {(rd as unknown[]).slice(-7).map((item, i) => {
           const d = item as Record<string, unknown>;
+          const workouts = parseHeaderTable(d.w);
+          const hasWorkouts = workouts.length > 0;
+          const hasPlanned = parseHeaderTable(d.pw).length > 0;
           return (
             <details key={i}>
               <summary className="cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm">
                 <span className="text-slate-300">{String(d.d ?? '')}</span>
                 {d.fr ? <span className="ml-2 text-xs text-cyan-400">Calendar Empty</span> : null}
                 {d.sick ? <span className="ml-2 text-xs text-red-400">Sick</span> : null}
-                {Array.isArray(d.w) && d.w.length > 0 ? (
+                {hasWorkouts ? (
                   <span className="ml-2 text-xs text-slate-500">
-                    {d.w.length} workout{d.w.length > 1 ? 's' : ''}
+                    {workouts.length} workout{workouts.length > 1 ? 's' : ''}
                   </span>
+                ) : hasPlanned ? (
+                  <span className="ml-2 text-xs text-slate-500">planned only</span>
                 ) : (
                   <span className="ml-2 text-xs text-slate-500">Rest</span>
                 )}
               </summary>
-              {Array.isArray(d.w) && d.w.length > 0 && (
+              {hasWorkouts && (
                 <div className="mt-2 space-y-2 pl-2">
-                  {(d.w as unknown[]).map((w, j) => {
-                    const workout = w as Record<string, unknown>;
-                    return (
-                      <div key={j} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm">
-                          <span className="font-medium text-slate-200">{String(workout.n ?? '')}</span>
-                          <span className="text-xs text-slate-500">{String(workout.ty ?? '')}</span>
-                          {workout.dur ? <span className="text-xs text-slate-400">{formatSeconds(Number(workout.dur))}</span> : null}
-                          {workout.tss != null ? <span className="text-xs text-slate-400">{String(workout.tss)} TSS</span> : null}
-                          {workout.ifv != null ? <span className="text-xs text-slate-400">IF {numStr(workout.ifv)}</span> : null}
-                          {workout.rpe != null ? <RPEDisplay rpe={Number(workout.rpe)} /> : null}
-                        </div>
-                        {typeof workout.recap === 'string' && workout.recap.length > 80 && (
-                          <details className="mt-1">
-                            <summary className="cursor-pointer text-xs text-slate-500">Recap snippet</summary>
-                            <div className="prompt-preview-text mt-1 text-xs leading-5 text-slate-400">
-                              {(workout.recap as string).slice(0, 300)}
-                              {(workout.recap as string).length > 300 ? '…' : ''}
-                            </div>
-                          </details>
-                        )}
+                  {workouts.map((workout, j) => (
+                    <div key={j} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm">
+                        <span className="font-medium text-slate-200">{String(workout.n ?? workout.id ?? '')}</span>
+                        <span className="text-xs text-slate-500">{String(workout.ty ?? '')}</span>
+                        {workout.sd ? <span className="text-xs text-slate-400">{String(workout.sd)}</span> : null}
+                        {workout.tss != null ? <span className="text-xs text-slate-400">{String(workout.tss)} TSS</span> : null}
+                        {workout.np != null ? <span className="text-xs text-slate-400">{String(workout.np)} NP</span> : null}
+                        {workout.ifv != null ? <span className="text-xs text-slate-400">IF {numStr(workout.ifv)}</span> : null}
+                        {workout.rpe != null ? <RPEDisplay rpe={Number(workout.rpe)} /> : null}
                       </div>
-                    );
-                  })}
+                      <SegmentList label={decodeShortKey('ps')} segments={formatSegmentTriplets(workout.ps, 'W')} />
+                      <SegmentList label={decodeShortKey('cs')} segments={formatSegmentTriplets(workout.cs, 'RPM')} />
+                      {typeof workout.recap === 'string' && workout.recap.length > 80 && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-xs text-slate-500">Recap snippet</summary>
+                          <div className="prompt-preview-text mt-1 text-xs leading-5 text-slate-400">
+                            {workout.recap.slice(0, 300)}
+                            {workout.recap.length > 300 ? '…' : ''}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </details>
@@ -520,16 +751,52 @@ function buildRawTable(data: Record<string, unknown>) {
   return (
     <div>
       <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Other Fields</div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm md:grid-cols-3">
-        {entries.map(([key, val]) => (
-          <div key={key} className="flex justify-between gap-2">
-            <span className="text-slate-400">{decodeShortKey(key)}</span>
-            <span className="text-slate-200">{fmtVal(val)}</span>
-          </div>
-        ))}
+      <div className="space-y-3">
+        {entries.map(([key, val]) => {
+          const rows = parseHeaderTable(val);
+          if (rows.length > 0) {
+            const headers = Object.keys(rows[0] ?? {});
+            return (
+              <div key={key}>
+                <div className="mb-1 text-xs text-slate-400">{decodeShortKey(key)}</div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 text-left text-slate-500">
+                      {headers.map((header) => (
+                        <th key={header} className="pb-1 pr-2">{decodeShortKey(header)}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, i) => (
+                      <tr key={i} className="border-b border-white/5 text-slate-300">
+                        {headers.map((header) => (
+                          <td key={header} className="py-0.5 pr-2">{fmtCell(row[header])}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          }
+          return (
+            <div key={key} className="flex justify-between gap-2 text-sm">
+              <span className="text-slate-400">{decodeShortKey(key)}</span>
+              <span className="text-slate-200">{fmtVal(val)}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
+}
+
+function fmtCell(v: unknown): string {
+  if (v == null) return '—';
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'string') return v;
+  return fmtVal(v);
 }
 
 function fmtVal(v: unknown): string {
