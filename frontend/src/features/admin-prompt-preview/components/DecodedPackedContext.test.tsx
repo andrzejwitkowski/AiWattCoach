@@ -115,18 +115,49 @@ describe('DecodedPackedContext', () => {
     expect(screen.queryByText('Rest', { selector: 'summary span' })).not.toBeInTheDocument();
   });
 
-  it('keeps rs in Other Fields when no dedicated renderer exists', () => {
+  it('renders race strategy table instead of collapsing rs to other fields', () => {
     const { container } = render(
       <DecodedPackedContext
         label="Volatile Training Context"
         data={{
-          rs: { h: ['d', 'n'], r: [['2026-07-20', 'Race A']] },
+          rs: {
+            h: ['d', 'pri', 'disc', 'n', 'days_out'],
+            r: [['2026-07-20', 'A', 'road', 'Szosomania', 4]],
+          },
         }}
       />,
     );
 
-    expect(container.textContent).toContain('Other Fields');
-    expect(container.textContent).toContain('rs');
+    expect(screen.getByText('Race Strategy (1)')).toBeInTheDocument();
+    expect(screen.getByText('Szosomania')).toBeInTheDocument();
+    expect(screen.getByText('road')).toBeInTheDocument();
+    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('Other Fields');
+  });
+
+  it('renders upcoming days from header-mapped planned tables', () => {
+    render(
+      <DecodedPackedContext
+        label="Volatile Training Context"
+        data={{
+          ud: [
+            {
+              d: '2026-07-18',
+              fr: false,
+              pw: {
+                h: ['id', 'n', 'tss'],
+                r: [[101, 'Easy spin', 40]],
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Upcoming Days')).toBeInTheDocument();
+    expect(screen.getByText('1 planned')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('2026-07-18'));
+    expect(screen.getByText('Easy spin')).toBeInTheDocument();
   });
 
   it('renders aligned intervals map instead of collapsing sa to other fields', () => {

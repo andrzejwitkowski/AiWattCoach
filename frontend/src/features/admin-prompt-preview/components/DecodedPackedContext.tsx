@@ -131,12 +131,26 @@ function buildSections(data: Record<string, unknown>): React.ReactNode[] {
     const recaps = buildWorkoutRecaps(data.wr);
     if (recaps) sections.push(recaps);
   }
+  if (data.rs != null) {
+    const races = buildRaceStrategy(data.rs);
+    if (races) sections.push(races);
+  }
+  if (data.ud && Array.isArray(data.ud)) {
+    sections.push(buildUpcomingDays(data.ud));
+  }
+  if (data.pd && Array.isArray(data.pd)) {
+    sections.push(buildProjectedDays(data.pd));
+  }
+  if (data.fx && isObject(data.fx)) {
+    sections.push(buildFocus(data.fx));
+  }
 
+  const known = new Set([
+    'p', 'rc', 'prd', 'h', 'rd', 'wr', 'ud', 'pd', 'fe', 'v', 'g', 'fx', 'i', 'sa', 'rs',
+  ]);
   const rest: Record<string, unknown> = {};
   for (const key of Object.keys(data)) {
-    if (!['p', 'rc', 'prd', 'h', 'rd', 'wr', 'ud', 'pd', 'fe', 'v', 'g', 'fx', 'i', 'sa'].includes(key)) {
-      rest[key] = data[key];
-    }
+    if (!known.has(key)) rest[key] = data[key];
   }
 
   const rawSection = buildRawTable(rest);
@@ -507,6 +521,147 @@ function normalizeAlignedIntervalEntries(
   );
 }
 
+function buildFocus(fx: Record<string, unknown>) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Focus</div>
+      <div className="flex flex-wrap gap-3 text-sm text-slate-300">
+        {fx.k != null ? (
+          <span>
+            Kind: <span className="font-mono text-cyan-300">{String(fx.k)}</span>
+          </span>
+        ) : null}
+        {fx.id != null ? (
+          <span>
+            Id: <span className="font-mono text-slate-200">{String(fx.id)}</span>
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function buildRaceStrategy(rs: unknown): React.ReactNode {
+  const rows = parseHeaderTable(rs);
+  if (rows.length === 0) return null;
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        Race Strategy ({rows.length})
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-white/10 text-left text-xs uppercase text-slate-500">
+            <th className="pb-1 pr-3">Date</th>
+            <th className="pb-1 pr-3">Name</th>
+            <th className="pb-1 pr-3">Priority</th>
+            <th className="pb-1 pr-3">Discipline</th>
+            <th className="pb-1 pr-3">Days out</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} className="border-b border-white/5 text-slate-200">
+              <td className="py-1 pr-3 text-slate-400">{String(row.d ?? '')}</td>
+              <td className="py-1 pr-3">{String(row.n ?? '')}</td>
+              <td className="py-1 pr-3">
+                <PriorityBadge priority={String(row.pri ?? '')} />
+              </td>
+              <td className="py-1 pr-3">{String(row.disc ?? '')}</td>
+              <td className="py-1 pr-3">{row.days_out != null ? String(row.days_out) : ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function buildUpcomingDays(ud: unknown[]) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        Upcoming Days
+      </div>
+      <div className="space-y-2">
+        {ud.map((item, i) => {
+          const d = item as Record<string, unknown>;
+          const planned = parseHeaderTable(d.pw);
+          return (
+            <details key={i}>
+              <summary className="cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm">
+                <span className="text-slate-300">{String(d.d ?? '')}</span>
+                {d.fr ? <span className="ml-2 text-xs text-cyan-400">Calendar Empty</span> : null}
+                {planned.length > 0 ? (
+                  <span className="ml-2 text-xs text-slate-500">
+                    {planned.length} planned
+                  </span>
+                ) : (
+                  <span className="ml-2 text-xs text-slate-500">Rest</span>
+                )}
+              </summary>
+              {planned.length > 0 && (
+                <div className="mt-2 space-y-1 pl-2 text-sm text-slate-300">
+                  {planned.map((workout, j) => (
+                    <div key={j}>
+                      {String(workout.n ?? workout.id ?? 'Planned')}
+                      {workout.tss != null ? (
+                        <span className="ml-2 text-xs text-slate-500">{String(workout.tss)} TSS</span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </details>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function buildProjectedDays(pd: unknown[]) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        Projected Days
+      </div>
+      <div className="space-y-2">
+        {pd.map((item, i) => {
+          const d = item as Record<string, unknown>;
+          const workouts = parseHeaderTable(d.w);
+          return (
+            <details key={i}>
+              <summary className="cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm">
+                <span className="text-slate-300">{String(d.d ?? '')}</span>
+                <span className="ml-2 text-xs text-slate-500">
+                  {workouts.length > 0
+                    ? `${workouts.length} workout${workouts.length > 1 ? 's' : ''}`
+                    : 'empty'}
+                </span>
+              </summary>
+              {workouts.length > 0 && (
+                <div className="mt-2 space-y-1 pl-2 text-sm text-slate-300">
+                  {workouts.map((workout, j) => (
+                    <div key={j}>
+                      {String(workout.n ?? workout.swid ?? 'Projected')}
+                      {workout.rest ? (
+                        <span className="ml-2 text-xs text-slate-500">
+                          Rest{workout.rr ? `: ${String(workout.rr)}` : ''}
+                        </span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </details>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function buildRecentDays(rd: unknown[]) {
   return (
     <div>
@@ -596,16 +751,52 @@ function buildRawTable(data: Record<string, unknown>) {
   return (
     <div>
       <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Other Fields</div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm md:grid-cols-3">
-        {entries.map(([key, val]) => (
-          <div key={key} className="flex justify-between gap-2">
-            <span className="text-slate-400">{decodeShortKey(key)}</span>
-            <span className="text-slate-200">{fmtVal(val)}</span>
-          </div>
-        ))}
+      <div className="space-y-3">
+        {entries.map(([key, val]) => {
+          const rows = parseHeaderTable(val);
+          if (rows.length > 0) {
+            const headers = Object.keys(rows[0] ?? {});
+            return (
+              <div key={key}>
+                <div className="mb-1 text-xs text-slate-400">{decodeShortKey(key)}</div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 text-left text-slate-500">
+                      {headers.map((header) => (
+                        <th key={header} className="pb-1 pr-2">{decodeShortKey(header)}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, i) => (
+                      <tr key={i} className="border-b border-white/5 text-slate-300">
+                        {headers.map((header) => (
+                          <td key={header} className="py-0.5 pr-2">{fmtCell(row[header])}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          }
+          return (
+            <div key={key} className="flex justify-between gap-2 text-sm">
+              <span className="text-slate-400">{decodeShortKey(key)}</span>
+              <span className="text-slate-200">{fmtVal(val)}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
+}
+
+function fmtCell(v: unknown): string {
+  if (v == null) return '—';
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'string') return v;
+  return fmtVal(v);
 }
 
 function fmtVal(v: unknown): string {

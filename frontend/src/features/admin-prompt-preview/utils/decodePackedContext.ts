@@ -76,6 +76,8 @@ const KEY_LABEL: Record<string, string> = {
   doc: 'Raw Doc',
   done: 'Completed',
   km: 'Distance (km)',
+  rs: 'Race Strategy',
+  days_out: 'Days Out',
   disc: 'Discipline',
   pri: 'Priority',
   n7d: 'Avg NP 7d',
