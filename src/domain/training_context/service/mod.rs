@@ -4,7 +4,7 @@ use std::{
 };
 
 use chrono::{Duration, NaiveDate};
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::domain::{
     completed_workouts::{
@@ -56,6 +56,7 @@ use context::{
 };
 use dates::{activity_date, epoch_seconds_to_date, event_date};
 use history::build_recent_interval_blocks_by_activity_id;
+use power::raw_stream;
 use summary_lookup::{load_workout_summary_fields, WorkoutSummaryDateScope};
 
 mod workout_pick;
@@ -511,6 +512,7 @@ where
             ),
             Err(_) => (Vec::new(), "internal_error".to_string()),
         };
+        log_alignment_candidates(user_id, workout_id, &history_completed_workouts);
         // Align against the packed row: Intervals+Wahoo share source_activity_id but different legacy ids.
         let align_id = history_completed_workouts
             .iter()
@@ -549,6 +551,14 @@ where
             }
             Err(_) => (Vec::new(), Vec::new(), "internal_error".to_string()),
         };
+        info!(
+            user_id = %user_id,
+            selected_workout_id = %workout_id,
+            align_activity_id = %align_id,
+            planned_workout_count = planned_workouts.len(),
+            special_day_count = special_days.len(),
+            "training_context alignment: loaded planned sources"
+        );
         let planned_events_by_id = planned_workouts
             .iter()
             .map(|workout| {
@@ -560,6 +570,14 @@ where
             .collect::<HashMap<_, _>>();
         let direct_event_matches =
             build_direct_event_matches(&history_completed_workouts, &planned_events_by_id);
+        info!(
+            user_id = %user_id,
+            selected_workout_id = %workout_id,
+            align_activity_id = %align_id,
+            direct_match_count = direct_event_matches.len(),
+            align_direct_match = direct_event_matches.get(&align_id).map(|event| event.id),
+            "training_context alignment: mapped completed workouts to planned events"
+        );
         let all_events = build_local_events(&planned_workouts, &special_days);
         let stable_future_events = all_events
             .iter()
@@ -704,13 +722,34 @@ where
 
         let mut recent_days = recent_days;
         if focus_kind != "summary" {
+            info!(
+                user_id = %user_id,
+                selected_workout_id = %workout_id,
+                align_activity_id = %align_id,
+                focus_kind = %focus_kind,
+                "training_context alignment: attempting adjusted blocks"
+            );
             if let Some(aligned) = compute_selected_aligned_intervals(
                 &align_id,
                 &recent_days,
                 &detailed_recent_activities,
                 configured_ftp,
             ) {
+                info!(
+                    user_id = %user_id,
+                    selected_workout_id = %workout_id,
+                    align_activity_id = %align_id,
+                    aligned_interval_count = aligned.len(),
+                    "training_context alignment: adjusted blocks built"
+                );
                 attach_aligned_intervals(&mut recent_days, &align_id, &aligned);
+            } else {
+                info!(
+                    user_id = %user_id,
+                    selected_workout_id = %workout_id,
+                    align_activity_id = %align_id,
+                    "training_context alignment: adjusted blocks unavailable"
+                );
             }
         }
 
@@ -1010,12 +1049,50 @@ fn compute_selected_aligned_intervals(
     detailed_activities: &[Activity],
     configured_ftp: Option<i32>,
 ) -> Option<Vec<crate::domain::workout_alignment::AlignedInterval>> {
+    info!(
+        align_activity_id = %workout_id,
+        recent_day_count = recent_days.len(),
+        detailed_activity_count = detailed_activities.len(),
+        "training_context alignment: evaluating adjusted block prerequisites"
+    );
     let workout = recent_days
         .iter()
         .flat_map(|day| day.workouts.iter())
-        .find(|w| w.activity_id == workout_id)?;
-    let planned = workout.planned_workout.as_ref()?;
-    let activity = detailed_activities.iter().find(|a| a.id == workout_id)?;
+        .find(|w| w.activity_id == workout_id);
+    let Some(workout) = workout else {
+        info!(
+            align_activity_id = %workout_id,
+            "training_context alignment: no packed workout row for selected activity"
+        );
+        return None;
+    };
+    let planned = workout.planned_workout.as_ref();
+    let Some(planned) = planned else {
+        info!(
+            align_activity_id = %workout_id,
+            has_power_segments = !workout.power_segments.is_empty(),
+            has_cadence_segments = !workout.cadence_segments.is_empty(),
+            "training_context alignment: packed workout missing planned_workout link"
+        );
+        return None;
+    };
+    let activity = detailed_activities.iter().find(|a| a.id == workout_id);
+    let Some(activity) = activity else {
+        info!(
+            align_activity_id = %workout_id,
+            "training_context alignment: detailed activity not found"
+        );
+        return None;
+    };
+    info!(
+        align_activity_id = %workout_id,
+        planned_block_count = planned.interval_blocks.len(),
+        raw_watts_points = raw_stream(&activity.details.streams, "watts").len(),
+        raw_cadence_points = raw_stream(&activity.details.streams, "cadence").len(),
+        activity_ftp = activity.metrics.ftp_watts,
+        configured_ftp,
+        "training_context alignment: computing adjusted blocks"
+    );
     compute_aligned_intervals(activity, planned, configured_ftp)
 }
 
@@ -1410,6 +1487,62 @@ fn default_special_day_name(kind: &SpecialDayKind) -> String {
 
 fn date_key(value: &str) -> &str {
     value.get(..10).unwrap_or(value)
+}
+
+fn log_alignment_candidates(user_id: &str, workout_id: &str, workouts: &[CompletedWorkout]) {
+    let selected = workouts
+        .iter()
+        .filter(|workout| completed_workout_matches_selection(workout, workout_id))
+        .collect::<Vec<_>>();
+    if selected.is_empty() {
+        info!(
+            user_id = %user_id,
+            selected_workout_id = %workout_id,
+            "training_context alignment: no completed workout matched selection"
+        );
+        return;
+    }
+
+    for workout in selected {
+        let watts_points = completed_stream_points(workout, "watts");
+        let cadence_points = completed_stream_points(workout, "cadence");
+        info!(
+            user_id = %user_id,
+            selected_workout_id = %workout_id,
+            completed_workout_id = %workout.completed_workout_id,
+            source_activity_id = workout.source_activity_id.as_deref(),
+            legacy_activity_id = %legacy_activity_id(&workout.completed_workout_id),
+            planned_workout_id = workout.planned_workout_id.as_deref(),
+            is_wahoo = workout.completed_workout_id.starts_with("wahoo-workout:"),
+            watts_points,
+            cadence_points,
+            "training_context alignment: candidate completed workout details"
+        );
+    }
+}
+
+fn completed_stream_points(workout: &CompletedWorkout, stream_type: &str) -> usize {
+    workout
+        .details
+        .streams
+        .iter()
+        .filter(|stream| stream.stream_type.eq_ignore_ascii_case(stream_type))
+        .map(|stream| {
+            stream_point_count(stream.primary_series.as_ref())
+                .max(stream_point_count(stream.secondary_series.as_ref()))
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+fn stream_point_count(series: Option<&CompletedWorkoutSeries>) -> usize {
+    match series {
+        Some(CompletedWorkoutSeries::Integers(values)) => values.len(),
+        Some(CompletedWorkoutSeries::Floats(values)) => values.len(),
+        Some(CompletedWorkoutSeries::Bools(values)) => values.len(),
+        Some(CompletedWorkoutSeries::Strings(values)) => values.len(),
+        None => 0,
+    }
 }
 
 #[cfg(test)]
