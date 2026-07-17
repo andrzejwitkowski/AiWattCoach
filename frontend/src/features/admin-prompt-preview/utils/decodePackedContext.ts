@@ -43,6 +43,7 @@ const KEY_LABEL: Record<string, string> = {
   if28: 'Avg IF 28d',
   lt: 'Load Trend',
   w: 'Workouts',
+  sa: 'Aligned Intervals',
   pw: 'Planned Workouts',
   days: 'Days',
   tss: 'TSS',
@@ -85,6 +86,21 @@ export function decodeShortKey(key: string): string {
   return KEY_LABEL[key] ?? key;
 }
 
+export function parseHeaderTable(table: unknown): Record<string, unknown>[] {
+  if (typeof table !== 'object' || table === null || Array.isArray(table)) return [];
+  const { h, r } = table as { h?: unknown; r?: unknown };
+  if (!Array.isArray(h) || !Array.isArray(r)) return [];
+
+  const headers = h.map(String);
+  return r.flatMap((row) => {
+    if (!Array.isArray(row)) return [];
+    const record: Record<string, unknown> = {};
+    headers.forEach((header, index) => {
+      record[header] = row[index] ?? null;
+    });
+    return [record];
+  });
+}
 export function formatSeconds(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);

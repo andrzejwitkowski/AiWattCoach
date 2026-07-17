@@ -408,7 +408,7 @@ async fn preview_post_workout_calculates_adjusted_blocks_from_plan_and_wahoo_fit
     // --- 5) Adjusted blocks from preview must equal the alignment of plan + FIT raw ---
     let expected_sa = serde_json::to_value(&expected).expect("expected intervals serialize");
     assert_eq!(
-        volatile["sa"], expected_sa,
+        volatile["sa"]["476396735"], expected_sa,
         "preview must calculate adjusted blocks from planned steps + Wahoo FIT raw streams"
     );
 

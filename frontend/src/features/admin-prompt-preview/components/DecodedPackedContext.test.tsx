@@ -88,4 +88,60 @@ describe('DecodedPackedContext', () => {
     expect(screen.getByText('84 RPM · 5m')).toBeInTheDocument();
     expect(screen.queryByText('[1 items]')).not.toBeInTheDocument();
   });
+
+  it('renders recent days from header-mapped workout tables instead of labeling them rest', () => {
+    render(
+      <DecodedPackedContext
+        label="Volatile Training Context"
+        data={{
+          rd: [
+            {
+              d: '2026-07-15',
+              fr: false,
+              w: {
+                h: ['id', 'sd', 'n', 'tss'],
+                r: [['ride-1', '2026-07-15T10:00:00', 'Endurance', 72]],
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('1 workout')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('2026-07-15'));
+    expect(screen.getByText('Endurance')).toBeInTheDocument();
+    expect(screen.getByText('72 TSS')).toBeInTheDocument();
+    expect(screen.queryByText('Rest', { selector: 'summary span' })).not.toBeInTheDocument();
+  });
+
+  it('renders aligned intervals map instead of collapsing sa to other fields', () => {
+    render(
+      <DecodedPackedContext
+        label="Volatile Training Context"
+        data={{
+          sa: {
+            'ride-1': [
+              {
+                interval_index: 0,
+                planned_step: {
+                  step_type: 'work',
+                  target_power_min: 200,
+                  target_power_max: 220,
+                  planned_duration_seconds: 600,
+                },
+                actual_duration_seconds: 580,
+                normalized_power: 215,
+              },
+            ],
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Aligned Intervals (1 workout)')).toBeInTheDocument();
+    expect(screen.getByText('ride-1')).toBeInTheDocument();
+    expect(screen.getByText('1 interval')).toBeInTheDocument();
+    expect(screen.queryByText('Other Fields')).not.toBeInTheDocument();
+  });
 });

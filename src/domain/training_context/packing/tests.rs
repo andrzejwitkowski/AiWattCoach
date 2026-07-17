@@ -415,6 +415,10 @@ fn selected_workout_aligned_intervals_emit_sa_and_clear_ps_cs() {
 
     assert!(rendered.volatile_context.contains("\"sa\""));
     assert!(rendered.volatile_context.contains("\"interval_index\""));
+    assert!(rendered.volatile_context.contains(&format!(
+        "\"sa\":{{\"{}\"",
+        context.recent_days[0].workouts[0].activity_id
+    )));
     assert!(!rendered.volatile_context.contains("[[220,220,3]]"));
 }
 

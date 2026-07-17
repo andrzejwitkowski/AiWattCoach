@@ -56,7 +56,6 @@ use context::{
 };
 use dates::{activity_date, epoch_seconds_to_date, event_date};
 use history::build_recent_interval_blocks_by_activity_id;
-use power::raw_stream;
 use summary_lookup::{load_workout_summary_fields, WorkoutSummaryDateScope};
 
 mod workout_pick;
@@ -754,36 +753,20 @@ where
         let focus_kind = infer_focus_kind(&align_id, &recent_days, &upcoming_days);
 
         let mut recent_days = recent_days;
-        if focus_kind != "summary" {
+        let aligned_workout_count = attach_all_recent_aligned_intervals(
+            &mut recent_days,
+            &detailed_recent_activities,
+            configured_ftp,
+        );
+        if aligned_workout_count > 0 {
             info!(
                 user_id = %user_id,
                 selected_workout_id = %workout_id,
                 align_activity_id = %align_id,
                 focus_kind = %focus_kind,
-                "training_context alignment: attempting adjusted blocks"
+                aligned_workout_count,
+                "training_context alignment: adjusted blocks built"
             );
-            if let Some(aligned) = compute_selected_aligned_intervals(
-                &align_id,
-                &recent_days,
-                &detailed_recent_activities,
-                configured_ftp,
-            ) {
-                info!(
-                    user_id = %user_id,
-                    selected_workout_id = %workout_id,
-                    align_activity_id = %align_id,
-                    aligned_interval_count = aligned.len(),
-                    "training_context alignment: adjusted blocks built"
-                );
-                attach_aligned_intervals(&mut recent_days, &align_id, &aligned);
-            } else {
-                info!(
-                    user_id = %user_id,
-                    selected_workout_id = %workout_id,
-                    align_activity_id = %align_id,
-                    "training_context alignment: adjusted blocks unavailable"
-                );
-            }
         }
 
         let context = TrainingContext {
@@ -1134,74 +1117,34 @@ where
     }
 }
 
-fn compute_selected_aligned_intervals(
-    workout_id: &str,
-    recent_days: &[RecentDayContext],
+fn attach_all_recent_aligned_intervals(
+    recent_days: &mut [RecentDayContext],
     detailed_activities: &[Activity],
     configured_ftp: Option<i32>,
-) -> Option<Vec<crate::domain::workout_alignment::AlignedInterval>> {
-    info!(
-        align_activity_id = %workout_id,
-        recent_day_count = recent_days.len(),
-        detailed_activity_count = detailed_activities.len(),
-        "training_context alignment: evaluating adjusted block prerequisites"
-    );
-    let workout = recent_days
+) -> usize {
+    let activities_by_id = detailed_activities
         .iter()
-        .flat_map(|day| day.workouts.iter())
-        .find(|w| w.activity_id == workout_id);
-    let Some(workout) = workout else {
-        info!(
-            align_activity_id = %workout_id,
-            "training_context alignment: no packed workout row for selected activity"
-        );
-        return None;
-    };
-    let planned = workout.planned_workout.as_ref();
-    let Some(planned) = planned else {
-        info!(
-            align_activity_id = %workout_id,
-            has_power_segments = !workout.power_segments.is_empty(),
-            has_cadence_segments = !workout.cadence_segments.is_empty(),
-            "training_context alignment: packed workout missing planned_workout link"
-        );
-        return None;
-    };
-    let activity = detailed_activities.iter().find(|a| a.id == workout_id);
-    let Some(activity) = activity else {
-        info!(
-            align_activity_id = %workout_id,
-            "training_context alignment: detailed activity not found"
-        );
-        return None;
-    };
-    info!(
-        align_activity_id = %workout_id,
-        planned_block_count = planned.interval_blocks.len(),
-        raw_watts_points = raw_stream(&activity.details.streams, "watts").len(),
-        raw_cadence_points = raw_stream(&activity.details.streams, "cadence").len(),
-        activity_ftp = activity.metrics.ftp_watts,
-        configured_ftp,
-        "training_context alignment: computing adjusted blocks"
-    );
-    compute_aligned_intervals(activity, planned, configured_ftp)
-}
-
-fn attach_aligned_intervals(
-    recent_days: &mut [RecentDayContext],
-    workout_id: &str,
-    aligned: &[crate::domain::workout_alignment::AlignedInterval],
-) {
+        .map(|activity| (activity.id.as_str(), activity))
+        .collect::<HashMap<_, _>>();
+    let mut aligned_workout_count = 0_usize;
     for day in recent_days.iter_mut() {
         for workout in day.workouts.iter_mut() {
-            if workout.activity_id == workout_id {
-                workout.aligned_intervals = Some(aligned.to_vec());
-                workout.power_segments.clear();
-                workout.cadence_segments.clear();
-                return;
-            }
+            let Some(planned) = workout.planned_workout.as_ref() else {
+                continue;
+            };
+            let Some(activity) = activities_by_id.get(workout.activity_id.as_str()) else {
+                continue;
+            };
+            let Some(aligned) = compute_aligned_intervals(activity, planned, configured_ftp) else {
+                continue;
+            };
+            workout.aligned_intervals = Some(aligned);
+            workout.power_segments.clear();
+            workout.cadence_segments.clear();
+            aligned_workout_count += 1;
         }
     }
+    aligned_workout_count
 }
 
 pub(super) fn build_local_events(
