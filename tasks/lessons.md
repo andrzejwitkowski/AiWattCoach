@@ -72,6 +72,7 @@
 - When adding a new provider field to cache invalidation or config comparisons, add it everywhere.
 - **Plan→actual alignment IDs**: Resolve `align_id` / focus matching against the **post-dedupe** packed activity set, not the first Mongo list match. Intervals+Wahoo share `source_activity_id` but pack different legacy `activity_id`s; pre-dedupe first-match makes `focus_kind=summary` and leaves raw `ps`/`cs`.
 - **Plan link on Wahoo winner**: Plans sync to Intervals so `planned_workout_id` often lives only on the Intervals completed sibling; Wahoo wins prompt dedupe for FIT. When preferring Wahoo, merge the loser's `planned_workout_id` onto the winner (`or`), same idea as import `merge_completed_workout`. Otherwise packed context keeps raw `ps` and never emits `sa`.
+- **Authoritative plan filter vs alignment**: `AuthoritativePlannedWorkoutRepository` hides plans already linked to completed workouts (calendar correctness). Training-context alignment still needs those plan blocks for `direct_match_count` / `sa`. After authoritative load, restore missing `planned_workout_id`s from the unfiltered planned-workout repo before building `planned_events_by_id`.
 
 ## Testing
 

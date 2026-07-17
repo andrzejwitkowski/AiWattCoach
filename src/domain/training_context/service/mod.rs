@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
 
@@ -262,6 +262,9 @@ where
     completed_workout_target_service: Arc<dyn CompletedWorkoutTargetUseCases>,
     completed_workout_repository: Option<Arc<dyn CompletedWorkoutReadPort>>,
     planned_workout_repository: Option<Arc<dyn PlannedWorkoutReadPort>>,
+    /// Unfiltered planned-workout source used to restore plans hidden from calendar
+    /// once a completed workout already references them.
+    unfiltered_planned_workout_repository: Option<Arc<dyn PlannedWorkoutReadPort>>,
     special_day_repository: Option<Arc<dyn SpecialDayReadPort>>,
     ftp_history_repository: Option<Arc<dyn FtpHistoryReadPort>>,
     training_load_daily_snapshot_repository: Option<Arc<dyn TrainingLoadDailySnapshotReadPort>>,
@@ -287,6 +290,7 @@ where
             completed_workout_target_service,
             completed_workout_repository: None,
             planned_workout_repository: None,
+            unfiltered_planned_workout_repository: None,
             special_day_repository: None,
             ftp_history_repository: None,
             training_load_daily_snapshot_repository: None,
@@ -310,6 +314,17 @@ where
         Repository: PlannedWorkoutRepository,
     {
         self.planned_workout_repository = Some(Arc::new(repository));
+        self
+    }
+
+    pub fn with_unfiltered_planned_workout_repository<Repository>(
+        mut self,
+        repository: Repository,
+    ) -> Self
+    where
+        Repository: PlannedWorkoutRepository,
+    {
+        self.unfiltered_planned_workout_repository = Some(Arc::new(repository));
         self
     }
 
@@ -538,7 +553,7 @@ where
             .unwrap_or_default();
         let ftp_history = self.list_ftp_history(user_id).await.unwrap_or_default();
 
-        let (planned_workouts, special_days, events_status) = match self
+        let (mut planned_workouts, special_days, events_status) = match self
             .load_event_sources(
                 user_id,
                 &events_range.oldest,
@@ -551,6 +566,24 @@ where
             }
             Err(_) => (Vec::new(), Vec::new(), "internal_error".to_string()),
         };
+        if let Err(error) = self
+            .merge_linked_planned_workouts_for_alignment(
+                user_id,
+                &events_range.oldest,
+                &stable_future_events_range.newest,
+                &history_completed_workouts,
+                &mut planned_workouts,
+            )
+            .await
+        {
+            warn!(
+                user_id = %user_id,
+                selected_workout_id = %workout_id,
+                align_activity_id = %align_id,
+                error = %error,
+                "training_context alignment: failed to restore linked planned workouts"
+            );
+        }
         info!(
             user_id = %user_id,
             selected_workout_id = %workout_id,
@@ -1017,6 +1050,64 @@ where
         };
 
         Ok((planned_workouts, special_days))
+    }
+
+    async fn merge_linked_planned_workouts_for_alignment(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+        history_completed_workouts: &[CompletedWorkout],
+        planned_workouts: &mut Vec<PlannedWorkout>,
+    ) -> Result<(), LlmError> {
+        let Some(unfiltered_repository) = &self.unfiltered_planned_workout_repository else {
+            return Ok(());
+        };
+
+        let linked_planned_workout_ids = history_completed_workouts
+            .iter()
+            .filter_map(|workout| workout.planned_workout_id.clone())
+            .collect::<HashSet<_>>();
+        if linked_planned_workout_ids.is_empty() {
+            return Ok(());
+        }
+
+        let loaded_ids = planned_workouts
+            .iter()
+            .map(|workout| workout.planned_workout_id.clone())
+            .collect::<HashSet<_>>();
+        let missing_ids = linked_planned_workout_ids
+            .difference(&loaded_ids)
+            .cloned()
+            .collect::<Vec<_>>();
+        if missing_ids.is_empty() {
+            return Ok(());
+        }
+
+        let unfiltered = unfiltered_repository
+            .list_by_user_id_and_date_range(user_id, oldest, newest)
+            .await
+            .map_err(|error| LlmError::Internal(error.to_string()))?;
+        let mut restored = 0_usize;
+        let mut loaded_ids = loaded_ids;
+        for workout in unfiltered {
+            if missing_ids.contains(&workout.planned_workout_id)
+                && loaded_ids.insert(workout.planned_workout_id.clone())
+            {
+                planned_workouts.push(workout);
+                restored += 1;
+            }
+        }
+
+        if restored > 0 {
+            info!(
+                user_id = %user_id,
+                restored_linked_plan_count = restored,
+                "training_context alignment: restored authoritative-hidden linked plans"
+            );
+        }
+
+        Ok(())
     }
 
     async fn list_training_load_daily_snapshots(

@@ -5,6 +5,7 @@ use crate::domain::external_sync::{
 
 mod focus_and_aliases;
 mod load_history;
+mod preview_aligned_seed;
 mod rendering;
 
 #[derive(Clone, Default)]
