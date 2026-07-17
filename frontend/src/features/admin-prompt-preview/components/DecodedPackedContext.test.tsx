@@ -115,8 +115,22 @@ describe('DecodedPackedContext', () => {
     expect(screen.queryByText('Rest', { selector: 'summary span' })).not.toBeInTheDocument();
   });
 
+  it('keeps rs in Other Fields when no dedicated renderer exists', () => {
+    const { container } = render(
+      <DecodedPackedContext
+        label="Volatile Training Context"
+        data={{
+          rs: { h: ['d', 'n'], r: [['2026-07-20', 'Race A']] },
+        }}
+      />,
+    );
+
+    expect(container.textContent).toContain('Other Fields');
+    expect(container.textContent).toContain('rs');
+  });
+
   it('renders aligned intervals map instead of collapsing sa to other fields', () => {
-    render(
+    const { container } = render(
       <DecodedPackedContext
         label="Volatile Training Context"
         data={{
@@ -142,6 +156,6 @@ describe('DecodedPackedContext', () => {
     expect(screen.getByText('Aligned Intervals (1 workout)')).toBeInTheDocument();
     expect(screen.getByText('ride-1')).toBeInTheDocument();
     expect(screen.getByText('1 interval')).toBeInTheDocument();
-    expect(screen.queryByText('Other Fields')).not.toBeInTheDocument();
+    expect(container.textContent).not.toContain('Other Fields');
   });
 });

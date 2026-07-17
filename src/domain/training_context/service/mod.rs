@@ -568,8 +568,6 @@ where
         if let Err(error) = self
             .merge_linked_planned_workouts_for_alignment(
                 user_id,
-                &events_range.oldest,
-                &stable_future_events_range.newest,
                 &history_completed_workouts,
                 &mut planned_workouts,
             )
@@ -1038,8 +1036,6 @@ where
     async fn merge_linked_planned_workouts_for_alignment(
         &self,
         user_id: &str,
-        oldest: &str,
-        newest: &str,
         history_completed_workouts: &[CompletedWorkout],
         planned_workouts: &mut Vec<PlannedWorkout>,
     ) -> Result<(), LlmError> {
@@ -1062,13 +1058,15 @@ where
         let missing_ids = linked_planned_workout_ids
             .difference(&loaded_ids)
             .cloned()
-            .collect::<Vec<_>>();
+            .collect::<HashSet<_>>();
         if missing_ids.is_empty() {
             return Ok(());
         }
 
+        // Restore by plan id, not calendar window — linked plans may sit outside
+        // the events date range after reschedule / authoritative hide+restore.
         let unfiltered = unfiltered_repository
-            .list_by_user_id_and_date_range(user_id, oldest, newest)
+            .list_by_user_id(user_id)
             .await
             .map_err(|error| LlmError::Internal(error.to_string()))?;
         let mut restored = 0_usize;

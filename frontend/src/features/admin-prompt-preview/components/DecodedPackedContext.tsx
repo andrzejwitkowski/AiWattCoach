@@ -134,7 +134,7 @@ function buildSections(data: Record<string, unknown>): React.ReactNode[] {
 
   const rest: Record<string, unknown> = {};
   for (const key of Object.keys(data)) {
-    if (!['p', 'rc', 'prd', 'h', 'rd', 'wr', 'ud', 'pd', 'fe', 'v', 'g', 'fx', 'i', 'sa', 'rs'].includes(key)) {
+    if (!['p', 'rc', 'prd', 'h', 'rd', 'wr', 'ud', 'pd', 'fe', 'v', 'g', 'fx', 'i', 'sa'].includes(key)) {
       rest[key] = data[key];
     }
   }
