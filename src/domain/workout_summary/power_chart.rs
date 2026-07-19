@@ -111,11 +111,12 @@ fn watts_stream(workout: &CompletedWorkout) -> Option<Vec<i32>> {
         .streams
         .iter()
         .find(|s| s.stream_type.eq_ignore_ascii_case("watts"))?;
-    let series = stream
-        .primary_series
-        .as_ref()
-        .or(stream.secondary_series.as_ref())?;
-    match series {
+    numeric_series(stream.primary_series.as_ref())
+        .or_else(|| numeric_series(stream.secondary_series.as_ref()))
+}
+
+fn numeric_series(series: Option<&CompletedWorkoutSeries>) -> Option<Vec<i32>> {
+    match series? {
         CompletedWorkoutSeries::Integers(v) => Some(v.iter().map(|&x| x.max(0) as i32).collect()),
         CompletedWorkoutSeries::Floats(v) => Some(
             v.iter()

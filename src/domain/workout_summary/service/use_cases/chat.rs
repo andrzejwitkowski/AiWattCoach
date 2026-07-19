@@ -488,7 +488,13 @@ where
                 Some(data) => data,
                 None => return Ok(None),
             };
-        let png = crate::domain::workout_summary::power_chart::render_power_chart_png(&data);
+        let png = tokio::task::spawn_blocking(move || {
+            crate::domain::workout_summary::power_chart::render_power_chart_png(&data)
+        })
+        .await
+        .map_err(|e| {
+            WorkoutSummaryError::Repository(format!("power chart render task failed: {e}"))
+        })?;
         Ok(Some(BASE64_STANDARD.encode(png)))
     }
 }

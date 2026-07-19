@@ -304,7 +304,14 @@ pub async fn get_power_chart(
 
     match crate::domain::workout_summary::power_chart::extract_power_chart_data(&workout) {
         Some(data) => {
-            let png = crate::domain::workout_summary::power_chart::render_power_chart_png(&data);
+            let png = match tokio::task::spawn_blocking(move || {
+                crate::domain::workout_summary::power_chart::render_power_chart_png(&data)
+            })
+            .await
+            {
+                Ok(png) => png,
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            };
             (StatusCode::OK, [("content-type", "image/png")], png).into_response()
         }
         None => StatusCode::NOT_FOUND.into_response(),

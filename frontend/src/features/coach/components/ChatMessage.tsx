@@ -40,7 +40,13 @@ function PowerChartImage({ src }: { src: string }) {
         className="mt-3 block overflow-hidden rounded-xl border border-white/10"
         aria-label="Maximize power chart"
       >
-        <img src={src} alt="Power chart" className="max-h-56 w-auto cursor-zoom-in" />
+        <img
+          src={src}
+          alt="Power chart"
+          width={1200}
+          height={500}
+          className="max-h-56 w-auto cursor-zoom-in"
+        />
       </button>
       {isMaximized ? (
         <div
