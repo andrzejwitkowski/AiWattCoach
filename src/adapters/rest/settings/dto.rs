@@ -69,6 +69,8 @@ pub(super) struct AiAgentsDto {
     pub(super) meso_cycle_provider: Option<String>,
     #[serde(rename = "mesoCycleModel")]
     pub(super) meso_cycle_model: Option<String>,
+    #[serde(rename = "includePowerImage")]
+    pub(super) include_power_image: bool,
 }
 
 #[derive(Serialize)]
@@ -168,6 +170,8 @@ pub(crate) struct UpdateAiAgentsRequest {
     pub(super) meso_cycle_provider: OptionalStringInput,
     #[serde(default, rename = "mesoCycleModel")]
     pub(super) meso_cycle_model: OptionalStringInput,
+    #[serde(default, rename = "includePowerImage")]
+    pub(super) include_power_image: Option<bool>,
 }
 
 #[derive(Deserialize)]

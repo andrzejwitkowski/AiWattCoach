@@ -382,6 +382,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 tool_call: None,
                 questions: Vec::new(),
                 created_at_epoch_seconds: 1_700_000_000,
+                image_url: None,
             };
             let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
                 id: format!("message-coach-{}", next_user_suffix + 1),
@@ -390,6 +391,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 tool_call: None,
                 questions: Vec::new(),
                 created_at_epoch_seconds: 1_700_000_000,
+                image_url: None,
             };
 
             summary.messages.push(user_message.clone());
@@ -456,6 +458,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 tool_call: None,
                 questions: Vec::new(),
                 created_at_epoch_seconds: 1_700_000_000,
+                image_url: None,
             };
 
             summary.messages.push(user_message.clone());
@@ -533,6 +536,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                         tool_call: Some(tool_call),
                         questions: Vec::new(),
                         created_at_epoch_seconds: 1_700_000_000,
+                        image_url: None,
                     });
             }
 
@@ -544,6 +548,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 tool_call: None,
                 questions: Vec::new(),
                 created_at_epoch_seconds: 1_700_000_000,
+                image_url: None,
             };
 
             summary.messages.push(coach_message.clone());

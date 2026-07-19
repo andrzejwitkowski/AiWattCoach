@@ -203,6 +203,7 @@ async fn list_summaries_metadata_view_omits_messages() {
         questions: Vec::new(),
         tool_call: None,
         created_at_epoch_seconds: 1_700_000_010,
+        image_url: None,
     });
 
     let app = workout_summary_test_app(

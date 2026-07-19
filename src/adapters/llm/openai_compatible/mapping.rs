@@ -6,9 +6,10 @@ use crate::domain::llm::{
 };
 
 use super::dto::{
-    OpenAiChatRequest, OpenAiChatResponse, OpenAiFunctionDefinition, OpenAiMessage,
-    OpenAiNamedFunctionChoice, OpenAiNamedToolChoice, OpenAiPromptTokenDetails, OpenAiTool,
-    OpenAiToolCall, OpenAiToolChoice as OpenAiToolChoiceDto, OpenAiToolFunctionCall, OpenAiUsage,
+    OpenAiChatRequest, OpenAiChatResponse, OpenAiContentPart, OpenAiFunctionDefinition,
+    OpenAiImageUrl, OpenAiMessage, OpenAiMessageContent, OpenAiNamedFunctionChoice,
+    OpenAiNamedToolChoice, OpenAiPromptTokenDetails, OpenAiTool, OpenAiToolCall,
+    OpenAiToolChoice as OpenAiToolChoiceDto, OpenAiToolFunctionCall, OpenAiUsage,
 };
 
 pub fn map_request(
@@ -24,7 +25,7 @@ pub fn map_request(
     .into_iter()
     .map(|(role, content)| OpenAiMessage {
         role: role.to_string(),
-        content: Some(content.to_string()),
+        content: Some(OpenAiMessageContent::Text(content.to_string())),
         tool_calls: Vec::new(),
         tool_call_id: None,
         reasoning_content: None,
@@ -119,21 +120,41 @@ pub fn map_response(
 }
 
 pub(crate) fn map_message(message: LlmChatMessage) -> OpenAiMessage {
+    let LlmChatMessage {
+        role,
+        content,
+        tool_calls,
+        tool_call_id,
+        reasoning_content,
+        image_base64,
+    } = message;
+    let content = match image_base64 {
+        Some(b64) => {
+            let mut parts = Vec::new();
+            if !content.is_empty() {
+                parts.push(OpenAiContentPart::Text { text: content });
+            }
+            parts.push(OpenAiContentPart::ImageUrl {
+                image_url: OpenAiImageUrl {
+                    url: format!("data:image/png;base64,{b64}"),
+                    detail: Some("high".to_string()),
+                },
+            });
+            Some(OpenAiMessageContent::Parts(parts))
+        }
+        None => (!content.is_empty()).then_some(OpenAiMessageContent::Text(content)),
+    };
     OpenAiMessage {
-        role: match message.role {
+        role: match role {
             LlmMessageRole::System => "system".to_string(),
             LlmMessageRole::User => "user".to_string(),
             LlmMessageRole::Assistant => "assistant".to_string(),
             LlmMessageRole::Tool => "tool".to_string(),
         },
-        content: (!message.content.is_empty()).then_some(message.content),
-        tool_calls: message
-            .tool_calls
-            .into_iter()
-            .map(map_domain_tool_call)
-            .collect(),
-        tool_call_id: message.tool_call_id,
-        reasoning_content: message.reasoning_content,
+        content,
+        tool_calls: tool_calls.into_iter().map(map_domain_tool_call).collect(),
+        tool_call_id,
+        reasoning_content,
     }
 }
 
@@ -195,5 +216,38 @@ fn map_finish_reason(value: String) -> LlmFinishReason {
         "tool_calls" => LlmFinishReason::ToolCalls,
         "content_filter" => LlmFinishReason::ContentFilter,
         other => LlmFinishReason::Unknown(other.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn map_message_with_image_base64_emits_image_url_part() {
+        let mut message = LlmChatMessage::user("Analyze this");
+        message.image_base64 = Some("abc123".to_string());
+
+        let mapped = map_message(message);
+
+        let content = mapped.content.expect("content should be present");
+        let OpenAiMessageContent::Parts(parts) = content else {
+            panic!("expected parts content for image message");
+        };
+        assert_eq!(parts.len(), 2);
+        assert!(matches!(parts[0], OpenAiContentPart::Text { .. }));
+        let OpenAiContentPart::ImageUrl { image_url } = &parts[1] else {
+            panic!("expected image_url part");
+        };
+        assert_eq!(image_url.url, "data:image/png;base64,abc123");
+        assert_eq!(image_url.detail.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn map_message_without_image_keeps_text_content() {
+        let mapped = map_message(LlmChatMessage::user("plain text"));
+
+        let content = mapped.content.expect("content should be present");
+        assert_eq!(content.as_text(), Some("plain text"));
     }
 }

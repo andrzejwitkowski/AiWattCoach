@@ -24,6 +24,7 @@ export const conversationMessageSchema = z.object({
   toolCall: toolCallSchema.nullish(),
   questions: z.array(coachQuestionSchema).nullish(),
   createdAtEpochSeconds: z.number().int(),
+  imageUrl: z.string().nullish(),
 });
 
 const toolConversationMessageSchema = conversationMessageSchema.extend({

@@ -95,6 +95,7 @@ fn workout_summary_document_reads_datetime_fields_without_legacy_epoch() {
             questions: Vec::new(),
             created_at_epoch_seconds: None,
             created_at: Some(DateTime::from_millis(1_700_000_000_000)),
+            image_url: None,
         }],
         provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
@@ -321,6 +322,7 @@ fn map_message_to_domain_round_trips_questions() {
         }],
         created_at_epoch_seconds: Some(1_700_000_000),
         created_at: None,
+        image_url: None,
     };
 
     let message = map_message_to_domain(document).expect("coach message with questions should map");

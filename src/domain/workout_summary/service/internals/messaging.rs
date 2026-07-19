@@ -21,6 +21,7 @@ where
         workout_id: &str,
         role: MessageRole,
         content: String,
+        image_url: Option<String>,
     ) -> Result<ConversationMessage, WorkoutSummaryError> {
         self.append_message_with_role_and_id(
             user_id,
@@ -32,6 +33,7 @@ where
                 tool_call: None,
                 questions: Vec::new(),
                 require_open_summary: true,
+                image_url,
             },
         )
         .await
@@ -53,6 +55,7 @@ where
                 tool_call: Some(tool_call),
                 questions: Vec::new(),
                 require_open_summary: false,
+                image_url: None,
             },
         )
         .await
@@ -180,7 +183,7 @@ where
             .is_configured())
     }
 
-    async fn find_coach_settings(
+    pub(in super::super) async fn find_coach_settings(
         &self,
         settings_service: &Arc<dyn crate::domain::settings::UserSettingsUseCases>,
         user_id: &str,
@@ -232,6 +235,7 @@ where
             tool_call: input.tool_call,
             questions: input.questions,
             created_at_epoch_seconds: now,
+            image_url: input.image_url,
         }
     }
 

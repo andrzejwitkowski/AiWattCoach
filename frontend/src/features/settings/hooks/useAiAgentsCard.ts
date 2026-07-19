@@ -52,8 +52,10 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
         workoutPlanningModel: aiAgents.workoutPlanningModel ?? '',
         mesoCycleProvider: aiAgents.mesoCycleProvider ?? '',
         mesoCycleModel: aiAgents.mesoCycleModel ?? '',
+        includePowerImage: aiAgents.includePowerImage ?? false,
       }),
     [
+      aiAgents.includePowerImage,
       aiAgents.mesoCycleModel,
       aiAgents.mesoCycleProvider,
       aiAgents.selectedModel,
@@ -126,6 +128,11 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
   ) => {
     clearTestStatus();
     setDraft((current) => updateProviderDraft(current, providerField, modelField, value));
+  };
+
+  const toggleIncludePowerImage = (value: boolean) => {
+    clearTestStatus();
+    setDraft((current) => ({ ...current, includePowerImage: value }));
   };
 
   const handleSave = async () => {
@@ -219,6 +226,7 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
     updateDraft,
     updateProvider,
     updateOverrideProvider,
+    toggleIncludePowerImage,
     handleSave,
     handleTest,
   };

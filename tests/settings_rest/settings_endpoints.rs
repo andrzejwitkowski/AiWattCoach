@@ -1457,6 +1457,7 @@ async fn test_ai_agents_connection_returns_bad_request_when_provider_changes_wit
         workout_planning_model: None,
         meso_cycle_provider: None,
         meso_cycle_model: None,
+        include_power_image: false,
     };
     let app = settings_test_app_with_services(
         TestIdentityServiceWithSession::default(),

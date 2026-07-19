@@ -278,3 +278,35 @@ pub async fn send_message(
         Err(error) => map_workout_summary_error(&error),
     }
 }
+
+pub async fn get_power_chart(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<WorkoutSummaryPath>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+    let service = match state.completed_workout_service.as_ref() {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let workout = match service
+        .get_completed_workout(&user_id, &path.workout_id)
+        .await
+    {
+        Ok(Some(workout)) => workout,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    match crate::domain::workout_summary::power_chart::extract_power_chart_data(&workout) {
+        Some(data) => {
+            let png = crate::domain::workout_summary::power_chart::render_power_chart_png(&data);
+            (StatusCode::OK, [("content-type", "image/png")], png).into_response()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}

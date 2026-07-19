@@ -53,6 +53,7 @@ pub(super) fn map_settings_to_dto(
                 .as_ref()
                 .map(|provider| provider.as_str().to_string()),
             meso_cycle_model: settings.ai_agents.meso_cycle_model.clone(),
+            include_power_image: settings.ai_agents.include_power_image,
         },
         intervals: IntervalsDto {
             api_key: mask_sensitive(&settings.intervals.api_key),
@@ -233,6 +234,9 @@ pub(super) fn map_ai_agents_update(
         workout_planning_model,
         meso_cycle_provider: validation::validate_ai_provider(meso_cycle_provider)?,
         meso_cycle_model,
+        include_power_image: body
+            .include_power_image
+            .unwrap_or(current.ai_agents.include_power_image),
     })
 }
 

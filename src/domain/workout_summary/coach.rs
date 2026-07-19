@@ -9,6 +9,7 @@ pub trait WorkoutCoach: Send + Sync {
         summary: &WorkoutSummary,
         user_message: &str,
         athlete_summary_text: Option<&str>,
+        power_chart_base64: Option<&str>,
     ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>>;
 }
 
@@ -22,6 +23,7 @@ impl WorkoutCoach for MockWorkoutCoach {
         summary: &WorkoutSummary,
         user_message: &str,
         _athlete_summary_text: Option<&str>,
+        _power_chart_base64: Option<&str>,
     ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
         let response = match summary.rpe {
             Some(rpe) if rpe >= 8 => format!(

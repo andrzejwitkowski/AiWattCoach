@@ -385,6 +385,7 @@ impl WorkoutCoach for TestCoach {
         _summary: &WorkoutSummary,
         user_message: &str,
         _athlete_summary_text: Option<&str>,
+        _power_chart_base64: Option<&str>,
     ) -> crate::domain::llm::BoxFuture<Result<crate::domain::llm_tools::LlmToolLoopOutput, LlmError>>
     {
         let error = self.fail_with.lock().expect("coach mutex poisoned").take();
@@ -434,6 +435,7 @@ impl WorkoutCoach for BlockingCoach {
         _summary: &WorkoutSummary,
         user_message: &str,
         _athlete_summary_text: Option<&str>,
+        _power_chart_base64: Option<&str>,
     ) -> crate::domain::llm::BoxFuture<Result<crate::domain::llm_tools::LlmToolLoopOutput, LlmError>>
     {
         let started = self.started.clone();

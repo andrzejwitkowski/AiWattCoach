@@ -42,6 +42,17 @@ where
         })
     }
 
+    fn load_completed_workout(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> BoxFuture<Result<Option<CompletedWorkout>, WorkoutSummaryError>> {
+        let repository = self.repository.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move { resolve_completed_workout(&repository, &user_id, &workout_id).await })
+    }
+
     fn resolve_completed_workout_target(
         &self,
         user_id: &str,

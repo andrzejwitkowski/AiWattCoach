@@ -62,8 +62,8 @@ export function buildAiAgentsConnectionBody(
   data: unknown,
   validated: ValidatedAiAgents,
   options?: { includeMesoFields?: boolean },
-): Record<string, string | null> {
-  const body: Record<string, string | null> = {};
+): Record<string, string | null | boolean> {
+  const body: Record<string, string | null | boolean> = {};
   const fields: AiAgentsFieldKey[] = [
     'openaiApiKey',
     'geminiApiKey',
@@ -90,6 +90,13 @@ export function buildAiAgentsConnectionBody(
     }
     if (mesoCycleModel !== undefined) {
       body.mesoCycleModel = mesoCycleModel;
+    }
+  }
+
+  if (data && typeof data === 'object' && 'includePowerImage' in data) {
+    const includePowerImage = (data as Record<string, unknown>).includePowerImage;
+    if (typeof includePowerImage === 'boolean') {
+      body.includePowerImage = includePowerImage;
     }
   }
 

@@ -110,6 +110,7 @@ pub(super) fn map_message_to_dto(message: ConversationMessage) -> ConversationMe
             })
             .collect(),
         created_at_epoch_seconds: message.created_at_epoch_seconds,
+        image_url: message.image_url,
     }
 }
 
@@ -126,6 +127,7 @@ mod tests {
             tool_call: None,
             questions: vec![],
             created_at_epoch_seconds: 1_000,
+            image_url: None,
         }
     }
 
@@ -135,6 +137,7 @@ mod tests {
             role: MessageRole::Coach,
             content: "Great effort today!".to_string(),
             tool_call: None,
+            image_url: None,
             questions: vec![
                 CoachQuestion {
                     id: "q1".to_string(),

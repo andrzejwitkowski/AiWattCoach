@@ -108,6 +108,8 @@ pub struct LlmChatMessage {
     pub tool_call_id: Option<String>,
     #[serde(default)]
     pub reasoning_content: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_base64: Option<String>,
 }
 
 impl LlmChatMessage {
@@ -118,6 +120,7 @@ impl LlmChatMessage {
             tool_calls: Vec::new(),
             tool_call_id: None,
             reasoning_content: None,
+            image_base64: None,
         }
     }
 
@@ -128,6 +131,7 @@ impl LlmChatMessage {
             tool_calls: Vec::new(),
             tool_call_id: None,
             reasoning_content: None,
+            image_base64: None,
         }
     }
 
@@ -138,6 +142,7 @@ impl LlmChatMessage {
             tool_calls: Vec::new(),
             tool_call_id: None,
             reasoning_content: None,
+            image_base64: None,
         }
     }
 
@@ -151,6 +156,7 @@ impl LlmChatMessage {
             tool_calls,
             tool_call_id: None,
             reasoning_content: None,
+            image_base64: None,
         }
     }
 
@@ -161,6 +167,7 @@ impl LlmChatMessage {
             tool_calls: Vec::new(),
             tool_call_id: Some(tool_call_id.into()),
             reasoning_content: None,
+            image_base64: None,
         }
     }
 }

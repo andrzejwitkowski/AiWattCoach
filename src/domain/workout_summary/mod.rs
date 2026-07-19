@@ -4,6 +4,7 @@ mod coach_output;
 mod meso_roadmap;
 mod model;
 mod ports;
+pub(crate) mod power_chart;
 mod prompt;
 mod save_completion_port;
 mod service;

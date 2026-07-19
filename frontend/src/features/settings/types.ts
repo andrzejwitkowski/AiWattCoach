@@ -22,6 +22,7 @@ const aiAgentsSettingsSchema = z.object({
   workoutChatModel: z.string().nullable().optional(),
   workoutPlanningProvider: llmProviderSchema.nullable().optional(),
   workoutPlanningModel: z.string().nullable().optional(),
+  includePowerImage: z.boolean().optional(),
 });
 
 const intervalsSettingsSchema = z.object({
@@ -163,6 +164,7 @@ export const updateAiAgentsRequestSchema = z.object({
   workoutChatModel: z.string().nullable().optional(),
   workoutPlanningProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
   workoutPlanningModel: z.string().nullable().optional(),
+  includePowerImage: z.boolean().optional(),
 });
 
 export type LlmProvider = z.infer<typeof llmProviderSchema>;

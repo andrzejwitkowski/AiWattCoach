@@ -1,4 +1,6 @@
-use crate::adapters::llm::openai_compatible::dto::{OpenAiChatRequest, OpenAiMessage};
+use crate::adapters::llm::openai_compatible::dto::{
+    OpenAiChatRequest, OpenAiMessage, OpenAiMessageContent,
+};
 use crate::adapters::llm::openai_compatible::mapping::{
     map_message, map_tool_choice, map_tool_definition,
 };
@@ -25,7 +27,7 @@ pub fn map_zai_request(
     if !merged_system.is_empty() {
         messages.push(OpenAiMessage {
             role: "system".to_string(),
-            content: Some(merged_system),
+            content: Some(OpenAiMessageContent::Text(merged_system)),
             tool_calls: Vec::new(),
             tool_call_id: None,
             reasoning_content: None,
@@ -100,7 +102,10 @@ mod tests {
         assert_eq!(payload.messages.len(), 2);
         assert_eq!(payload.messages[0].role, "system");
         assert_eq!(
-            payload.messages[0].content.as_deref(),
+            payload.messages[0]
+                .content
+                .as_ref()
+                .and_then(|c| c.as_text()),
             Some("coach\n\npacked=1")
         );
         assert_eq!(payload.prompt_cache_key.as_deref(), Some("cache-hash"));
@@ -127,7 +132,10 @@ mod tests {
         assert_eq!(payload.messages.len(), 4);
         assert_eq!(payload.messages[3].role, "user");
         assert_eq!(
-            payload.messages[3].content.as_deref(),
+            payload.messages[3]
+                .content
+                .as_ref()
+                .and_then(|c| c.as_text()),
             Some("second\n\ntiming=now")
         );
     }
@@ -145,7 +153,13 @@ mod tests {
 
         assert_eq!(payload.messages.len(), 1);
         assert_eq!(payload.messages[0].role, "user");
-        assert_eq!(payload.messages[0].content.as_deref(), Some("timing=now"));
+        assert_eq!(
+            payload.messages[0]
+                .content
+                .as_ref()
+                .and_then(|c| c.as_text()),
+            Some("timing=now")
+        );
     }
 
     #[test]
@@ -181,17 +195,29 @@ mod tests {
         .expect("turn two should map");
 
         assert_eq!(turn_one.messages[0].content, turn_two.messages[0].content);
-        assert_eq!(turn_two.messages[1].content.as_deref(), Some("hello"));
-        assert_eq!(turn_two.messages[2].content.as_deref(), Some("hi"));
+        assert_eq!(
+            turn_two.messages[1]
+                .content
+                .as_ref()
+                .and_then(|c| c.as_text()),
+            Some("hello")
+        );
+        assert_eq!(
+            turn_two.messages[2]
+                .content
+                .as_ref()
+                .and_then(|c| c.as_text()),
+            Some("hi")
+        );
         assert_ne!(
             turn_one
                 .messages
                 .last()
-                .and_then(|message| message.content.as_deref()),
+                .and_then(|m| m.content.as_ref().and_then(|c| c.as_text())),
             turn_two
                 .messages
                 .last()
-                .and_then(|message| message.content.as_deref())
+                .and_then(|m| m.content.as_ref().and_then(|c| c.as_text()))
         );
     }
 }

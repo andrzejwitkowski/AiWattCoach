@@ -14,6 +14,7 @@ export type AiAgentsDraftState = {
   workoutPlanningModel: string;
   mesoCycleProvider: string;
   mesoCycleModel: string;
+  includePowerImage: boolean;
 };
 
 type PersistedAiAgentsDraft = Pick<
@@ -26,6 +27,7 @@ type PersistedAiAgentsDraft = Pick<
   | 'workoutPlanningModel'
   | 'mesoCycleProvider'
   | 'mesoCycleModel'
+  | 'includePowerImage'
 >;
 
 export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiAgentsDraftState {
@@ -43,6 +45,7 @@ export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiA
     workoutPlanningModel: persisted.workoutPlanningModel,
     mesoCycleProvider: persisted.mesoCycleProvider,
     mesoCycleModel: persisted.mesoCycleModel,
+    includePowerImage: persisted.includePowerImage,
   };
 }
 
@@ -107,6 +110,10 @@ export function mergeDraftWithPersisted(
       current.mesoCycleModel === previousPersisted.mesoCycleModel
         ? persisted.mesoCycleModel
         : current.mesoCycleModel,
+    includePowerImage:
+      current.includePowerImage === previousPersisted.includePowerImage
+        ? persisted.includePowerImage
+        : current.includePowerImage,
   };
 }
 
@@ -124,12 +131,13 @@ export function isAiAgentsDraftDirty(current: AiAgentsDraftState, clean: AiAgent
     current.workoutPlanningProvider !== clean.workoutPlanningProvider ||
     current.workoutPlanningModel !== clean.workoutPlanningModel ||
     current.mesoCycleProvider !== clean.mesoCycleProvider ||
-    current.mesoCycleModel !== clean.mesoCycleModel
+    current.mesoCycleModel !== clean.mesoCycleModel ||
+    current.includePowerImage !== clean.includePowerImage
   );
 }
 
 function assignTrimmedApiKey(
-  request: Partial<Record<keyof AiAgentsDraftState, string | null>>,
+  request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>>,
   key: keyof AiAgentsDraftState,
   value: string,
 ) {
@@ -140,7 +148,7 @@ function assignTrimmedApiKey(
 }
 
 function assignChangedStringField(
-  request: Partial<Record<keyof AiAgentsDraftState, string | null>>,
+  request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>>,
   key: keyof AiAgentsDraftState,
   currentValue: string,
   persistedValue: string,
@@ -154,8 +162,8 @@ function assignChangedStringField(
 export function buildVisibleAiAgentsRequest(
   draft: AiAgentsDraftState,
   persisted: AiAgentsDraftState,
-): Partial<Record<keyof AiAgentsDraftState, string | null>> {
-  const request: Partial<Record<keyof AiAgentsDraftState, string | null>> = {};
+): Partial<Record<keyof AiAgentsDraftState, string | null | boolean>> {
+  const request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>> = {};
 
   assignTrimmedApiKey(request, 'openaiApiKey', draft.openaiApiKey);
   assignTrimmedApiKey(request, 'geminiApiKey', draft.geminiApiKey);
@@ -186,6 +194,10 @@ export function buildVisibleAiAgentsRequest(
   assignChangedStringField(request, 'workoutPlanningModel', draft.workoutPlanningModel, persisted.workoutPlanningModel);
   assignChangedStringField(request, 'mesoCycleProvider', draft.mesoCycleProvider, persisted.mesoCycleProvider);
   assignChangedStringField(request, 'mesoCycleModel', draft.mesoCycleModel, persisted.mesoCycleModel);
+
+  if (draft.includePowerImage !== persisted.includePowerImage) {
+    request.includePowerImage = draft.includePowerImage;
+  }
 
   return request;
 }

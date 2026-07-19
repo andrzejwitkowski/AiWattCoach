@@ -625,6 +625,7 @@ mod tests {
                             tool_call: None,
                             questions: Vec::new(),
                             created_at_epoch_seconds: 1,
+                            image_url: None,
                         },
                         ConversationMessage {
                             id: "tool-1".to_string(),
@@ -633,6 +634,7 @@ mod tests {
                             tool_call: None,
                             questions: Vec::new(),
                             created_at_epoch_seconds: 2,
+                            image_url: None,
                         },
                         ConversationMessage {
                             id: "coach-1".to_string(),
@@ -641,6 +643,7 @@ mod tests {
                             tool_call: None,
                             questions: Vec::new(),
                             created_at_epoch_seconds: 3,
+                            image_url: None,
                         },
                     ],
                     provider_transcript: vec![LlmChatMessage::assistant(

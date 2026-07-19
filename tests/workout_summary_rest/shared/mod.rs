@@ -8,7 +8,8 @@ mod settings_stub;
 mod workout_summary;
 
 pub(crate) use app::{
-    get_json, session_cookie, workout_summary_test_app, workout_summary_test_app_with_settings,
+    get_json, session_cookie, workout_summary_test_app,
+    workout_summary_test_app_with_completed_workouts, workout_summary_test_app_with_settings,
     workout_summary_test_app_with_settings_and_notifier,
 };
 pub(crate) use clock::TestClock;

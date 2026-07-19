@@ -178,6 +178,7 @@ pub fn planning_conversation_messages(
             tool_calls: Vec::new(),
             tool_call_id: None,
             reasoning_content: None,
+            image_base64: None,
         })
         .collect()
 }

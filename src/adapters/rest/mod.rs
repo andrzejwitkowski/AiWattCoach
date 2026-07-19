@@ -265,6 +265,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                     post(workout_summary::send_message),
                 )
                 .route(
+                    "/api/workout-summaries/{workout_id}/power-chart.png",
+                    get(workout_summary::get_power_chart),
+                )
+                .route(
                     "/api/intervals/events",
                     get(intervals::list_events).post(intervals::create_event),
                 )

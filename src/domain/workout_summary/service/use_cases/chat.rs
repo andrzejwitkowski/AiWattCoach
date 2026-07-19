@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use tracing::{info, warn};
 
 use crate::domain::llm::{
@@ -48,12 +49,20 @@ where
             .resolve_workout_summary_target(user_id, workout_id, None)
             .await?;
 
+        let pre_summary = self
+            .get_existing_summary(user_id, &target.storage_workout_id)
+            .await?;
+        let image_url = self
+            .resolve_first_message_image_url(user_id, &target.storage_workout_id, &pre_summary)
+            .await?;
+
         let user_message = self
             .append_message_with_role(
                 user_id,
                 &target.storage_workout_id,
                 MessageRole::User,
                 content,
+                image_url,
             )
             .await?;
 
@@ -203,17 +212,39 @@ where
         let summary = self.get_existing_summary(user_id, workout_id).await?;
         let (athlete_summary_text, athlete_summary_was_regenerated) =
             self.ensure_athlete_summary(user_id).await?;
+        let power_chart_base64 = if summary.messages.iter().any(|m| m.image_url.is_some()) {
+            self.render_power_chart_base64(user_id, workout_id).await?
+        } else {
+            None
+        };
 
-        let llm_output = self
-            .request_coach_reply_from_llm(
+        let llm_output = match self
+            .coach
+            .reply(
                 user_id,
-                workout_id,
-                user_message,
                 &summary,
+                &user_message.content,
                 athlete_summary_text.as_deref(),
-                &operation,
+                power_chart_base64.as_deref(),
             )
-            .await?;
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                let failed = operation.mark_failed(&error, self.clock.now_epoch_seconds());
+                self.persist_post_provider_operation(failed, "persist_failed_checkpoint")
+                    .await?;
+                warn!(
+                    user_id = %user_id,
+                    workout_id = %workout_id,
+                    user_message_id = %user_message.id,
+                    retryable = error.is_retryable(),
+                    error = %error,
+                    "workout summary coach reply failed"
+                );
+                return Err(WorkoutSummaryError::Llm(error));
+            }
+        };
         let operation = self
             .persist_provider_response_checkpoint(user_id, workout_id, operation, &llm_output)
             .await?;
@@ -233,43 +264,6 @@ where
         };
 
         Ok((operation, llm_output, athlete_summary_was_regenerated))
-    }
-
-    async fn request_coach_reply_from_llm(
-        &self,
-        user_id: &str,
-        workout_id: &str,
-        user_message: &ConversationMessage,
-        summary: &WorkoutSummary,
-        athlete_summary_text: Option<&str>,
-        operation: &CoachReplyOperation,
-    ) -> Result<crate::domain::llm_tools::LlmToolLoopOutput, WorkoutSummaryError> {
-        match self
-            .coach
-            .reply(
-                user_id,
-                summary,
-                &user_message.content,
-                athlete_summary_text,
-            )
-            .await
-        {
-            Ok(response) => Ok(response),
-            Err(error) => {
-                let failed = operation.mark_failed(&error, self.clock.now_epoch_seconds());
-                self.persist_post_provider_operation(failed, "persist_failed_checkpoint")
-                    .await?;
-                warn!(
-                    user_id = %user_id,
-                    workout_id = %workout_id,
-                    user_message_id = %user_message.id,
-                    retryable = error.is_retryable(),
-                    error = %error,
-                    "workout summary coach reply failed"
-                );
-                Err(WorkoutSummaryError::Llm(error))
-            }
-        }
     }
 
     async fn persist_provider_response_checkpoint(
@@ -417,6 +411,85 @@ where
             coach_message,
             athlete_summary_was_regenerated,
         })
+    }
+
+    async fn resolve_first_message_image_url(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        summary: &WorkoutSummary,
+    ) -> Result<Option<String>, WorkoutSummaryError> {
+        if summary.messages.iter().any(|m| m.image_url.is_some()) {
+            return Ok(None);
+        }
+        if self.completed_workout_target_service.is_none() {
+            return Ok(None);
+        }
+        if !self.power_image_enabled(user_id).await? {
+            return Ok(None);
+        }
+        if !self
+            .completed_workout_has_power_chart(user_id, workout_id)
+            .await?
+        {
+            return Ok(None);
+        }
+        Ok(Some(format!(
+            "/api/workout-summaries/{workout_id}/power-chart.png"
+        )))
+    }
+
+    async fn power_image_enabled(&self, user_id: &str) -> Result<bool, WorkoutSummaryError> {
+        let Some(settings_service) = &self.settings_service else {
+            return Ok(false);
+        };
+        let settings = self.find_coach_settings(settings_service, user_id).await?;
+        Ok(settings.ai_agents.include_power_image)
+    }
+
+    async fn completed_workout_has_power_chart(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> Result<bool, WorkoutSummaryError> {
+        let Some(target_service) = &self.completed_workout_target_service else {
+            return Ok(false);
+        };
+        let Some(workout) = target_service
+            .load_completed_workout(user_id, workout_id)
+            .await?
+        else {
+            return Ok(false);
+        };
+        Ok(
+            crate::domain::workout_summary::power_chart::extract_power_chart_data(&workout)
+                .is_some(),
+        )
+    }
+
+    // ponytail: re-renders PNG each call to keep it in LLM context; cache by workout if token cost bites
+    async fn render_power_chart_base64(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> Result<Option<String>, WorkoutSummaryError> {
+        let Some(target_service) = &self.completed_workout_target_service else {
+            return Ok(None);
+        };
+        let workout = match target_service
+            .load_completed_workout(user_id, workout_id)
+            .await?
+        {
+            Some(workout) => workout,
+            None => return Ok(None),
+        };
+        let data =
+            match crate::domain::workout_summary::power_chart::extract_power_chart_data(&workout) {
+                Some(data) => data,
+                None => return Ok(None),
+            };
+        let png = crate::domain::workout_summary::power_chart::render_power_chart_png(&data);
+        Ok(Some(BASE64_STANDARD.encode(png)))
     }
 }
 

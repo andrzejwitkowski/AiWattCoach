@@ -379,6 +379,7 @@ where
             data_port: self.data_port.clone(),
             reusable_cache_id: None,
             meso_roadmap_stable_context,
+            power_chart_base64: None,
         });
 
         Ok(Self::map_response(MappedPreviewResponse {

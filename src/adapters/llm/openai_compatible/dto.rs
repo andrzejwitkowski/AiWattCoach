@@ -45,11 +45,43 @@ pub struct OpenAiNamedFunctionChoice {
     pub name: String,
 }
 
+#[derive(Serialize, PartialEq, Debug)]
+#[serde(untagged)]
+pub enum OpenAiMessageContent {
+    Text(String),
+    Parts(Vec<OpenAiContentPart>),
+}
+
+impl OpenAiMessageContent {
+    pub fn as_text(&self) -> Option<&str> {
+        match self {
+            Self::Text(s) => Some(s),
+            Self::Parts(_) => None,
+        }
+    }
+}
+
+#[derive(Serialize, PartialEq, Debug)]
+#[serde(tag = "type")]
+pub enum OpenAiContentPart {
+    #[serde(rename = "text")]
+    Text { text: String },
+    #[serde(rename = "image_url")]
+    ImageUrl { image_url: OpenAiImageUrl },
+}
+
+#[derive(Serialize, PartialEq, Debug)]
+pub struct OpenAiImageUrl {
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
 #[derive(Serialize)]
 pub struct OpenAiMessage {
     pub role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
+    pub content: Option<OpenAiMessageContent>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub tool_calls: Vec<OpenAiToolCall>,
     #[serde(skip_serializing_if = "Option::is_none")]
