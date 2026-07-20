@@ -54,6 +54,7 @@ impl UserLlmConfigProvider for TestLlmConfigProvider {
                 provider: LlmProvider::OpenAi,
                 model: "gpt-4o-mini".to_string(),
                 api_key: "test".to_string(),
+                base_url: None,
             })
         })
     }

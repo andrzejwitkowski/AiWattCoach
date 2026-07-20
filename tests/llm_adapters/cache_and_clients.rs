@@ -20,6 +20,7 @@ async fn openai_client_maps_response_and_cached_tokens() {
                 provider: LlmProvider::OpenAi,
                 model: "gpt-4o-mini".to_string(),
                 api_key: "openai-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -40,6 +41,35 @@ async fn openai_client_maps_response_and_cached_tokens() {
 }
 
 #[tokio::test]
+async fn openai_compatible_client_prefers_config_base_url_over_client_default() {
+    let server = MockServer::start().await;
+    let client = openai_client(&server.base_url);
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenAiCompatible,
+                model: "local-model".to_string(),
+                api_key: "compat-key".to_string(),
+                base_url: Some(server.base_url.clone()),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.assistant_text(), Some("DeepSeek says hi"));
+    assert_eq!(response.provider, LlmProvider::OpenAiCompatible);
+
+    let requests = server.requests();
+    assert_eq!(requests[0].path, "/chat/completions");
+    assert_eq!(
+        requests[0].authorization.as_deref(),
+        Some("Bearer compat-key")
+    );
+}
+
+#[tokio::test]
 async fn deepseek_client_maps_response_and_cache_hit_tokens() {
     let server = MockServer::start().await;
     let client = deepseek_client(&server.base_url);
@@ -50,6 +80,7 @@ async fn deepseek_client_maps_response_and_cache_hit_tokens() {
                 provider: LlmProvider::DeepSeek,
                 model: "deepseek-v4-flash".to_string(),
                 api_key: "deepseek-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -80,6 +111,7 @@ async fn zai_client_maps_response_cache_layout_and_cached_tokens() {
                 provider: LlmProvider::Zai,
                 model: "glm-5.2".to_string(),
                 api_key: "zai-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -115,6 +147,7 @@ async fn deepseek_client_maps_reasoning_content_for_thinking_models() {
                 provider: LlmProvider::DeepSeek,
                 model: "deepseek-v4-pro".to_string(),
                 api_key: "deepseek-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -140,6 +173,7 @@ async fn openai_client_maps_tool_call_response_and_finish_reason() {
                 provider: LlmProvider::OpenAi,
                 model: "gpt-4o-mini-tool-calls".to_string(),
                 api_key: "openai-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -167,6 +201,7 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
                 provider: LlmProvider::Gemini,
                 model: "gemini-2.5-flash".to_string(),
                 api_key: "gemini-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -187,6 +222,7 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
                 provider: LlmProvider::Gemini,
                 model: "gemini-2.5-flash".to_string(),
                 api_key: "gemini-key".to_string(),
+                base_url: None,
             },
             aiwattcoach::domain::llm::LlmChatRequest {
                 reusable_cache_id: Some("cachedContents/cache-1".to_string()),
@@ -234,6 +270,7 @@ async fn gemini_client_accepts_google_prefixed_model_name() {
                 provider: LlmProvider::Gemini,
                 model: "google/gemini-2.5-flash".to_string(),
                 api_key: "gemini-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -254,6 +291,7 @@ async fn openrouter_client_maps_cache_discount_and_write_tokens() {
                 provider: LlmProvider::OpenRouter,
                 model: "openai/gpt-4o-mini".to_string(),
                 api_key: "or-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -282,6 +320,7 @@ async fn openrouter_request_caches_stable_prefix_only() {
                 provider: LlmProvider::OpenRouter,
                 model: "openai/gpt-4o-mini".to_string(),
                 api_key: "or-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -325,6 +364,7 @@ async fn openrouter_request_skips_prompt_cache_for_google_models() {
                 provider: LlmProvider::OpenRouter,
                 model: "google/gemini-3-flash-preview".to_string(),
                 api_key: "or-key".to_string(),
+                base_url: None,
             },
             aiwattcoach::domain::llm::LlmChatRequest {
                 tools: vec![LlmToolDefinition {
@@ -366,6 +406,7 @@ async fn gemini_client_skips_cache_creation_without_durable_cache_keys() {
                 provider: LlmProvider::Gemini,
                 model: "gemini-2.5-flash".to_string(),
                 api_key: "gemini-key".to_string(),
+                base_url: None,
             },
             aiwattcoach::domain::llm::LlmChatRequest {
                 cache_scope_key: None,
@@ -418,6 +459,7 @@ async fn openrouter_client_does_not_fallback_cache_discount_to_cost() {
                 provider: LlmProvider::OpenRouter,
                 model: "openai/gpt-4o-mini-no-discount".to_string(),
                 api_key: "or-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -438,6 +480,7 @@ async fn openrouter_client_maps_payment_required_to_provider_rejected() {
                 provider: LlmProvider::OpenRouter,
                 model: "openai/gpt-4o-mini-no-credits".to_string(),
                 api_key: "or-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -463,6 +506,7 @@ async fn openrouter_client_parses_array_content_parts() {
                 provider: LlmProvider::OpenRouter,
                 model: "google/gemini-3-flash-preview".to_string(),
                 api_key: "or-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -486,6 +530,7 @@ async fn openrouter_client_inserts_spaces_between_array_content_parts() {
                 provider: LlmProvider::OpenRouter,
                 model: "google/gemini-3-flash-preview-multipart".to_string(),
                 api_key: "or-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -509,6 +554,7 @@ async fn openrouter_request_serializes_explicit_none_tool_choice() {
                 provider: LlmProvider::OpenRouter,
                 model: "openai/gpt-4o-mini".to_string(),
                 api_key: "or-key".to_string(),
+                base_url: None,
             },
             aiwattcoach::domain::llm::LlmChatRequest {
                 tool_choice: LlmToolChoice::None,
@@ -533,6 +579,7 @@ async fn openrouter_request_rejects_invalid_tool_schema_json() {
                 provider: LlmProvider::OpenRouter,
                 model: "openai/gpt-4o-mini".to_string(),
                 api_key: "or-key".to_string(),
+                base_url: None,
             },
             aiwattcoach::domain::llm::LlmChatRequest {
                 tools: vec![LlmToolDefinition {
@@ -564,6 +611,7 @@ async fn openrouter_client_parses_numeric_usage_fields() {
                 provider: LlmProvider::OpenRouter,
                 model: "google/gemini-3-flash-preview-numeric-usage".to_string(),
                 api_key: "or-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -585,6 +633,7 @@ async fn openrouter_client_retries_once_after_empty_assistant_turn() {
                 provider: LlmProvider::OpenRouter,
                 model: "google/gemini-3-flash-preview-empty-then-success".to_string(),
                 api_key: "or-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )
@@ -609,6 +658,7 @@ async fn openrouter_client_logs_success_response_body() {
                     provider: LlmProvider::OpenRouter,
                     model: "openai/gpt-4o-mini".to_string(),
                     api_key: "or-key".to_string(),
+                    base_url: None,
                 },
                 sample_request(),
             )
@@ -640,6 +690,7 @@ async fn openai_client_maps_forbidden_to_credentials_not_configured() {
                 provider: LlmProvider::OpenAi,
                 model: "gpt-4o-mini".to_string(),
                 api_key: "openai-key".to_string(),
+                base_url: None,
             },
             sample_request(),
         )

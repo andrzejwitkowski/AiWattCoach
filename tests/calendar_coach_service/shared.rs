@@ -416,6 +416,7 @@ impl UserLlmConfigProvider for StaticLlmConfigProvider {
                 provider: LlmProvider::OpenAi,
                 model: "gpt-5".to_string(),
                 api_key: "test-key".to_string(),
+                base_url: None,
             })
         })
     }

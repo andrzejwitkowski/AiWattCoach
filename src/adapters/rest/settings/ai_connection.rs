@@ -24,7 +24,7 @@ pub(super) fn merge_ai_connection_config(
     let transient_provider = parse_provider_input(body.selected_provider, || {
         test_ai_agents_connection_response(
             false,
-            "selectedProvider must be one of: openai, gemini, openrouter, deepseek, zai",
+            "selectedProvider must be one of: openai, gemini, openrouter, deepseek, zai, openai_compatible",
             false,
             false,
             false,
@@ -36,6 +36,10 @@ pub(super) fn merge_ai_connection_config(
     let transient_openrouter_api_key = normalize_string_input(body.openrouter_api_key);
     let transient_deepseek_api_key = normalize_string_input(body.deepseek_api_key);
     let transient_zai_api_key = normalize_string_input(body.zai_api_key);
+    let transient_openai_compatible_api_key =
+        normalize_string_input(body.openai_compatible_api_key);
+    let transient_openai_compatible_base_url =
+        normalize_string_input(body.openai_compatible_base_url);
 
     let used_saved_provider =
         used_saved_value(&transient_provider, &current.ai_agents.selected_provider);
@@ -93,6 +97,10 @@ pub(super) fn merge_ai_connection_config(
             transient_zai_api_key.clone(),
             current.ai_agents.zai_api_key.clone(),
         ),
+        LlmProvider::OpenAiCompatible => apply_field_update(
+            transient_openai_compatible_api_key.clone(),
+            current.ai_agents.openai_compatible_api_key.clone(),
+        ),
     };
     let used_saved_api_key = current_api_key_is_saved(provider.clone(), current)
         && selected_key_was_not_provided(
@@ -102,7 +110,40 @@ pub(super) fn merge_ai_connection_config(
             matches!(&transient_openrouter_api_key, FieldUpdate::Missing),
             matches!(&transient_deepseek_api_key, FieldUpdate::Missing),
             matches!(&transient_zai_api_key, FieldUpdate::Missing),
+            matches!(&transient_openai_compatible_api_key, FieldUpdate::Missing),
         );
+
+    let base_url = match provider {
+        LlmProvider::OpenAiCompatible => {
+            let Some(raw) = apply_field_update(
+                transient_openai_compatible_base_url,
+                current.ai_agents.openai_compatible_base_url.clone(),
+            )
+            .filter(|url| !url.trim().is_empty()) else {
+                return Err(test_ai_agents_connection_response(
+                    false,
+                    "OpenAI Compatible base URL is required.",
+                    used_saved_api_key,
+                    used_saved_provider,
+                    used_saved_model,
+                ));
+            };
+            Some(
+                crate::domain::llm::normalize_openai_compatible_base_url(&raw).map_err(
+                    |message| {
+                        test_ai_agents_connection_response(
+                            false,
+                            &message,
+                            used_saved_api_key,
+                            used_saved_provider,
+                            used_saved_model,
+                        )
+                    },
+                )?,
+            )
+        }
+        _ => None,
+    };
 
     let Some(model) = model else {
         return Err(test_ai_agents_connection_response(
@@ -138,6 +179,7 @@ pub(super) fn merge_ai_connection_config(
             provider,
             model,
             api_key,
+            base_url,
         },
         used_saved_api_key,
         used_saved_provider,
@@ -221,6 +263,7 @@ fn current_api_key_is_saved(provider: LlmProvider, current: &UserSettings) -> bo
         LlmProvider::OpenRouter => current.ai_agents.openrouter_api_key.is_some(),
         LlmProvider::DeepSeek => current.ai_agents.deepseek_api_key.is_some(),
         LlmProvider::Zai => current.ai_agents.zai_api_key.is_some(),
+        LlmProvider::OpenAiCompatible => current.ai_agents.openai_compatible_api_key.is_some(),
     }
 }
 
@@ -231,6 +274,7 @@ fn selected_key_was_not_provided(
     openrouter_missing: bool,
     deepseek_missing: bool,
     zai_missing: bool,
+    openai_compatible_missing: bool,
 ) -> bool {
     match provider {
         LlmProvider::OpenAi => openai_missing,
@@ -238,5 +282,6 @@ fn selected_key_was_not_provided(
         LlmProvider::OpenRouter => openrouter_missing,
         LlmProvider::DeepSeek => deepseek_missing,
         LlmProvider::Zai => zai_missing,
+        LlmProvider::OpenAiCompatible => openai_compatible_missing,
     }
 }

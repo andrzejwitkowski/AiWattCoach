@@ -4,6 +4,8 @@ type AiAgentsFieldKey =
   | 'openrouterApiKey'
   | 'deepseekApiKey'
   | 'zaiApiKey'
+  | 'openaiCompatibleApiKey'
+  | 'openaiCompatibleBaseUrl'
   | 'selectedProvider'
   | 'selectedModel';
 
@@ -70,6 +72,8 @@ export function buildAiAgentsConnectionBody(
     'openrouterApiKey',
     'deepseekApiKey',
     'zaiApiKey',
+    'openaiCompatibleApiKey',
+    'openaiCompatibleBaseUrl',
     'selectedProvider',
     'selectedModel',
   ];

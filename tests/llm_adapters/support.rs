@@ -143,6 +143,7 @@ impl UserLlmConfigProvider for FixedGeminiConfigProvider {
                 provider: LlmProvider::Gemini,
                 model: "gemini-3.1-pro".to_string(),
                 api_key: "gemini-key".to_string(),
+                base_url: None,
             })
         })
     }
@@ -160,6 +161,7 @@ impl UserLlmConfigProvider for FixedOpenAiConfigProvider {
                 provider: LlmProvider::OpenAi,
                 model: "gpt-4o-mini".to_string(),
                 api_key: "openai-key".to_string(),
+                base_url: None,
             })
         })
     }

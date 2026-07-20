@@ -124,6 +124,7 @@ mod tests {
                 provider: LlmProvider::OpenAi,
                 model: "gpt-test".to_string(),
                 api_key: "secret".to_string(),
+                base_url: None,
             },
             window: MesoCycleWindow {
                 meso_start: "2026-06-06".to_string(),

@@ -81,6 +81,7 @@ mod tests {
             provider: LlmProvider::Zai,
             model: "glm-5.2".to_string(),
             api_key: "zai-key".to_string(),
+            base_url: None,
         }
     }
 

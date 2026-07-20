@@ -4,6 +4,8 @@ const TRIMMED_STRING_FIELDS = [
   'openrouterApiKey',
   'deepseekApiKey',
   'zaiApiKey',
+  'openaiCompatibleApiKey',
+  'openaiCompatibleBaseUrl',
   'selectedProvider',
   'selectedModel',
   'workoutChatProvider',

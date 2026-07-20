@@ -24,6 +24,11 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: 'z.ai',
     suggestedModels: ['glm-5.2'],
   },
+  {
+    value: 'openai_compatible',
+    label: 'OpenAI Compatible',
+    suggestedModels: ['gpt-4o-mini', 'llama3.2'],
+  },
 ];
 
 export function getProviderOption(provider: string) {
@@ -47,6 +52,8 @@ export function isLlmProviderKeyConfigured(
       return aiAgents.deepseekApiKeySet;
     case 'zai':
       return aiAgents.zaiApiKeySet;
+    case 'openai_compatible':
+      return aiAgents.openaiCompatibleApiKeySet;
     default:
       return false;
   }
@@ -58,6 +65,7 @@ type ProviderDraftKeys = {
   openrouterApiKey: string;
   deepseekApiKey: string;
   zaiApiKey: string;
+  openaiCompatibleApiKey: string;
 };
 
 export function getProviderKeyState(
@@ -95,6 +103,12 @@ export function getProviderKeyState(
         draftValue: draft.zaiApiKey.trim(),
         hasPersistedKey: aiAgents.zaiApiKeySet,
         label: 'z.ai',
+      };
+    case 'openai_compatible':
+      return {
+        draftValue: draft.openaiCompatibleApiKey.trim(),
+        hasPersistedKey: aiAgents.openaiCompatibleApiKeySet,
+        label: 'OpenAI Compatible',
       };
     default:
       return { draftValue: '', hasPersistedKey: false, label: 'Provider' };

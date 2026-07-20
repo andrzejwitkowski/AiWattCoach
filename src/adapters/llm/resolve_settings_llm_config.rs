@@ -1,5 +1,5 @@
 use crate::domain::{
-    llm::{LlmError, LlmProvider, LlmProviderConfig},
+    llm::{normalize_openai_compatible_base_url, LlmError, LlmProvider, LlmProviderConfig},
     settings::AiAgentsConfig,
 };
 
@@ -22,14 +22,32 @@ pub fn resolve_llm_config(
         LlmProvider::OpenRouter => ai_agents.openrouter_api_key.clone(),
         LlmProvider::DeepSeek => ai_agents.deepseek_api_key.clone(),
         LlmProvider::Zai => ai_agents.zai_api_key.clone(),
+        LlmProvider::OpenAiCompatible => ai_agents.openai_compatible_api_key.clone(),
     }
     .filter(|value| !value.trim().is_empty())
     .ok_or(LlmError::CredentialsNotConfigured)?;
+
+    let base_url = match provider {
+        LlmProvider::OpenAiCompatible => {
+            let raw = ai_agents
+                .openai_compatible_base_url
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    LlmError::ProviderRejected(
+                        "OpenAI Compatible base URL is not configured".to_string(),
+                    )
+                })?;
+            Some(normalize_openai_compatible_base_url(raw).map_err(LlmError::ProviderRejected)?)
+        }
+        _ => None,
+    };
 
     Ok(LlmProviderConfig {
         provider,
         model,
         api_key,
+        base_url,
     })
 }
 
@@ -57,6 +75,7 @@ mod tests {
         assert_eq!(config.provider, LlmProvider::OpenAi);
         assert_eq!(config.model, "gpt-4o-mini");
         assert_eq!(config.api_key, "sk-openai");
+        assert_eq!(config.base_url, None);
     }
 
     #[test]
@@ -88,5 +107,39 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(error, LlmError::CredentialsNotConfigured));
+    }
+
+    #[test]
+    fn resolve_llm_config_openai_compatible_requires_base_url_and_key() {
+        let ai_agents = AiAgentsConfig {
+            openai_compatible_api_key: Some("sk-local".to_string()),
+            openai_compatible_base_url: Some("http://127.0.0.1:11434/v1/".to_string()),
+            selected_provider: Some(LlmProvider::OpenAiCompatible),
+            selected_model: Some("llama3.2".to_string()),
+            ..AiAgentsConfig::default()
+        };
+
+        let config = resolve_llm_config(&ai_agents, None, None).unwrap();
+        assert_eq!(config.provider, LlmProvider::OpenAiCompatible);
+        assert_eq!(config.model, "llama3.2");
+        assert_eq!(config.api_key, "sk-local");
+        assert_eq!(
+            config.base_url.as_deref(),
+            Some("http://127.0.0.1:11434/v1")
+        );
+    }
+
+    #[test]
+    fn resolve_llm_config_openai_compatible_fails_without_base_url() {
+        let ai_agents = AiAgentsConfig {
+            openai_compatible_api_key: Some("sk-local".to_string()),
+            openai_compatible_base_url: None,
+            selected_provider: Some(LlmProvider::OpenAiCompatible),
+            selected_model: Some("llama3.2".to_string()),
+            ..AiAgentsConfig::default()
+        };
+
+        let error = resolve_llm_config(&ai_agents, None, None).unwrap_err();
+        assert!(matches!(error, LlmError::ProviderRejected(_)));
     }
 }

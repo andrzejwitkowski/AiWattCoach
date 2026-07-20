@@ -53,6 +53,12 @@ pub(super) struct AiAgentsDto {
     pub(super) zai_api_key: Option<String>,
     #[serde(rename = "zaiApiKeySet")]
     pub(super) zai_api_key_set: bool,
+    #[serde(rename = "openaiCompatibleApiKey")]
+    pub(super) openai_compatible_api_key: Option<String>,
+    #[serde(rename = "openaiCompatibleApiKeySet")]
+    pub(super) openai_compatible_api_key_set: bool,
+    #[serde(rename = "openaiCompatibleBaseUrl")]
+    pub(super) openai_compatible_base_url: Option<String>,
     #[serde(rename = "selectedProvider")]
     pub(super) selected_provider: Option<String>,
     #[serde(rename = "selectedModel")]
@@ -154,6 +160,10 @@ pub(crate) struct UpdateAiAgentsRequest {
     pub(super) deepseek_api_key: OptionalStringInput,
     #[serde(default, rename = "zaiApiKey")]
     pub(super) zai_api_key: OptionalStringInput,
+    #[serde(default, rename = "openaiCompatibleApiKey")]
+    pub(super) openai_compatible_api_key: OptionalStringInput,
+    #[serde(default, rename = "openaiCompatibleBaseUrl")]
+    pub(super) openai_compatible_base_url: OptionalStringInput,
     #[serde(default, rename = "selectedProvider")]
     pub(super) selected_provider: OptionalStringInput,
     #[serde(default, rename = "selectedModel")]

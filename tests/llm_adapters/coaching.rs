@@ -164,6 +164,7 @@ fn llm_debug_output_redacts_secrets_and_prompt_contents() {
         provider: aiwattcoach::domain::llm::LlmProvider::OpenAi,
         model: "gpt-4o-mini".to_string(),
         api_key: "sk-secret-value".to_string(),
+        base_url: None,
     };
     let request = sample_request();
 

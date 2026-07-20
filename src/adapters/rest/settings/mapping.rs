@@ -1,4 +1,4 @@
-use crate::domain::llm::LlmProvider;
+use crate::domain::llm::{normalize_openai_compatible_base_url, LlmProvider};
 use crate::domain::settings::{
     mask_sensitive, validation, AiAgentsConfig, AnalysisOptions, AvailabilityDay,
     AvailabilitySettings, CyclingSettings, IntervalsConfig, SettingsError, UserSettings, Weekday,
@@ -29,6 +29,11 @@ pub(super) fn map_settings_to_dto(
             deepseek_api_key_set: settings.ai_agents.deepseek_api_key.is_some(),
             zai_api_key: mask_sensitive(&settings.ai_agents.zai_api_key),
             zai_api_key_set: settings.ai_agents.zai_api_key.is_some(),
+            openai_compatible_api_key: mask_sensitive(
+                &settings.ai_agents.openai_compatible_api_key,
+            ),
+            openai_compatible_api_key_set: settings.ai_agents.openai_compatible_api_key.is_some(),
+            openai_compatible_base_url: settings.ai_agents.openai_compatible_base_url.clone(),
             selected_provider: settings
                 .ai_agents
                 .selected_provider
@@ -147,6 +152,8 @@ pub(super) fn map_ai_agents_update(
     let openrouter_api_key = normalize_string_input(body.openrouter_api_key);
     let deepseek_api_key = normalize_string_input(body.deepseek_api_key);
     let zai_api_key = normalize_string_input(body.zai_api_key);
+    let openai_compatible_api_key = normalize_string_input(body.openai_compatible_api_key);
+    let openai_compatible_base_url = normalize_string_input(body.openai_compatible_base_url);
 
     let provider_changed = match &selected_provider_update {
         FieldUpdate::Missing => false,
@@ -208,6 +215,29 @@ pub(super) fn map_ai_agents_update(
         "mesoCycleModel",
     )?;
 
+    let openai_compatible_base_url = apply_field_update(
+        openai_compatible_base_url,
+        current.ai_agents.openai_compatible_base_url.clone(),
+    )
+    .filter(|url| !url.trim().is_empty())
+    .map(|url| normalize_openai_compatible_base_url(&url).map_err(SettingsError::Validation))
+    .transpose()?;
+
+    let uses_openai_compatible = [
+        selected_provider.as_ref(),
+        workout_chat_provider.as_ref(),
+        workout_planning_provider.as_ref(),
+        meso_cycle_provider.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|provider| *provider == LlmProvider::OpenAiCompatible);
+    if uses_openai_compatible && openai_compatible_base_url.is_none() {
+        return Err(SettingsError::Validation(
+            "openaiCompatibleBaseUrl is required when OpenAI Compatible is selected".to_string(),
+        ));
+    }
+
     Ok(AiAgentsConfig {
         openai_api_key: apply_field_update(
             openai_api_key,
@@ -226,6 +256,11 @@ pub(super) fn map_ai_agents_update(
             current.ai_agents.deepseek_api_key.clone(),
         ),
         zai_api_key: apply_field_update(zai_api_key, current.ai_agents.zai_api_key.clone()),
+        openai_compatible_api_key: apply_field_update(
+            openai_compatible_api_key,
+            current.ai_agents.openai_compatible_api_key.clone(),
+        ),
+        openai_compatible_base_url,
         selected_provider: validation::validate_ai_provider(selected_provider)?,
         selected_model,
         workout_chat_provider: validation::validate_ai_provider(workout_chat_provider)?,

@@ -28,9 +28,10 @@ pub(crate) use transcript::{
 pub use error::LlmError;
 pub use logging::{llm_full_debug_logging_enabled, serialize_logged_body, truncate_logged_body};
 pub use model::{
-    hash_text, llm_request_timeout, LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse,
-    LlmContextCache, LlmFinishReason, LlmMessageRole, LlmProvider, LlmProviderConfig,
-    LlmTokenUsage, LlmToolCall, LlmToolChoice, LlmToolDefinition, LLM_REQUEST_TIMEOUT_SECONDS,
+    hash_text, llm_request_timeout, normalize_openai_compatible_base_url, LlmCacheUsage,
+    LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmContextCache, LlmFinishReason,
+    LlmMessageRole, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolCall, LlmToolChoice,
+    LlmToolDefinition, LLM_REQUEST_TIMEOUT_SECONDS,
 };
 pub use operation::{
     deserialize_llm_error, serialize_llm_error, CompletedLlmReply, LlmReplyClaimResult,

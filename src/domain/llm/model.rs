@@ -21,6 +21,8 @@ pub enum LlmProvider {
     DeepSeek,
     #[serde(rename = "zai")]
     Zai,
+    #[serde(rename = "openai_compatible")]
+    OpenAiCompatible,
 }
 
 impl LlmProvider {
@@ -31,6 +33,7 @@ impl LlmProvider {
             Self::OpenRouter => "openrouter",
             Self::DeepSeek => "deepseek",
             Self::Zai => "zai",
+            Self::OpenAiCompatible => "openai_compatible",
         }
     }
 
@@ -41,6 +44,7 @@ impl LlmProvider {
             "openrouter" => Some(Self::OpenRouter),
             "deepseek" => Some(Self::DeepSeek),
             "zai" => Some(Self::Zai),
+            "openai_compatible" => Some(Self::OpenAiCompatible),
             _ => None,
         }
     }
@@ -52,6 +56,7 @@ impl LlmProvider {
             Self::OpenRouter => "openai/gpt-4o-mini",
             Self::DeepSeek => "deepseek-v4-flash",
             Self::Zai => "glm-5.2",
+            Self::OpenAiCompatible => "gpt-4o-mini",
         }
     }
 }
@@ -67,6 +72,40 @@ pub struct LlmProviderConfig {
     pub provider: LlmProvider,
     pub model: String,
     pub api_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+}
+
+/// Normalize a user-supplied OpenAI-compatible base URL (absolute http/https, no trailing `/`).
+pub fn normalize_openai_compatible_base_url(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("OpenAI Compatible base URL is not configured".to_string());
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    let (prefix_len, rest) = if let Some(rest) = lower.strip_prefix("https://") {
+        ("https://".len(), rest)
+    } else if let Some(rest) = lower.strip_prefix("http://") {
+        ("http://".len(), rest)
+    } else {
+        return Err("OpenAI Compatible base URL must be an absolute http(s) URL".to_string());
+    };
+
+    let rest = rest.trim_end_matches('/');
+    if rest.is_empty() || rest.starts_with('/') {
+        return Err("OpenAI Compatible base URL must include a host".to_string());
+    }
+    if trimmed
+        .chars()
+        .any(|ch| ch.is_whitespace() || ch.is_control())
+    {
+        return Err("OpenAI Compatible base URL must not contain whitespace".to_string());
+    }
+
+    let prefix = &trimmed[..prefix_len];
+    let path = trimmed[prefix_len..].trim_end_matches('/');
+    Ok(format!("{prefix}{path}"))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -269,6 +308,7 @@ impl std::fmt::Debug for LlmProviderConfig {
             .field("provider", &self.provider)
             .field("model", &self.model)
             .field("api_key", &redact_value(&self.api_key))
+            .field("base_url", &self.base_url)
             .finish()
     }
 }
@@ -312,4 +352,35 @@ fn redact_value(value: &str) -> String {
     }
 
     format!("<redacted:{} chars>", value.chars().count())
+}
+
+#[cfg(test)]
+mod normalize_openai_compatible_base_url_tests {
+    use super::normalize_openai_compatible_base_url;
+
+    #[test]
+    fn accepts_http_and_strips_trailing_slash() {
+        assert_eq!(
+            normalize_openai_compatible_base_url("http://127.0.0.1:11434/v1/").unwrap(),
+            "http://127.0.0.1:11434/v1"
+        );
+    }
+
+    #[test]
+    fn rejects_non_http_schemes() {
+        let error = normalize_openai_compatible_base_url("file:///tmp").unwrap_err();
+        assert!(error.contains("http(s)"));
+    }
+
+    #[test]
+    fn rejects_relative_urls() {
+        let error = normalize_openai_compatible_base_url("/v1").unwrap_err();
+        assert!(error.contains("absolute"));
+    }
+
+    #[test]
+    fn rejects_scheme_without_host() {
+        let error = normalize_openai_compatible_base_url("https://").unwrap_err();
+        assert!(error.contains("host"));
+    }
 }

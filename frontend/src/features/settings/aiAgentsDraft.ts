@@ -6,6 +6,8 @@ export type AiAgentsDraftState = {
   openrouterApiKey: string;
   deepseekApiKey: string;
   zaiApiKey: string;
+  openaiCompatibleApiKey: string;
+  openaiCompatibleBaseUrl: string;
   selectedProvider: string;
   selectedModel: string;
   workoutChatProvider: string;
@@ -19,6 +21,7 @@ export type AiAgentsDraftState = {
 
 type PersistedAiAgentsDraft = Pick<
   AiAgentsDraftState,
+  | 'openaiCompatibleBaseUrl'
   | 'selectedProvider'
   | 'selectedModel'
   | 'workoutChatProvider'
@@ -37,6 +40,8 @@ export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiA
     openrouterApiKey: '',
     deepseekApiKey: '',
     zaiApiKey: '',
+    openaiCompatibleApiKey: '',
+    openaiCompatibleBaseUrl: persisted.openaiCompatibleBaseUrl,
     selectedProvider: persisted.selectedProvider,
     selectedModel: persisted.selectedModel,
     workoutChatProvider: persisted.workoutChatProvider,
@@ -57,6 +62,7 @@ export function clearDraftApiKeys(draft: AiAgentsDraftState): AiAgentsDraftState
     openrouterApiKey: '',
     deepseekApiKey: '',
     zaiApiKey: '',
+    openaiCompatibleApiKey: '',
   };
 }
 
@@ -80,6 +86,14 @@ export function mergeDraftWithPersisted(
         : current.deepseekApiKey,
     zaiApiKey:
       current.zaiApiKey === previousPersisted.zaiApiKey ? persisted.zaiApiKey : current.zaiApiKey,
+    openaiCompatibleApiKey:
+      current.openaiCompatibleApiKey === previousPersisted.openaiCompatibleApiKey
+        ? persisted.openaiCompatibleApiKey
+        : current.openaiCompatibleApiKey,
+    openaiCompatibleBaseUrl:
+      current.openaiCompatibleBaseUrl === previousPersisted.openaiCompatibleBaseUrl
+        ? persisted.openaiCompatibleBaseUrl
+        : current.openaiCompatibleBaseUrl,
     selectedProvider:
       current.selectedProvider === previousPersisted.selectedProvider
         ? persisted.selectedProvider
@@ -124,6 +138,8 @@ export function isAiAgentsDraftDirty(current: AiAgentsDraftState, clean: AiAgent
     current.openrouterApiKey !== clean.openrouterApiKey ||
     current.deepseekApiKey !== clean.deepseekApiKey ||
     current.zaiApiKey !== clean.zaiApiKey ||
+    current.openaiCompatibleApiKey !== clean.openaiCompatibleApiKey ||
+    current.openaiCompatibleBaseUrl !== clean.openaiCompatibleBaseUrl ||
     current.selectedProvider !== clean.selectedProvider ||
     current.selectedModel !== clean.selectedModel ||
     current.workoutChatProvider !== clean.workoutChatProvider ||
@@ -170,6 +186,13 @@ export function buildVisibleAiAgentsRequest(
   assignTrimmedApiKey(request, 'openrouterApiKey', draft.openrouterApiKey);
   assignTrimmedApiKey(request, 'deepseekApiKey', draft.deepseekApiKey);
   assignTrimmedApiKey(request, 'zaiApiKey', draft.zaiApiKey);
+  assignTrimmedApiKey(request, 'openaiCompatibleApiKey', draft.openaiCompatibleApiKey);
+  assignChangedStringField(
+    request,
+    'openaiCompatibleBaseUrl',
+    draft.openaiCompatibleBaseUrl,
+    persisted.openaiCompatibleBaseUrl,
+  );
 
   const trimmedProvider = draft.selectedProvider.trim();
   const trimmedModel = draft.selectedModel.trim();

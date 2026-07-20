@@ -104,6 +104,7 @@ fn sample_llm_config() -> LlmProviderConfig {
         provider: LlmProvider::OpenAi,
         model: "gpt-4o-mini".to_string(),
         api_key: "test-key".to_string(),
+        base_url: None,
     }
 }
 

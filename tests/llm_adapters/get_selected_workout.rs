@@ -92,6 +92,7 @@ async fn tool_loop_hides_get_selected_workout_without_data_port_and_stops_with_s
             provider: LlmProvider::OpenRouter,
             model: "google/gemini-3.1-pro".to_string(),
             api_key: "test-key".to_string(),
+            base_url: None,
         },
         LlmChatRequest {
             user_id: "user-123".to_string(),
@@ -225,6 +226,7 @@ async fn tool_loop_sends_get_selected_workout_when_data_port_is_available() {
             provider: LlmProvider::OpenRouter,
             model: "google/gemini-3.1-pro".to_string(),
             api_key: "test-key".to_string(),
+            base_url: None,
         },
         LlmChatRequest {
             user_id: "user-123".to_string(),
@@ -288,6 +290,7 @@ async fn tool_loop_logs_round_trip_and_tool_execution_details() {
                 provider: LlmProvider::OpenRouter,
                 model: "google/gemini-3.1-pro".to_string(),
                 api_key: "test-key".to_string(),
+                base_url: None,
             },
             LlmChatRequest {
                 user_id: "user-123".to_string(),
