@@ -262,12 +262,12 @@ mod tests {
             panic!("expected parts content for image message");
         };
         assert_eq!(parts.len(), 2);
-        assert!(matches!(parts[0], OpenAiContentPart::Text { .. }));
-        let OpenAiContentPart::ImageUrl { image_url } = &parts[1] else {
-            panic!("expected image_url part");
+        let OpenAiContentPart::ImageUrl { image_url } = &parts[0] else {
+            panic!("expected image_url part first (Qwen VL order)");
         };
         assert_eq!(image_url.url, "data:image/png;base64,abc123");
         assert_eq!(image_url.detail, None);
+        assert!(matches!(parts[1], OpenAiContentPart::Text { .. }));
     }
 
     #[test]
@@ -307,7 +307,8 @@ mod tests {
         let OpenAiMessageContent::Parts(parts) = content else {
             panic!("expected parts content for openai_compatible vision");
         };
-        assert!(matches!(parts[1], OpenAiContentPart::ImageUrl { .. }));
+        assert!(matches!(parts[0], OpenAiContentPart::ImageUrl { .. }));
+        assert!(matches!(parts[1], OpenAiContentPart::Text { .. }));
     }
 
     #[test]
