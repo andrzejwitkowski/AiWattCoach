@@ -680,7 +680,7 @@ async fn openrouter_client_logs_success_response_body() {
 }
 
 #[tokio::test]
-async fn openai_client_maps_forbidden_to_credentials_not_configured() {
+async fn openai_client_maps_forbidden_to_provider_auth_rejection() {
     let server = MockServer::start().await;
     let client = openai_forbidden_client(&server.base_url);
 
@@ -697,8 +697,13 @@ async fn openai_client_maps_forbidden_to_credentials_not_configured() {
         .await
         .unwrap_err();
 
-    assert_eq!(
-        error,
-        aiwattcoach::domain::llm::LlmError::CredentialsNotConfigured
-    );
+    match error {
+        aiwattcoach::domain::llm::LlmError::ProviderRejected(message) => {
+            assert!(
+                message.contains("Provider rejected the API key"),
+                "unexpected message: {message}"
+            );
+        }
+        other => panic!("expected provider auth rejection, got {other:?}"),
+    }
 }

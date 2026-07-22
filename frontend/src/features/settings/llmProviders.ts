@@ -27,7 +27,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     value: 'openai_compatible',
     label: 'OpenAI Compatible',
-    suggestedModels: ['gpt-4o-mini', 'llama3.2'],
+    suggestedModels: ['qwen3-vl-plus', 'qwen-vl-plus', 'gpt-4o-mini', 'llama3.2'],
   },
 ];
 

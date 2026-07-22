@@ -130,7 +130,8 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           </span>
           <span className="mt-0.5 block text-xs text-slate-500">
             Sends a rendered power chart (3s rolling average with MAX, NP, and AVG lines) to the coach on
-            your first message. Requires a multimodal model.
+            your first message. Requires a vision/multimodal model (for Qwen: qwen3-vl-plus or qwen-vl-plus,
+            not text-only qwen-plus).
           </span>
         </span>
       </label>

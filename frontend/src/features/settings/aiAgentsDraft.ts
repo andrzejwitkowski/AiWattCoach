@@ -232,9 +232,12 @@ export function buildTestStatusMessage(result: TestAiAgentsConnectionResponse) {
     result.usedSavedModel ? 'saved model' : null,
   ].filter(Boolean);
 
+  const trimmedMessage = result.message.trim();
+  const normalizedMessage = /[.!?]$/.test(trimmedMessage) ? trimmedMessage : `${trimmedMessage}.`;
+
   if (reusedSavedValues.length === 0) {
-    return `${result.message} Tested the visible draft only.`;
+    return `${normalizedMessage} Tested the visible draft only.`;
   }
 
-  return `${result.message} Used ${reusedSavedValues.join(', ')} for unchanged fields.`;
+  return `${normalizedMessage} Used ${reusedSavedValues.join(', ')} for unchanged fields.`;
 }

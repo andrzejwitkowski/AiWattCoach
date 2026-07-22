@@ -9,7 +9,15 @@ type AiAgentsFieldKey =
   | 'selectedProvider'
   | 'selectedModel';
 
-type ValidatedAiAgents = Partial<Record<AiAgentsFieldKey | 'mesoCycleProvider' | 'mesoCycleModel', string | null>>;
+type AgentOverrideFieldKey =
+  | 'workoutChatProvider'
+  | 'workoutChatModel'
+  | 'workoutPlanningProvider'
+  | 'workoutPlanningModel'
+  | 'mesoCycleProvider'
+  | 'mesoCycleModel';
+
+type ValidatedAiAgents = Partial<Record<AiAgentsFieldKey | AgentOverrideFieldKey, string | null>>;
 
 function trimToUndefined(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -60,10 +68,19 @@ export function getOptionalStringFieldValue(
   return trimToUndefined(validatedValue);
 }
 
+const AGENT_OVERRIDE_FIELDS: AgentOverrideFieldKey[] = [
+  'workoutChatProvider',
+  'workoutChatModel',
+  'workoutPlanningProvider',
+  'workoutPlanningModel',
+  'mesoCycleProvider',
+  'mesoCycleModel',
+];
+
 export function buildAiAgentsConnectionBody(
   data: unknown,
   validated: ValidatedAiAgents,
-  options?: { includeMesoFields?: boolean },
+  options?: { includeAgentOverrides?: boolean },
 ): Record<string, string | null | boolean> {
   const body: Record<string, string | null | boolean> = {};
   const fields: AiAgentsFieldKey[] = [
@@ -85,15 +102,12 @@ export function buildAiAgentsConnectionBody(
     }
   }
 
-  if (options?.includeMesoFields) {
-    const mesoCycleProvider = getOptionalStringFieldValue(data, 'mesoCycleProvider', validated.mesoCycleProvider);
-    const mesoCycleModel = getOptionalStringFieldValue(data, 'mesoCycleModel', validated.mesoCycleModel);
-
-    if (mesoCycleProvider !== undefined) {
-      body.mesoCycleProvider = mesoCycleProvider;
-    }
-    if (mesoCycleModel !== undefined) {
-      body.mesoCycleModel = mesoCycleModel;
+  if (options?.includeAgentOverrides) {
+    for (const field of AGENT_OVERRIDE_FIELDS) {
+      const value = getOptionalStringFieldValue(data, field, validated[field]);
+      if (value !== undefined) {
+        body[field] = value;
+      }
     }
   }
 

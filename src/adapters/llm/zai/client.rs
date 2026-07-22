@@ -121,7 +121,9 @@ impl LlmChatPort for ZaiClient {
 
 fn map_error(status: StatusCode, body: String) -> LlmError {
     match status {
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => LlmError::CredentialsNotConfigured,
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+            LlmError::provider_auth_rejected(status.as_u16(), &body)
+        }
         StatusCode::TOO_MANY_REQUESTS => LlmError::RateLimited(body),
         StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY => {
             LlmError::ProviderRejected(body)

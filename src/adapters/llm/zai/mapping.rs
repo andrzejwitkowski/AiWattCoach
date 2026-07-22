@@ -38,7 +38,11 @@ pub fn map_zai_request(
     if !volatile_context.is_empty() {
         append_volatile_to_last_user(&mut conversation, &volatile_context);
     }
-    messages.extend(conversation.drain(..).map(map_message));
+    messages.extend(
+        conversation
+            .drain(..)
+            .map(|message| map_message(message, false)),
+    );
 
     Ok(OpenAiChatRequest {
         model: config.model.clone(),

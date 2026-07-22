@@ -570,6 +570,46 @@ describe('settings api', () => {
     });
   });
 
+  it('includes post-workout and planning overrides in update requests', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateAiAgents('', {
+      workoutChatProvider: 'openai',
+      workoutChatModel: 'gpt-5',
+      workoutPlanningProvider: 'gemini',
+      workoutPlanningModel: 'gemini-2.5-flash',
+      mesoCycleProvider: '',
+      mesoCycleModel: '',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/ai-agents', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        workoutChatProvider: 'openai',
+        workoutChatModel: 'gpt-5',
+        workoutPlanningProvider: 'gemini',
+        workoutPlanningModel: 'gemini-2.5-flash',
+        mesoCycleProvider: null,
+        mesoCycleModel: null,
+      }),
+    });
+  });
+
   it('trims athlete profile context fields in cycling updates', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()

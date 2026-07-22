@@ -164,7 +164,7 @@ pub(super) fn merge_ai_connection_config(
     })?;
     let model = model.expect("validated selected model should remain present");
 
-    let Some(api_key) = api_key else {
+    let Some(api_key) = api_key.filter(|value| !value.trim().is_empty()) else {
         return Err(test_ai_agents_connection_response(
             false,
             "Provider, model, and matching API key are required.",
@@ -258,13 +258,19 @@ pub(super) fn map_ai_connection_error_to_response(
 
 fn current_api_key_is_saved(provider: LlmProvider, current: &UserSettings) -> bool {
     match provider {
-        LlmProvider::OpenAi => current.ai_agents.openai_api_key.is_some(),
-        LlmProvider::Gemini => current.ai_agents.gemini_api_key.is_some(),
-        LlmProvider::OpenRouter => current.ai_agents.openrouter_api_key.is_some(),
-        LlmProvider::DeepSeek => current.ai_agents.deepseek_api_key.is_some(),
-        LlmProvider::Zai => current.ai_agents.zai_api_key.is_some(),
-        LlmProvider::OpenAiCompatible => current.ai_agents.openai_compatible_api_key.is_some(),
+        LlmProvider::OpenAi => non_empty_key(&current.ai_agents.openai_api_key),
+        LlmProvider::Gemini => non_empty_key(&current.ai_agents.gemini_api_key),
+        LlmProvider::OpenRouter => non_empty_key(&current.ai_agents.openrouter_api_key),
+        LlmProvider::DeepSeek => non_empty_key(&current.ai_agents.deepseek_api_key),
+        LlmProvider::Zai => non_empty_key(&current.ai_agents.zai_api_key),
+        LlmProvider::OpenAiCompatible => {
+            non_empty_key(&current.ai_agents.openai_compatible_api_key)
+        }
     }
+}
+
+fn non_empty_key(value: &Option<String>) -> bool {
+    value.as_ref().is_some_and(|key| !key.trim().is_empty())
 }
 
 fn selected_key_was_not_provided(

@@ -1,7 +1,7 @@
 use crate::adapters::llm::context_prelude::non_empty_context_parts;
 use crate::domain::llm::{
     LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmFinishReason,
-    LlmMessageRole, LlmProviderConfig, LlmTokenUsage, LlmToolCall, LlmToolChoice,
+    LlmMessageRole, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolCall, LlmToolChoice,
     LlmToolDefinition,
 };
 
@@ -12,11 +12,15 @@ use super::dto::{
     OpenAiToolChoice as OpenAiToolChoiceDto, OpenAiToolFunctionCall, OpenAiUsage,
 };
 
+const OMITTED_IMAGE_NOTE: &str =
+    "[Power chart image omitted: this provider does not support OpenAI-style image inputs.]";
+
 pub fn map_request(
     config: &LlmProviderConfig,
     request: LlmChatRequest,
 ) -> Result<OpenAiChatRequest, crate::domain::llm::LlmError> {
     let mut request = request;
+    let include_images = provider_supports_openai_image_parts(&config.provider);
     let mut messages = non_empty_context_parts([
         ("system", request.system_prompt.as_str()),
         ("system", request.stable_context.as_str()),
@@ -31,7 +35,12 @@ pub fn map_request(
         reasoning_content: None,
     })
     .collect::<Vec<_>>();
-    messages.extend(request.conversation.drain(..).map(map_message));
+    messages.extend(
+        request
+            .conversation
+            .drain(..)
+            .map(|message| map_message(message, include_images)),
+    );
 
     Ok(OpenAiChatRequest {
         model: config.model.clone(),
@@ -119,7 +128,7 @@ pub fn map_response(
     })
 }
 
-pub(crate) fn map_message(message: LlmChatMessage) -> OpenAiMessage {
+pub(crate) fn map_message(message: LlmChatMessage, include_images: bool) -> OpenAiMessage {
     let LlmChatMessage {
         role,
         content,
@@ -128,21 +137,30 @@ pub(crate) fn map_message(message: LlmChatMessage) -> OpenAiMessage {
         reasoning_content,
         image_base64,
     } = message;
-    let content = match image_base64 {
-        Some(b64) => {
-            let mut parts = Vec::new();
+    let content = match (include_images, image_base64) {
+        (true, Some(b64)) => {
+            // Qwen VL docs put image before text; OpenAI accepts either order.
+            let mut parts = vec![OpenAiContentPart::ImageUrl {
+                image_url: OpenAiImageUrl {
+                    url: format!("data:image/png;base64,{b64}"),
+                    // OpenAI accepts optional detail; Qwen VL docs omit it — keep unset for compatibility.
+                    detail: None,
+                },
+            }];
             if !content.is_empty() {
                 parts.push(OpenAiContentPart::Text { text: content });
             }
-            parts.push(OpenAiContentPart::ImageUrl {
-                image_url: OpenAiImageUrl {
-                    url: format!("data:image/png;base64,{b64}"),
-                    detail: Some("high".to_string()),
-                },
-            });
             Some(OpenAiMessageContent::Parts(parts))
         }
-        None => (!content.is_empty()).then_some(OpenAiMessageContent::Text(content)),
+        (false, Some(_)) => {
+            let text = if content.is_empty() {
+                OMITTED_IMAGE_NOTE.to_string()
+            } else {
+                content
+            };
+            Some(OpenAiMessageContent::Text(text))
+        }
+        (_, None) => (!content.is_empty()).then_some(OpenAiMessageContent::Text(content)),
     };
     OpenAiMessage {
         role: match role {
@@ -156,6 +174,15 @@ pub(crate) fn map_message(message: LlmChatMessage) -> OpenAiMessage {
         tool_call_id,
         reasoning_content,
     }
+}
+
+fn provider_supports_openai_image_parts(provider: &LlmProvider) -> bool {
+    // OpenAI Chat Completions vision format, also used by Qwen VL via openai_compatible
+    // (data:image/...;base64,... URLs). Text-only models on those endpoints reject image_url.
+    matches!(
+        provider,
+        LlmProvider::OpenAi | LlmProvider::OpenAiCompatible
+    )
 }
 
 pub(crate) fn map_tool_definition(
@@ -224,11 +251,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn map_message_with_image_base64_emits_image_url_part() {
+    fn map_message_with_image_base64_emits_image_url_part_for_openai() {
         let mut message = LlmChatMessage::user("Analyze this");
         message.image_base64 = Some("abc123".to_string());
 
-        let mapped = map_message(message);
+        let mapped = map_message(message, true);
 
         let content = mapped.content.expect("content should be present");
         let OpenAiMessageContent::Parts(parts) = content else {
@@ -240,12 +267,78 @@ mod tests {
             panic!("expected image_url part");
         };
         assert_eq!(image_url.url, "data:image/png;base64,abc123");
-        assert_eq!(image_url.detail.as_deref(), Some("high"));
+        assert_eq!(image_url.detail, None);
+    }
+
+    #[test]
+    fn map_message_strips_image_when_provider_does_not_support_parts() {
+        let mut message = LlmChatMessage::user("Analyze this");
+        message.image_base64 = Some("abc123".to_string());
+
+        let mapped = map_message(message, false);
+
+        let content = mapped.content.expect("content should be present");
+        assert_eq!(content.as_text(), Some("Analyze this"));
+    }
+
+    #[test]
+    fn map_request_keeps_image_parts_for_openai_compatible_provider() {
+        let mut message = LlmChatMessage::user("Analyze this");
+        message.image_base64 = Some("abc123".to_string());
+
+        let request = map_request(
+            &LlmProviderConfig {
+                provider: LlmProvider::OpenAiCompatible,
+                model: "qwen3-vl-plus".to_string(),
+                api_key: "key".to_string(),
+                base_url: Some("https://example.com/v1".to_string()),
+            },
+            LlmChatRequest {
+                conversation: vec![message],
+                ..Default::default()
+            },
+        )
+        .expect("request should map");
+
+        let content = request.messages[0]
+            .content
+            .as_ref()
+            .expect("content should be present");
+        let OpenAiMessageContent::Parts(parts) = content else {
+            panic!("expected parts content for openai_compatible vision");
+        };
+        assert!(matches!(parts[1], OpenAiContentPart::ImageUrl { .. }));
+    }
+
+    #[test]
+    fn map_request_omits_image_parts_for_deepseek_provider() {
+        let mut message = LlmChatMessage::user("Analyze this");
+        message.image_base64 = Some("abc123".to_string());
+
+        let request = map_request(
+            &LlmProviderConfig {
+                provider: LlmProvider::DeepSeek,
+                model: "deepseek-chat".to_string(),
+                api_key: "key".to_string(),
+                base_url: None,
+            },
+            LlmChatRequest {
+                conversation: vec![message],
+                ..Default::default()
+            },
+        )
+        .expect("request should map");
+
+        let content = request.messages[0]
+            .content
+            .as_ref()
+            .expect("content should be present");
+        assert_eq!(content.as_text(), Some("Analyze this"));
     }
 
     #[test]
     fn map_message_without_image_keeps_text_content() {
-        let mapped = map_message(LlmChatMessage::user("plain text"));
+        let mapped = map_message(LlmChatMessage::user("plain text"), true);
 
         let content = mapped.content.expect("content should be present");
         assert_eq!(content.as_text(), Some("plain text"));

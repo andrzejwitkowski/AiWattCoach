@@ -13,6 +13,10 @@ use super::input::{
     apply_field_update, normalize_string_input, parse_provider_settings_input, FieldUpdate,
 };
 
+fn api_key_is_set(value: &Option<String>) -> bool {
+    value.as_ref().is_some_and(|key| !key.trim().is_empty())
+}
+
 pub(super) fn map_settings_to_dto(
     settings: &UserSettings,
     wahoo_available: bool,
@@ -20,19 +24,21 @@ pub(super) fn map_settings_to_dto(
     UserSettingsDto {
         ai_agents: AiAgentsDto {
             openai_api_key: mask_sensitive(&settings.ai_agents.openai_api_key),
-            openai_api_key_set: settings.ai_agents.openai_api_key.is_some(),
+            openai_api_key_set: api_key_is_set(&settings.ai_agents.openai_api_key),
             gemini_api_key: mask_sensitive(&settings.ai_agents.gemini_api_key),
-            gemini_api_key_set: settings.ai_agents.gemini_api_key.is_some(),
+            gemini_api_key_set: api_key_is_set(&settings.ai_agents.gemini_api_key),
             openrouter_api_key: mask_sensitive(&settings.ai_agents.openrouter_api_key),
-            openrouter_api_key_set: settings.ai_agents.openrouter_api_key.is_some(),
+            openrouter_api_key_set: api_key_is_set(&settings.ai_agents.openrouter_api_key),
             deepseek_api_key: mask_sensitive(&settings.ai_agents.deepseek_api_key),
-            deepseek_api_key_set: settings.ai_agents.deepseek_api_key.is_some(),
+            deepseek_api_key_set: api_key_is_set(&settings.ai_agents.deepseek_api_key),
             zai_api_key: mask_sensitive(&settings.ai_agents.zai_api_key),
-            zai_api_key_set: settings.ai_agents.zai_api_key.is_some(),
+            zai_api_key_set: api_key_is_set(&settings.ai_agents.zai_api_key),
             openai_compatible_api_key: mask_sensitive(
                 &settings.ai_agents.openai_compatible_api_key,
             ),
-            openai_compatible_api_key_set: settings.ai_agents.openai_compatible_api_key.is_some(),
+            openai_compatible_api_key_set: api_key_is_set(
+                &settings.ai_agents.openai_compatible_api_key,
+            ),
             openai_compatible_base_url: settings.ai_agents.openai_compatible_base_url.clone(),
             selected_provider: settings
                 .ai_agents
