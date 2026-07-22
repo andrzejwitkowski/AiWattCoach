@@ -495,7 +495,7 @@ describe('WorkoutDetailModal completed mode', () => {
   });
 
   it('keeps calendar-hydrated actualWorkout when Intervals loadEvent returns null actualWorkout', async () => {
-    mockedLoadCompletedWorkoutSummary.mockResolvedValue(null);
+    mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
     mockedLoadEvent.mockResolvedValue(
       makeEvent({
         id: 123651861,
