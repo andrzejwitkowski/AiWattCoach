@@ -3,6 +3,7 @@ import {useTranslation} from 'react-i18next';
 
 import type {CompletedWorkoutSummary, IntervalActivity, IntervalEvent} from '../../intervals/types';
 import {
+  actualWorkoutElapsedSeconds,
   buildCompletedWorkoutPreviewBars,
   buildPowerTraceSeries,
   buildMatchedWorkoutBars,
@@ -51,10 +52,7 @@ export function CompletedWorkoutDetailModal({
       ? buildMatchedWorkoutBars(actualWorkout)
       : [];
   const compliance = actualWorkout ? `${Math.round(actualWorkout.complianceScore * 100)}% ${t('calendar.compliance')}` : null;
-  const actualWorkoutDurationSeconds = actualWorkout?.matchedIntervals.reduce((maxDuration, interval) => {
-    const intervalEnd = typeof interval.actualEndTimeSeconds === 'number' ? interval.actualEndTimeSeconds : 0;
-    return Math.max(maxDuration, intervalEnd);
-  }, 0) ?? 0;
+  const actualWorkoutDurationSeconds = actualWorkoutElapsedSeconds(actualWorkout);
   const durationSeconds = isCompletedActivityOnly
     ? firstPositiveValue(activity?.movingTimeSeconds, activity?.elapsedTimeSeconds)
     : isPlannedVsActual

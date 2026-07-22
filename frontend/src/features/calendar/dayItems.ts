@@ -3,7 +3,7 @@ import { formatPlannedRestLabelSubtitle } from './plannedRestPresentation';
 import type { CalendarDay, CalendarPlannedRestDayLabel, CalendarRaceLabel } from './types';
 import { formatRaceSubtitle } from './racePresentation';
 import type { WorkoutDetailSelection } from './workoutDetails';
-import { isPlannedWorkoutEvent } from './workoutDetails';
+import { actualWorkoutElapsedSeconds, isPlannedWorkoutEvent } from './workoutDetails';
 
 type BuildDayItemsOptions = {
   locale: string;
@@ -129,7 +129,7 @@ export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): 
 
     if (plannedWorkout) {
       const matchedActivity = event.actualWorkout?.activityId
-        ? day.activities.find((activity) => activity.id === event.actualWorkout?.activityId) ?? null
+        ? findActivityById(day.activities, event.actualWorkout.activityId)
         : null;
       items.push({
         kind: 'planned',
@@ -140,9 +140,10 @@ export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): 
         event,
         activity: matchedActivity,
         priorityRank: 1,
-        tss: event.eventDefinition.summary.estimatedTrainingStressScore !== null
-          ? Math.round(event.eventDefinition.summary.estimatedTrainingStressScore)
-          : null,
+        tss: event.actualWorkout?.trainingStressScore
+          ?? (event.eventDefinition.summary.estimatedTrainingStressScore !== null
+            ? Math.round(event.eventDefinition.summary.estimatedTrainingStressScore)
+            : null),
       });
       continue;
     }
@@ -151,7 +152,9 @@ export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): 
   }
 
   for (const activity of day.activities) {
-    const matchedEvent = day.events.find((event) => event.actualWorkout?.activityId === activity.id) ?? null;
+    const matchedEvent = day.events.find((event) =>
+      activityIdsMatch(event.actualWorkout?.activityId, activity.id)
+    ) ?? null;
     if (matchedEvent && isPlannedWorkoutEvent(matchedEvent)) {
       continue;
     }
@@ -206,17 +209,45 @@ function compareDayItems(left: CalendarDayItem, right: CalendarDayItem): number 
   return left.title.localeCompare(right.title);
 }
 
+function findActivityById(
+  activities: IntervalActivity[],
+  activityId: string,
+): IntervalActivity | null {
+  return activities.find((activity) => activityIdsMatch(activity.id, activityId)) ?? null;
+}
+
+function activityIdsMatch(left: string | null | undefined, right: string | null | undefined): boolean {
+  if (!left || !right) {
+    return false;
+  }
+  if (left === right) {
+    return true;
+  }
+  return normalizeActivityId(left) === normalizeActivityId(right);
+}
+
+function normalizeActivityId(activityId: string): string {
+  return activityId
+    .replace(/^intervals-activity:/, '')
+    .replace(/^wahoo-workout:/, '');
+}
+
 function summarizePlannedEvent(event: IntervalEvent, locale: string): string | null {
   if (event.restDay) {
     return event.restDayReason ?? null;
   }
 
-  const durationMinutes = event.eventDefinition.summary.totalDurationSeconds > 0
-    ? Math.round(event.eventDefinition.summary.totalDurationSeconds / 60)
+  const actualDurationSeconds = actualWorkoutElapsedSeconds(event.actualWorkout);
+  const durationSeconds = actualDurationSeconds > 0
+    ? actualDurationSeconds
+    : event.eventDefinition.summary.totalDurationSeconds;
+  const durationMinutes = durationSeconds > 0
+    ? Math.round(durationSeconds / 60)
     : null;
-  const tss = event.eventDefinition.summary.estimatedTrainingStressScore !== null
-    ? Math.round(event.eventDefinition.summary.estimatedTrainingStressScore)
-    : null;
+  const tss = event.actualWorkout?.trainingStressScore
+    ?? (event.eventDefinition.summary.estimatedTrainingStressScore !== null
+      ? Math.round(event.eventDefinition.summary.estimatedTrainingStressScore)
+      : null);
 
   const durationLabel = formatMinutes(durationMinutes, locale);
 

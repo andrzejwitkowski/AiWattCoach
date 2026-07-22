@@ -104,7 +104,7 @@ function ItemIcon({ item }: { item: CalendarDayItem }) {
     case 'planned_rest_day':
       return <BedDouble size={16} />;
     case 'planned':
-      return <Flag size={16} />;
+      return item.event.actualWorkout ? <Bike size={16} /> : <Flag size={16} />;
     case 'completed':
     case 'event':
     default:
@@ -119,7 +119,9 @@ function itemLabel(item: CalendarDayItem, t: ReturnType<typeof useTranslation>['
     case 'planned_rest_day':
       return t('calendar.plannedRestDay');
     case 'planned':
-      return t('calendar.plannedWorkout');
+      return item.event.actualWorkout
+        ? t('calendar.completedWorkout')
+        : t('calendar.plannedWorkout');
     case 'completed':
       return t('calendar.completedWorkout');
     case 'event':

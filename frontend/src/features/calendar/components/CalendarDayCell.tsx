@@ -6,7 +6,7 @@ import { formatPlannedRestLabelSubtitle } from '../plannedRestPresentation';
 import { formatRaceSubtitle, mapRaceDisciplineLabel } from '../racePresentation';
 import type { CalendarDay, CalendarPlannedRestDayLabel, CalendarRaceLabel } from '../types';
 import { formatDayLabel } from '../utils/dateUtils';
-import { buildPlannedWorkoutBars, isPlannedWorkoutEvent, type WorkoutBar } from '../workoutDetails';
+import { actualWorkoutElapsedSeconds, buildPlannedWorkoutBars, isPlannedWorkoutEvent, type WorkoutBar } from '../workoutDetails';
 import { CalendarMiniChart } from './CalendarMiniChart';
 import { buildBars } from './calendarDayBars';
 
@@ -62,7 +62,8 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const primaryCompletedActivity = interactiveDayItems.find((item): item is Extract<typeof interactiveDayItems[number], { kind: 'completed' }> => item.kind === 'completed')?.activity ?? null;
   const primaryPlannedItem = interactiveDayItems.find((item): item is Extract<typeof interactiveDayItems[number], { kind: 'planned' }> => item.kind === 'planned') ?? null;
   const matchedPlannedActivity = primaryPlannedItem?.activity ?? null;
-  const hasMatchedPlannedWorkout = Boolean(primaryPlannedItem?.event.actualWorkout && matchedPlannedActivity);
+  const hasCompletedLinkedPlan = Boolean(primaryPlannedItem?.event.actualWorkout);
+  const hasMatchedPlannedWorkout = Boolean(hasCompletedLinkedPlan && matchedPlannedActivity);
   const primaryEvent = primaryPlannedItem?.event
     ?? nonRaceEvents.find((event) => Boolean(event.actualWorkout))
     ?? day.events[0]
@@ -80,7 +81,9 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
         ? primaryEvent
         : null;
   const isPlannedRestDay = Boolean(primaryPlannedWorkoutEvent?.restDay);
-  const isPlannedOnly = Boolean(!visibleActivity && !raceLabel && primaryPlannedWorkoutEvent);
+  const isPlannedOnly = Boolean(
+    !visibleActivity && !hasCompletedLinkedPlan && !raceLabel && primaryPlannedWorkoutEvent,
+  );
   const isMissedPlannedOnly = Boolean(isPastDay && isPlannedOnly);
   const isPredictedPlannedOnly = Boolean(
     isPlannedOnly
@@ -125,7 +128,11 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
       : (raceLabel
       ? formatRaceSubtitle(raceLabel.payload, t)
       : (hasTraining
-        ? buildSubtitle(visibleActivity, isPlannedOnly ? primaryPlannedWorkoutEvent : null, locale, {
+        ? buildSubtitle(
+          visibleActivity,
+          isPlannedOnly || hasCompletedLinkedPlan ? primaryPlannedWorkoutEvent : null,
+          locale,
+          {
           workout: t('calendar.workout'),
           race: t('calendar.eventRace'),
           ride: t('calendar.eventRide'),
@@ -224,7 +231,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
                 {mapRaceDisciplineLabel(raceLabel.payload.discipline, t)}
               </p>
             </div>
-          ) : hasMatchedPlannedWorkout ? (
+          ) : hasCompletedLinkedPlan ? (
             <div className="mb-2 flex flex-wrap gap-2">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#d2ff9a]">
                 {t('calendar.completedWorkout')}
@@ -340,12 +347,18 @@ function buildSubtitle(
   }
 
   const eventSummary = dayEvent?.eventDefinition.summary ?? null;
-  const durationSeconds = dayActivity?.movingTimeSeconds ?? eventSummary?.totalDurationSeconds ?? 0;
+  const actualWorkout = dayEvent?.actualWorkout ?? null;
+  const actualDurationSeconds = actualWorkoutElapsedSeconds(actualWorkout);
+  const durationSeconds = dayActivity?.movingTimeSeconds
+    ?? (actualDurationSeconds > 0 ? actualDurationSeconds : null)
+    ?? eventSummary?.totalDurationSeconds
+    ?? 0;
   const durationMinutes = durationSeconds > 0
     ? new Intl.NumberFormat(locale, { style: 'unit', unit: 'minute', unitDisplay: 'short', maximumFractionDigits: 0 }).format(Math.round(durationSeconds / 60))
     : null;
   const estimatedTss = eventSummary?.estimatedTrainingStressScore;
   const tss = dayActivity?.metrics.trainingStressScore
+    ?? actualWorkout?.trainingStressScore
     ?? (estimatedTss !== null && estimatedTss !== undefined
       ? Math.round(estimatedTss)
       : null);

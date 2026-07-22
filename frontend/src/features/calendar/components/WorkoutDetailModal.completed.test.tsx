@@ -493,4 +493,75 @@ describe('WorkoutDetailModal completed mode', () => {
     await waitFor(() => expect(screen.getByText('Unable to load the AI workout summary right now.')).toBeInTheDocument());
     expect(screen.queryByText(/GET \/api\/completed-workouts\/a88\/summary failed/i)).not.toBeInTheDocument();
   });
+
+  it('keeps calendar-hydrated actualWorkout when Intervals loadEvent returns null actualWorkout', async () => {
+    mockedLoadCompletedWorkoutSummary.mockResolvedValue(null);
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 123651861,
+        name: 'Sub-Threshold Light',
+        indoor: false,
+        linkedIntervalsEventId: 123651861,
+        actualWorkout: null,
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: 'Sub-Threshold Light\n- 10m 90%',
+          intervals: [makeIntervalDefinition({ definition: '- 10m 90%', durationSeconds: 600, targetPercentFtp: 90, zoneId: 3 })],
+          summary: makeWorkoutSummary({ totalDurationSeconds: 600, estimatedTrainingStressScore: 25 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'i168123695',
+        name: 'Sub-Threshold Light',
+        movingTimeSeconds: 3191,
+        metrics: { trainingStressScore: 40, normalizedPowerWatts: 232, averagePowerWatts: 203 },
+        details: {
+          streams: [makeActivityStream({ streamType: 'watts', data: [200, 220, 240, 210] })],
+        },
+      }),
+    );
+
+    render(
+      <WorkoutDetailModal
+        selection={makeSelection({
+          dateKey: '2026-07-22',
+          event: makeEvent({
+            id: 123651861,
+            name: 'Sub-Threshold Light',
+            linkedIntervalsEventId: 123651861,
+            plannedSource: 'predicted',
+            actualWorkout: makeActualWorkout({
+              activityId: 'i168123695',
+              activityName: 'Sub-Threshold Light',
+              powerValues: [200, 220, 240, 210],
+              averagePowerWatts: 203,
+              normalizedPowerWatts: 232,
+              trainingStressScore: 40,
+              intensityFactor: 0.68,
+              complianceScore: 1,
+              matchedIntervals: [
+                makeMatchedInterval({
+                  plannedLabel: 'Main',
+                  plannedDurationSeconds: 3191,
+                  actualStartTimeSeconds: 0,
+                  actualEndTimeSeconds: 3191,
+                  averagePowerWatts: 203,
+                  normalizedPowerWatts: 232,
+                }),
+              ],
+            }),
+          }),
+          activity: null,
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Completed Workout')).toBeInTheDocument());
+    expect(screen.queryByText('Planned Workout')).not.toBeInTheDocument();
+    expect(mockedLoadActivity).toHaveBeenCalledWith('', 'i168123695');
+    expect(metricCard('NP')).toHaveTextContent('232');
+    expect(metricCard('TSS')).toHaveTextContent('40');
+  });
 });
