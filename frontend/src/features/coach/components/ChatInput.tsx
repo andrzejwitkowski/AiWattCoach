@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { SendHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -19,17 +19,27 @@ export function ChatInput({
 }: ChatInputProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const isSendingRef = useRef(false);
+  const inputDisabled = disabled || isSending;
 
   async function handleSend() {
     const trimmed = value.trim();
 
-    if (!trimmed || disabled) {
+    if (!trimmed || disabled || isSendingRef.current) {
       return;
     }
 
-    const wasSent = await onSend(trimmed);
-    if (wasSent) {
-      setValue('');
+    isSendingRef.current = true;
+    setIsSending(true);
+    try {
+      const wasSent = await onSend(trimmed);
+      if (wasSent) {
+        setValue('');
+      }
+    } finally {
+      isSendingRef.current = false;
+      setIsSending(false);
     }
   }
 
@@ -38,7 +48,7 @@ export function ChatInput({
       <div className="relative">
         <textarea
           className="min-h-28 w-full resize-none rounded-2xl border border-white/10 bg-black/40 px-5 py-4 pr-16 text-base text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/40"
-          disabled={disabled}
+          disabled={inputDisabled}
           aria-label={ariaLabel ?? t('coach.sendMessage')}
           placeholder={placeholder ?? t('coach.chatPlaceholder')}
           rows={3}
@@ -57,7 +67,7 @@ export function ChatInput({
           type="button"
           aria-label={sendAriaLabel ?? t('coach.sendMessage')}
           className="absolute bottom-4 right-4 flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-300 text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={disabled || value.trim().length === 0}
+          disabled={inputDisabled || value.trim().length === 0}
           onClick={() => {
             void handleSend();
           }}

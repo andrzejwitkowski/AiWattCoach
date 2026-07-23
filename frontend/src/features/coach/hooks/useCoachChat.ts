@@ -51,6 +51,9 @@ type PendingSocketState = {
   promise: Promise<WebSocket>;
 };
 
+// ponytail: 2s GET poll while awaiting-reply; upgrade to WS reliability if misses persist
+const AWAITING_REPLY_POLL_MS = 2000;
+
 export const availabilityRequiredChatError = 'availability must be configured before chatting with coach';
 
 export function isAvailabilityRequiredChatError(error: string | null | undefined): boolean {
@@ -127,6 +130,22 @@ function incomingSummaryIsNewer(current: WorkoutSummary | null, incoming: Workou
   return incoming.messages.length > current.messages.length;
 }
 
+function hasUnseenCoachReply(current: WorkoutSummary | null, incoming: WorkoutSummary): boolean {
+  const knownIds = new Set((current?.messages ?? []).map((message) => message.id));
+  return incoming.messages.some((message) => message.role === 'coach' && !knownIds.has(message.id));
+}
+
+function shouldRecoverPolledReply(
+  current: WorkoutSummary | null,
+  incoming: WorkoutSummary,
+  pendingContent: string,
+): boolean {
+  const hasPendingUser = incoming.messages.some(
+    (message) => message.role === 'user' && message.content === pendingContent,
+  );
+  return hasPendingUser && hasUnseenCoachReply(current, incoming);
+}
+
 export function useCoachChat({
   apiBaseUrl,
   workoutId,
@@ -152,6 +171,9 @@ export function useCoachChat({
   const summaryRef = useRef<WorkoutSummary | null>(null);
   const savingRequestIdRef = useRef(0);
   const localSystemMessageIdRef = useRef(0);
+  const sendInFlightRef = useRef(false);
+  const replyPollArmedRef = useRef(false);
+  const pendingSendContentRef = useRef<string | null>(null);
 
   useEffect(() => {
     summaryRef.current = summary;
@@ -160,6 +182,9 @@ export function useCoachChat({
   useEffect(() => {
     currentWorkoutIdRef.current = workoutId;
     savingRequestIdRef.current += 1;
+    sendInFlightRef.current = false;
+    replyPollArmedRef.current = false;
+    pendingSendContentRef.current = null;
     setIsSaving(false);
     setProgressState('idle');
   }, [workoutId]);
@@ -171,6 +196,9 @@ export function useCoachChat({
   }, []);
 
   const clearReplyProgress = useCallback(() => {
+    sendInFlightRef.current = false;
+    replyPollArmedRef.current = false;
+    pendingSendContentRef.current = null;
     setProgressState((current) => (current === 'awaiting-reply' ? 'idle' : current));
   }, []);
 
@@ -230,6 +258,9 @@ export function useCoachChat({
     }
 
     socketWorkoutIdRef.current = null;
+    sendInFlightRef.current = false;
+    replyPollArmedRef.current = false;
+    pendingSendContentRef.current = null;
 
     setIsConnected(false);
     setIsCoachTyping(false);
@@ -393,7 +424,10 @@ export function useCoachChat({
           pendingSocketRef.current = null;
         }
         setIsCoachTyping(false);
-        clearReplyProgress();
+        // Keep awaiting-reply + send lock so poll/REST can finish after a drop.
+        if (!sendInFlightRef.current) {
+          clearReplyProgress();
+        }
       });
 
       socket.addEventListener('error', () => {
@@ -407,7 +441,9 @@ export function useCoachChat({
         setError('Unable to connect to the coach chat right now.');
         setIsConnected(false);
         setIsCoachTyping(false);
-        clearReplyProgress();
+        if (!sendInFlightRef.current) {
+          clearReplyProgress();
+        }
         reject(new Error('WebSocket connection failed'));
       }, { once: true });
     });
@@ -421,7 +457,68 @@ export function useCoachChat({
         pendingSocketRef.current = null;
       }
     }
-  }, [apiBaseUrl, clearReplyProgress]);
+  }, [apiBaseUrl, applyIncomingSummary, clearReplyProgress]);
+
+  useEffect(() => {
+    if (progressState !== 'awaiting-reply' || !workoutId) {
+      return;
+    }
+
+    const requestedWorkoutId = workoutId;
+    let cancelled = false;
+
+    const pollForCoachReply = async () => {
+      if (!replyPollArmedRef.current || !pendingSendContentRef.current) {
+        return;
+      }
+
+      const pendingContent = pendingSendContentRef.current;
+
+      try {
+        const loadedSummary = await getWorkoutSummary(
+          apiBaseUrl,
+          requestedWorkoutId,
+          aliasRangeOldest && aliasRangeNewest
+            ? { oldest: aliasRangeOldest, newest: aliasRangeNewest }
+            : undefined,
+        );
+
+        if (cancelled || currentWorkoutIdRef.current !== requestedWorkoutId) {
+          return;
+        }
+
+        if (!shouldRecoverPolledReply(summaryRef.current, loadedSummary, pendingContent)) {
+          return;
+        }
+
+        if (!applyIncomingSummary(loadedSummary, requestedWorkoutId, 'newer-only')) {
+          return;
+        }
+
+        setIsCoachTyping(false);
+        clearReplyProgress();
+      } catch {
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void pollForCoachReply();
+    }, AWAITING_REPLY_POLL_MS);
+    void pollForCoachReply();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    aliasRangeNewest,
+    aliasRangeOldest,
+    apiBaseUrl,
+    applyIncomingSummary,
+    clearReplyProgress,
+    progressState,
+    workoutId,
+  ]);
 
   useEffect(() => {
     closeSocket();
@@ -619,6 +716,14 @@ export function useCoachChat({
       return false;
     }
 
+    if (sendInFlightRef.current) {
+      return false;
+    }
+
+    sendInFlightRef.current = true;
+    replyPollArmedRef.current = false;
+    pendingSendContentRef.current = trimmed;
+    setProgressState('awaiting-reply');
     setError(null);
 
     try {
@@ -640,8 +745,8 @@ export function useCoachChat({
       if (socket && socket.readyState === WebSocket.OPEN) {
         assertCurrentWorkout(requestedWorkoutId);
         const payload = clientWsMessageSchema.parse({ type: 'send_message', content: trimmed });
-        setProgressState('awaiting-reply');
         socket.send(JSON.stringify(payload));
+        replyPollArmedRef.current = true;
         setMessages((current) => {
           if (currentWorkoutIdRef.current !== requestedWorkoutId) {
             return current;
@@ -653,16 +758,20 @@ export function useCoachChat({
       }
 
       setError(null);
+      replyPollArmedRef.current = true;
       const response = await sendWorkoutSummaryMessage(apiBaseUrl, requestedWorkoutId, { content: trimmed });
       assertCurrentWorkout(requestedWorkoutId);
       applyIncomingSummary(response.summary, requestedWorkoutId);
+      clearReplyProgress();
       return true;
     } catch (sendError) {
       if (sendError instanceof StaleWorkoutSelectionError) {
+        clearReplyProgress();
         return false;
       }
 
       if (sendError instanceof AuthenticationError) {
+        clearReplyProgress();
         window.location.href = '/';
         return false;
       }

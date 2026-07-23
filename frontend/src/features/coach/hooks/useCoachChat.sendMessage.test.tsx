@@ -82,7 +82,7 @@ describe('useCoachChat sendMessage', () => {
     });
 
     expect(createWorkoutSummary).toHaveBeenCalledWith('', '101');
-    expect(getWorkoutSummary).toHaveBeenCalledTimes(2);
+    expect(getWorkoutSummary.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(result.current.summary?.rpe).toBe(5);
   });
 
@@ -487,5 +487,243 @@ describe('useCoachChat sendMessage', () => {
     });
 
     expect(updateWorkoutSummaryRpe).toHaveBeenCalledWith('', '101', 8);
+  });
+
+  it('sets awaiting-reply immediately and ignores a concurrent send', async () => {
+    installFakeWebSocket();
+    vi.mocked(getWorkoutSummary).mockRejectedValue(new HttpError(404, 'not found'));
+    let resolveCreate: ((value: typeof summaryFixture) => void) | undefined;
+    vi.mocked(createWorkoutSummary).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCreate = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    act(() => {
+      result.current.setDraftRpe(5);
+    });
+
+    let firstSend: Promise<boolean> | undefined;
+    let secondSend: Promise<boolean> | undefined;
+    await act(async () => {
+      firstSend = result.current.sendMessage('Legs felt strong');
+      secondSend = result.current.sendMessage('Legs felt strong');
+    });
+
+    expect(result.current.progressState).toBe('awaiting-reply');
+
+    await act(async () => {
+      resolveCreate?.({ ...summaryFixture, rpe: 5 });
+      await expect(firstSend).resolves.toBe(true);
+      await expect(secondSend).resolves.toBe(false);
+    });
+
+    expect(createWorkoutSummary).toHaveBeenCalledTimes(1);
+    expect(FakeWebSocket.instances[0]?.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovers a persisted coach reply via poll when websocket never emits coach_message', async () => {
+    installFakeWebSocket();
+    let returnPersistedReply = false;
+    vi.mocked(getWorkoutSummary).mockImplementation(async () => {
+      if (!returnPersistedReply) {
+        return summaryFixture;
+      }
+
+      return {
+        ...summaryFixture,
+        updatedAtEpochSeconds: 99,
+        messages: [
+          {
+            id: 'message-user-1',
+            role: 'user',
+            content: 'Need feedback',
+            createdAtEpochSeconds: 2,
+          },
+          {
+            id: 'message-coach-1',
+            role: 'coach',
+            content: 'Recovered coach reply',
+            createdAtEpochSeconds: 3,
+          },
+        ],
+      };
+    });
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('Need feedback');
+    });
+
+    expect(result.current.progressState).toBe('awaiting-reply');
+    expect(FakeWebSocket.instances[0]?.send).toHaveBeenCalled();
+
+    returnPersistedReply = true;
+
+    await waitFor(
+      () => {
+        expect(result.current.progressState).toBe('idle');
+        expect(result.current.isCoachTyping).toBe(false);
+        expect(result.current.messages.map((message) => message.content)).toEqual([
+          'Need feedback',
+          'Recovered coach reply',
+        ]);
+      },
+      { timeout: 4000 },
+    );
+  });
+
+  it('keeps awaiting-reply after websocket close and still recovers via poll', async () => {
+    installFakeWebSocket();
+    let returnPersistedReply = false;
+    vi.mocked(getWorkoutSummary).mockImplementation(async () => {
+      if (!returnPersistedReply) {
+        return summaryFixture;
+      }
+
+      return {
+        ...summaryFixture,
+        updatedAtEpochSeconds: 99,
+        messages: [
+          {
+            id: 'message-user-1',
+            role: 'user',
+            content: 'Need feedback',
+            createdAtEpochSeconds: 2,
+          },
+          {
+            id: 'message-coach-1',
+            role: 'coach',
+            content: 'Recovered after close',
+            createdAtEpochSeconds: 3,
+          },
+        ],
+      };
+    });
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('Need feedback');
+    });
+
+    expect(result.current.progressState).toBe('awaiting-reply');
+
+    act(() => {
+      FakeWebSocket.instances[0]?.close();
+    });
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(false);
+    });
+
+    expect(result.current.progressState).toBe('awaiting-reply');
+
+    returnPersistedReply = true;
+
+    await waitFor(
+      () => {
+        expect(result.current.progressState).toBe('idle');
+        expect(result.current.messages.map((message) => message.content)).toEqual([
+          'Need feedback',
+          'Recovered after close',
+        ]);
+      },
+      { timeout: 4000 },
+    );
+  });
+
+  it('keeps send lock through websocket connect failure into REST fallback', async () => {
+    installFakeWebSocket();
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+    let resolveFallback: ((value: SendMessageResponse) => void) | undefined;
+    vi.mocked(sendWorkoutSummaryMessage).mockImplementation(() => new Promise((resolve) => {
+      resolveFallback = resolve;
+    }));
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    FakeWebSocket.failNextConnection = true;
+    act(() => {
+      FakeWebSocket.instances[0]?.emit('error');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(false);
+    });
+
+    let sendPromise: Promise<boolean> | undefined;
+    let concurrentSend: Promise<boolean> | undefined;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('Need feedback');
+    });
+
+    expect(result.current.progressState).toBe('awaiting-reply');
+
+    await act(async () => {
+      concurrentSend = result.current.sendMessage('Need feedback');
+      await expect(concurrentSend).resolves.toBe(false);
+    });
+
+    act(() => {
+      resolveFallback?.({
+        summary: {
+          ...summaryFixture,
+          messages: [
+            {
+              id: 'message-user-1',
+              role: 'user',
+              content: 'Need feedback',
+              createdAtEpochSeconds: 2,
+            },
+            {
+              id: 'message-coach-1',
+              role: 'coach',
+              content: 'Coach reply',
+              createdAtEpochSeconds: 3,
+            },
+          ],
+        },
+        userMessage: {
+          id: 'message-user-1',
+          role: 'user',
+          content: 'Need feedback',
+          createdAtEpochSeconds: 2,
+        },
+        coachMessage: {
+          id: 'message-coach-1',
+          role: 'coach',
+          content: 'Coach reply',
+          createdAtEpochSeconds: 3,
+        },
+      });
+    });
+
+    await act(async () => {
+      await expect(sendPromise).resolves.toBe(true);
+    });
+
+    expect(sendWorkoutSummaryMessage).toHaveBeenCalledTimes(1);
+    expect(result.current.progressState).toBe('idle');
   });
 });
