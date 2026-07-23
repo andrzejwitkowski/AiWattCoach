@@ -6,6 +6,8 @@ export type AiAgentsDraftState = {
   openrouterApiKey: string;
   deepseekApiKey: string;
   zaiApiKey: string;
+  openaiCompatibleApiKey: string;
+  openaiCompatibleBaseUrl: string;
   selectedProvider: string;
   selectedModel: string;
   workoutChatProvider: string;
@@ -14,10 +16,12 @@ export type AiAgentsDraftState = {
   workoutPlanningModel: string;
   mesoCycleProvider: string;
   mesoCycleModel: string;
+  includePowerImage: boolean;
 };
 
 type PersistedAiAgentsDraft = Pick<
   AiAgentsDraftState,
+  | 'openaiCompatibleBaseUrl'
   | 'selectedProvider'
   | 'selectedModel'
   | 'workoutChatProvider'
@@ -26,6 +30,7 @@ type PersistedAiAgentsDraft = Pick<
   | 'workoutPlanningModel'
   | 'mesoCycleProvider'
   | 'mesoCycleModel'
+  | 'includePowerImage'
 >;
 
 export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiAgentsDraftState {
@@ -35,6 +40,8 @@ export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiA
     openrouterApiKey: '',
     deepseekApiKey: '',
     zaiApiKey: '',
+    openaiCompatibleApiKey: '',
+    openaiCompatibleBaseUrl: persisted.openaiCompatibleBaseUrl,
     selectedProvider: persisted.selectedProvider,
     selectedModel: persisted.selectedModel,
     workoutChatProvider: persisted.workoutChatProvider,
@@ -43,6 +50,7 @@ export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiA
     workoutPlanningModel: persisted.workoutPlanningModel,
     mesoCycleProvider: persisted.mesoCycleProvider,
     mesoCycleModel: persisted.mesoCycleModel,
+    includePowerImage: persisted.includePowerImage,
   };
 }
 
@@ -54,6 +62,7 @@ export function clearDraftApiKeys(draft: AiAgentsDraftState): AiAgentsDraftState
     openrouterApiKey: '',
     deepseekApiKey: '',
     zaiApiKey: '',
+    openaiCompatibleApiKey: '',
   };
 }
 
@@ -77,6 +86,14 @@ export function mergeDraftWithPersisted(
         : current.deepseekApiKey,
     zaiApiKey:
       current.zaiApiKey === previousPersisted.zaiApiKey ? persisted.zaiApiKey : current.zaiApiKey,
+    openaiCompatibleApiKey:
+      current.openaiCompatibleApiKey === previousPersisted.openaiCompatibleApiKey
+        ? persisted.openaiCompatibleApiKey
+        : current.openaiCompatibleApiKey,
+    openaiCompatibleBaseUrl:
+      current.openaiCompatibleBaseUrl === previousPersisted.openaiCompatibleBaseUrl
+        ? persisted.openaiCompatibleBaseUrl
+        : current.openaiCompatibleBaseUrl,
     selectedProvider:
       current.selectedProvider === previousPersisted.selectedProvider
         ? persisted.selectedProvider
@@ -107,6 +124,10 @@ export function mergeDraftWithPersisted(
       current.mesoCycleModel === previousPersisted.mesoCycleModel
         ? persisted.mesoCycleModel
         : current.mesoCycleModel,
+    includePowerImage:
+      current.includePowerImage === previousPersisted.includePowerImage
+        ? persisted.includePowerImage
+        : current.includePowerImage,
   };
 }
 
@@ -117,6 +138,8 @@ export function isAiAgentsDraftDirty(current: AiAgentsDraftState, clean: AiAgent
     current.openrouterApiKey !== clean.openrouterApiKey ||
     current.deepseekApiKey !== clean.deepseekApiKey ||
     current.zaiApiKey !== clean.zaiApiKey ||
+    current.openaiCompatibleApiKey !== clean.openaiCompatibleApiKey ||
+    current.openaiCompatibleBaseUrl !== clean.openaiCompatibleBaseUrl ||
     current.selectedProvider !== clean.selectedProvider ||
     current.selectedModel !== clean.selectedModel ||
     current.workoutChatProvider !== clean.workoutChatProvider ||
@@ -124,12 +147,13 @@ export function isAiAgentsDraftDirty(current: AiAgentsDraftState, clean: AiAgent
     current.workoutPlanningProvider !== clean.workoutPlanningProvider ||
     current.workoutPlanningModel !== clean.workoutPlanningModel ||
     current.mesoCycleProvider !== clean.mesoCycleProvider ||
-    current.mesoCycleModel !== clean.mesoCycleModel
+    current.mesoCycleModel !== clean.mesoCycleModel ||
+    current.includePowerImage !== clean.includePowerImage
   );
 }
 
 function assignTrimmedApiKey(
-  request: Partial<Record<keyof AiAgentsDraftState, string | null>>,
+  request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>>,
   key: keyof AiAgentsDraftState,
   value: string,
 ) {
@@ -140,7 +164,7 @@ function assignTrimmedApiKey(
 }
 
 function assignChangedStringField(
-  request: Partial<Record<keyof AiAgentsDraftState, string | null>>,
+  request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>>,
   key: keyof AiAgentsDraftState,
   currentValue: string,
   persistedValue: string,
@@ -154,14 +178,21 @@ function assignChangedStringField(
 export function buildVisibleAiAgentsRequest(
   draft: AiAgentsDraftState,
   persisted: AiAgentsDraftState,
-): Partial<Record<keyof AiAgentsDraftState, string | null>> {
-  const request: Partial<Record<keyof AiAgentsDraftState, string | null>> = {};
+): Partial<Record<keyof AiAgentsDraftState, string | null | boolean>> {
+  const request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>> = {};
 
   assignTrimmedApiKey(request, 'openaiApiKey', draft.openaiApiKey);
   assignTrimmedApiKey(request, 'geminiApiKey', draft.geminiApiKey);
   assignTrimmedApiKey(request, 'openrouterApiKey', draft.openrouterApiKey);
   assignTrimmedApiKey(request, 'deepseekApiKey', draft.deepseekApiKey);
   assignTrimmedApiKey(request, 'zaiApiKey', draft.zaiApiKey);
+  assignTrimmedApiKey(request, 'openaiCompatibleApiKey', draft.openaiCompatibleApiKey);
+  assignChangedStringField(
+    request,
+    'openaiCompatibleBaseUrl',
+    draft.openaiCompatibleBaseUrl,
+    persisted.openaiCompatibleBaseUrl,
+  );
 
   const trimmedProvider = draft.selectedProvider.trim();
   const trimmedModel = draft.selectedModel.trim();
@@ -187,6 +218,10 @@ export function buildVisibleAiAgentsRequest(
   assignChangedStringField(request, 'mesoCycleProvider', draft.mesoCycleProvider, persisted.mesoCycleProvider);
   assignChangedStringField(request, 'mesoCycleModel', draft.mesoCycleModel, persisted.mesoCycleModel);
 
+  if (draft.includePowerImage !== persisted.includePowerImage) {
+    request.includePowerImage = draft.includePowerImage;
+  }
+
   return request;
 }
 
@@ -197,9 +232,12 @@ export function buildTestStatusMessage(result: TestAiAgentsConnectionResponse) {
     result.usedSavedModel ? 'saved model' : null,
   ].filter(Boolean);
 
+  const trimmedMessage = result.message.trim();
+  const normalizedMessage = /[.!?]$/.test(trimmedMessage) ? trimmedMessage : `${trimmedMessage}.`;
+
   if (reusedSavedValues.length === 0) {
-    return `${result.message} Tested the visible draft only.`;
+    return `${normalizedMessage} Tested the visible draft only.`;
   }
 
-  return `${result.message} Used ${reusedSavedValues.join(', ')} for unchanged fields.`;
+  return `${normalizedMessage} Used ${reusedSavedValues.join(', ')} for unchanged fields.`;
 }

@@ -374,6 +374,7 @@ pub(crate) fn existing_summary_with_finished_conversation() -> WorkoutSummary {
         tool_call: None,
         questions: Vec::new(),
         created_at_epoch_seconds: 1_700_000_050,
+        image_url: None,
     });
     summary
 }
@@ -814,6 +815,7 @@ impl WorkoutCoach for DevWorkoutCoach {
         _summary: &WorkoutSummary,
         user_message: &str,
         _athlete_summary_text: Option<&str>,
+        _power_chart_base64: Option<&str>,
     ) -> aiwattcoach::domain::llm::BoxFuture<
         Result<
             aiwattcoach::domain::llm_tools::LlmToolLoopOutput,

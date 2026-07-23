@@ -4,10 +4,20 @@ type AiAgentsFieldKey =
   | 'openrouterApiKey'
   | 'deepseekApiKey'
   | 'zaiApiKey'
+  | 'openaiCompatibleApiKey'
+  | 'openaiCompatibleBaseUrl'
   | 'selectedProvider'
   | 'selectedModel';
 
-type ValidatedAiAgents = Partial<Record<AiAgentsFieldKey | 'mesoCycleProvider' | 'mesoCycleModel', string | null>>;
+type AgentOverrideFieldKey =
+  | 'workoutChatProvider'
+  | 'workoutChatModel'
+  | 'workoutPlanningProvider'
+  | 'workoutPlanningModel'
+  | 'mesoCycleProvider'
+  | 'mesoCycleModel';
+
+type ValidatedAiAgents = Partial<Record<AiAgentsFieldKey | AgentOverrideFieldKey, string | null>>;
 
 function trimToUndefined(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -58,18 +68,29 @@ export function getOptionalStringFieldValue(
   return trimToUndefined(validatedValue);
 }
 
+const AGENT_OVERRIDE_FIELDS: AgentOverrideFieldKey[] = [
+  'workoutChatProvider',
+  'workoutChatModel',
+  'workoutPlanningProvider',
+  'workoutPlanningModel',
+  'mesoCycleProvider',
+  'mesoCycleModel',
+];
+
 export function buildAiAgentsConnectionBody(
   data: unknown,
   validated: ValidatedAiAgents,
-  options?: { includeMesoFields?: boolean },
-): Record<string, string | null> {
-  const body: Record<string, string | null> = {};
+  options?: { includeAgentOverrides?: boolean },
+): Record<string, string | null | boolean> {
+  const body: Record<string, string | null | boolean> = {};
   const fields: AiAgentsFieldKey[] = [
     'openaiApiKey',
     'geminiApiKey',
     'openrouterApiKey',
     'deepseekApiKey',
     'zaiApiKey',
+    'openaiCompatibleApiKey',
+    'openaiCompatibleBaseUrl',
     'selectedProvider',
     'selectedModel',
   ];
@@ -81,15 +102,19 @@ export function buildAiAgentsConnectionBody(
     }
   }
 
-  if (options?.includeMesoFields) {
-    const mesoCycleProvider = getOptionalStringFieldValue(data, 'mesoCycleProvider', validated.mesoCycleProvider);
-    const mesoCycleModel = getOptionalStringFieldValue(data, 'mesoCycleModel', validated.mesoCycleModel);
-
-    if (mesoCycleProvider !== undefined) {
-      body.mesoCycleProvider = mesoCycleProvider;
+  if (options?.includeAgentOverrides) {
+    for (const field of AGENT_OVERRIDE_FIELDS) {
+      const value = getOptionalStringFieldValue(data, field, validated[field]);
+      if (value !== undefined) {
+        body[field] = value;
+      }
     }
-    if (mesoCycleModel !== undefined) {
-      body.mesoCycleModel = mesoCycleModel;
+  }
+
+  if (data && typeof data === 'object' && 'includePowerImage' in data) {
+    const includePowerImage = (data as Record<string, unknown>).includePowerImage;
+    if (typeof includePowerImage === 'boolean') {
+      body.includePowerImage = includePowerImage;
     }
   }
 

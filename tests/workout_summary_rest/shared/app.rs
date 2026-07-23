@@ -9,8 +9,8 @@ use aiwattcoach::{
     build_app_with_frontend_dist,
     config::AppState,
     domain::{
-        identity::IdentityUseCases, settings::UserSettingsUseCases,
-        workout_summary::WorkoutSummaryUseCases,
+        completed_workouts::CompletedWorkoutReadUseCases, identity::IdentityUseCases,
+        settings::UserSettingsUseCases, workout_summary::WorkoutSummaryUseCases,
     },
     Settings,
 };
@@ -86,6 +86,32 @@ pub(crate) async fn workout_summary_test_app_with_settings_and_notifier(
     if let Some(save_notifier) = save_notifier {
         app_state = app_state.with_workout_summary_save_notifier(save_notifier);
     }
+
+    build_app_with_frontend_dist(app_state, fixture.dist_dir())
+}
+
+pub(crate) async fn workout_summary_test_app_with_completed_workouts(
+    identity_service: impl IdentityUseCases + 'static,
+    workout_summary_service: impl WorkoutSummaryUseCases + 'static,
+    completed_workout_service: Arc<dyn CompletedWorkoutReadUseCases>,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let fixture = shared_frontend_fixture();
+
+    let app_state = AppState::new(
+        settings.app_name,
+        settings.mongo.database,
+        test_mongo_client(&settings.mongo.uri).await,
+    )
+    .with_identity_service(
+        Arc::new(identity_service),
+        "aiwattcoach_session",
+        "lax",
+        false,
+        24,
+    )
+    .with_workout_summary_service(Arc::new(workout_summary_service))
+    .with_completed_workout_service(completed_workout_service);
 
     build_app_with_frontend_dist(app_state, fixture.dist_dir())
 }

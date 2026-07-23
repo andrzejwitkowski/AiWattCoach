@@ -178,7 +178,9 @@ function selectDay(
 function itemKindLabel(item: CalendarDayItem, t: ReturnType<typeof useTranslation>['t']) {
   switch (item.kind) {
     case 'planned':
-      return t('calendar.plannedWorkout');
+      return item.event.actualWorkout
+        ? t('calendar.completedWorkout')
+        : t('calendar.plannedWorkout');
     case 'completed':
       return t('calendar.completedWorkout');
     case 'race':

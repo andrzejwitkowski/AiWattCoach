@@ -26,6 +26,8 @@ pub struct AiAgentsConfig {
     pub openrouter_api_key: Option<String>,
     pub deepseek_api_key: Option<String>,
     pub zai_api_key: Option<String>,
+    pub openai_compatible_api_key: Option<String>,
+    pub openai_compatible_base_url: Option<String>,
     pub selected_provider: Option<LlmProvider>,
     pub selected_model: Option<String>,
     pub workout_chat_provider: Option<LlmProvider>,
@@ -34,6 +36,7 @@ pub struct AiAgentsConfig {
     pub workout_planning_model: Option<String>,
     pub meso_cycle_provider: Option<LlmProvider>,
     pub meso_cycle_model: Option<String>,
+    pub include_power_image: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]

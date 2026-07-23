@@ -43,11 +43,15 @@ export function WorkoutDetailModal({selection, onClose, onEventSynced}: WorkoutD
         setSyncError(null);
         setState({event: null, activity: null, loading: true});
 
+        const activityIdToLoad = selection.activity?.id
+            ?? selection.event?.actualWorkout?.activityId
+            ?? null;
+
         void Promise.allSettled([
             selection.event && (selection.event.plannedSource !== 'predicted' || selection.event.linkedIntervalsEventId)
                 ? loadEvent(apiBaseUrl, selection.event.linkedIntervalsEventId ?? selection.event.id)
                 : Promise.resolve(null),
-            selection.activity ? loadActivity(apiBaseUrl, selection.activity.id) : Promise.resolve(null),
+            activityIdToLoad ? loadActivity(apiBaseUrl, activityIdToLoad) : Promise.resolve(null),
         ]).then(([eventResult, activityResult]) => {
             if (cancelled) {
                 return;
@@ -220,6 +224,7 @@ function mergeSelectedEvent(
 
     return {
         ...loadedEvent,
+        actualWorkout: selectedEvent.actualWorkout ?? loadedEvent.actualWorkout,
         eventDefinition: hasMeaningfulEventDefinition(loadedEvent.eventDefinition)
             ? loadedEvent.eventDefinition
             : mergeEventDefinitions(selectedEvent.eventDefinition, loadedEvent.eventDefinition),

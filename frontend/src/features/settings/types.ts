@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-const llmProviderSchema = z.enum(['openai', 'gemini', 'openrouter', 'deepseek', 'zai']);
+const llmProviderSchema = z.enum([
+  'openai',
+  'gemini',
+  'openrouter',
+  'deepseek',
+  'zai',
+  'openai_compatible',
+]);
 const availabilityWeekdaySchema = z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 
 const aiAgentsSettingsSchema = z.object({
@@ -14,6 +21,9 @@ const aiAgentsSettingsSchema = z.object({
   deepseekApiKeySet: z.boolean(),
   zaiApiKey: z.string().nullable(),
   zaiApiKeySet: z.boolean(),
+  openaiCompatibleApiKey: z.string().nullable(),
+  openaiCompatibleApiKeySet: z.boolean(),
+  openaiCompatibleBaseUrl: z.string().nullable(),
   selectedProvider: llmProviderSchema.nullable().optional(),
   selectedModel: z.string().nullable().optional(),
   mesoCycleProvider: llmProviderSchema.nullable().optional(),
@@ -22,6 +32,7 @@ const aiAgentsSettingsSchema = z.object({
   workoutChatModel: z.string().nullable().optional(),
   workoutPlanningProvider: llmProviderSchema.nullable().optional(),
   workoutPlanningModel: z.string().nullable().optional(),
+  includePowerImage: z.boolean().optional(),
 });
 
 const intervalsSettingsSchema = z.object({
@@ -155,6 +166,8 @@ export const updateAiAgentsRequestSchema = z.object({
   openrouterApiKey: z.string().nullable().optional(),
   deepseekApiKey: z.string().nullable().optional(),
   zaiApiKey: z.string().nullable().optional(),
+  openaiCompatibleApiKey: z.string().nullable().optional(),
+  openaiCompatibleBaseUrl: z.string().nullable().optional(),
   selectedProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
   selectedModel: z.string().nullable().optional(),
   mesoCycleProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
@@ -163,6 +176,7 @@ export const updateAiAgentsRequestSchema = z.object({
   workoutChatModel: z.string().nullable().optional(),
   workoutPlanningProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
   workoutPlanningModel: z.string().nullable().optional(),
+  includePowerImage: z.boolean().optional(),
 });
 
 export type LlmProvider = z.infer<typeof llmProviderSchema>;

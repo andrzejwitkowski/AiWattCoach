@@ -502,6 +502,42 @@ describe('settings api', () => {
     });
   });
 
+  it('includes openai compatible key and base url in update requests', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateAiAgents('', {
+      openaiCompatibleApiKey: ' sk-compat-key ',
+      openaiCompatibleBaseUrl: ' http://127.0.0.1:11434/v1/ ',
+      selectedProvider: 'openai_compatible',
+      selectedModel: 'llama3.2',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/ai-agents', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        openaiCompatibleApiKey: 'sk-compat-key',
+        openaiCompatibleBaseUrl: 'http://127.0.0.1:11434/v1/',
+        selectedProvider: 'openai_compatible',
+        selectedModel: 'llama3.2',
+      }),
+    });
+  });
+
   it('preserves explicit provider and model clears in update requests', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
@@ -530,6 +566,46 @@ describe('settings api', () => {
       body: JSON.stringify({
         selectedProvider: null,
         selectedModel: null,
+      }),
+    });
+  });
+
+  it('includes post-workout and planning overrides in update requests', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateAiAgents('', {
+      workoutChatProvider: 'openai',
+      workoutChatModel: 'gpt-5',
+      workoutPlanningProvider: 'gemini',
+      workoutPlanningModel: 'gemini-2.5-flash',
+      mesoCycleProvider: '',
+      mesoCycleModel: '',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/ai-agents', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        workoutChatProvider: 'openai',
+        workoutChatModel: 'gpt-5',
+        workoutPlanningProvider: 'gemini',
+        workoutPlanningModel: 'gemini-2.5-flash',
+        mesoCycleProvider: null,
+        mesoCycleModel: null,
       }),
     });
   });

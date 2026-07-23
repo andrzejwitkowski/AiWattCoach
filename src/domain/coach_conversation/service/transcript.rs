@@ -75,6 +75,7 @@ pub fn build_calendar_conversation(
                 tool_calls: Vec::new(),
                 tool_call_id: None,
                 reasoning_content: None,
+                image_base64: None,
             }),
             CoachConversationMessageRole::Coach => Some(LlmChatMessage {
                 role: LlmMessageRole::Assistant,
@@ -85,6 +86,7 @@ pub fn build_calendar_conversation(
                 tool_calls: Vec::new(),
                 tool_call_id: None,
                 reasoning_content: message.reasoning_content.clone(),
+                image_base64: None,
             }),
             CoachConversationMessageRole::Tool | CoachConversationMessageRole::System => None,
         })

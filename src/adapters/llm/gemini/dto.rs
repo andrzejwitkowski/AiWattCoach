@@ -12,12 +12,26 @@ pub struct GeminiGenerateContentRequest {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct GeminiContent {
     pub role: String,
-    pub parts: Vec<GeminiTextPart>,
+    pub parts: Vec<GeminiPart>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct GeminiTextPart {
-    pub text: String,
+#[serde(untagged)]
+pub enum GeminiPart {
+    Text {
+        text: String,
+    },
+    InlineData {
+        #[serde(rename = "inlineData")]
+        inline_data: GeminiInlineData,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct GeminiInlineData {
+    #[serde(rename = "mimeType")]
+    pub mime_type: String,
+    pub data: String,
 }
 
 #[derive(Deserialize)]

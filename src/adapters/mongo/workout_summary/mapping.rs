@@ -115,6 +115,7 @@ pub(super) fn map_message_to_document(message: ConversationMessage) -> Conversat
             "created_at",
         )
         .expect("created_at should fit BSON DateTime"),
+        image_url: message.image_url,
     }
 }
 
@@ -148,6 +149,7 @@ pub(super) fn map_message_to_domain(
             "created_at",
         )
         .map_err(WorkoutSummaryError::Repository)?,
+        image_url: message.image_url,
     })
 }
 

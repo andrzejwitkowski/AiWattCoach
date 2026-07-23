@@ -681,7 +681,11 @@ fn calendar_coach_tool_guidance(available_tool_names: &[&'static str]) -> Vec<St
 fn provider_supports_tools(provider: &LlmProvider) -> bool {
     matches!(
         provider,
-        LlmProvider::OpenAi | LlmProvider::OpenRouter | LlmProvider::DeepSeek | LlmProvider::Zai
+        LlmProvider::OpenAi
+            | LlmProvider::OpenRouter
+            | LlmProvider::DeepSeek
+            | LlmProvider::Zai
+            | LlmProvider::OpenAiCompatible
     )
 }
 
@@ -1004,6 +1008,7 @@ mod tests {
             provider: LlmProvider::OpenAi,
             model: "gpt-4o-mini".to_string(),
             api_key: "test-key".to_string(),
+            base_url: None,
         }
     }
 

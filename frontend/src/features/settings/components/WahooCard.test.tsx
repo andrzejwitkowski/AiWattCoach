@@ -3,12 +3,13 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WahooCard } from './WahooCard';
+import { buildTestSettings } from '../mockData';
 import type { UserSettingsResponse } from '../types';
 
 const originalLocation = window.location;
 
 function buildSettings(overrides?: Partial<UserSettingsResponse['wahoo']>): UserSettingsResponse {
-  return {
+  return buildTestSettings({
     aiAgents: {
       openaiApiKey: null,
       openaiApiKeySet: false,
@@ -23,12 +24,6 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['wahoo']>): User
       selectedProvider: null,
       selectedModel: null,
     },
-    intervals: {
-      apiKey: null,
-      apiKeySet: false,
-      athleteId: null,
-      connected: false,
-    },
     wahoo: {
       available: true,
       accessToken: null,
@@ -38,35 +33,7 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['wahoo']>): User
       connected: false,
       ...overrides,
     },
-    options: {
-      analyzeWithoutHeartRate: false,
-    },
-    availability: {
-      configured: false,
-      days: [
-        { weekday: 'mon', available: false, maxDurationMinutes: null },
-        { weekday: 'tue', available: false, maxDurationMinutes: null },
-        { weekday: 'wed', available: false, maxDurationMinutes: null },
-        { weekday: 'thu', available: false, maxDurationMinutes: null },
-        { weekday: 'fri', available: false, maxDurationMinutes: null },
-        { weekday: 'sat', available: false, maxDurationMinutes: null },
-        { weekday: 'sun', available: false, maxDurationMinutes: null },
-      ],
-    },
-    cycling: {
-      fullName: null,
-      age: null,
-      heightCm: null,
-      weightKg: null,
-      ftpWatts: null,
-      hrMaxBpm: null,
-      vo2Max: null,
-      athletePrompt: null,
-      medications: null,
-      athleteNotes: null,
-      lastZoneUpdateEpochSeconds: null,
-    },
-  };
+  });
 }
 
 describe('WahooCard', () => {

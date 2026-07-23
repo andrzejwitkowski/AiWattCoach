@@ -80,3 +80,43 @@ async fn ai_settings_test_maps_live_provider_rejection_to_bad_request() {
         Some("Bearer sk-test-key")
     );
 }
+
+#[tokio::test]
+async fn ai_settings_test_uses_openai_compatible_base_url_from_request() {
+    let context = llm_rest_test_context().await;
+    let base_url = context.server.openai_base_url();
+    let body = serde_json::json!({
+        "openaiCompatibleApiKey": "compat-key-123",
+        "openaiCompatibleBaseUrl": base_url,
+        "selectedProvider": "openai_compatible",
+        "selectedModel": "gpt-4o-mini"
+    });
+
+    let response = context
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::COOKIE, context.session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    assert_eq!(body.get("connected").and_then(Value::as_bool), Some(true));
+
+    let requests = context.server.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].path, "/v1/chat/completions");
+    assert_eq!(
+        requests[0].authorization.as_deref(),
+        Some("Bearer compat-key-123")
+    );
+    assert_eq!(requests[0].body["model"], "gpt-4o-mini");
+}

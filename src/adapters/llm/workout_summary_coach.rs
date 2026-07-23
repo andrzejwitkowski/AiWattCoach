@@ -84,6 +84,7 @@ where
         summary: &WorkoutSummary,
         user_message: &str,
         athlete_summary_text: Option<&str>,
+        power_chart_base64: Option<&str>,
     ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
         let llm_chat_port = self.llm_chat_port.clone();
         let config_provider = self.config_provider.clone();
@@ -96,6 +97,7 @@ where
         let summary = summary.clone();
         let user_message = user_message.to_string();
         let athlete_summary_text = athlete_summary_text.map(str::to_string);
+        let power_chart_base64 = power_chart_base64.map(str::to_string);
 
         Box::pin(async move {
             let config = config_provider
@@ -207,6 +209,7 @@ where
                     data_port,
                     reusable_cache_id,
                     meso_roadmap_stable_context,
+                    power_chart_base64,
                 });
             request.cache_key = Some(context_hash.clone());
             request.cache_scope_key = cache_scope_key.clone();
@@ -368,6 +371,7 @@ mod tests {
                     tool_call: None,
                     questions: Vec::new(),
                     created_at_epoch_seconds: 1,
+                    image_url: None,
                 },
                 ConversationMessage {
                     id: "tool-1".to_string(),
@@ -381,6 +385,7 @@ mod tests {
                     }),
                     questions: Vec::new(),
                     created_at_epoch_seconds: 2,
+                    image_url: None,
                 },
                 ConversationMessage {
                     id: "coach-1".to_string(),
@@ -389,6 +394,7 @@ mod tests {
                     tool_call: None,
                     questions: Vec::new(),
                     created_at_epoch_seconds: 3,
+                    image_url: None,
                 },
             ],
             &[
@@ -404,6 +410,7 @@ mod tests {
             ],
             "What about tomorrow?",
             4,
+            None,
         );
 
         assert_eq!(conversation.len(), 4);
@@ -430,6 +437,7 @@ mod tests {
                     tool_call: None,
                     questions: Vec::new(),
                     created_at_epoch_seconds: 1,
+                    image_url: None,
                 },
                 ConversationMessage {
                     id: "coach-1".to_string(),
@@ -438,6 +446,7 @@ mod tests {
                     tool_call: None,
                     questions: Vec::new(),
                     created_at_epoch_seconds: 2,
+                    image_url: None,
                 },
                 ConversationMessage {
                     id: "user-2".to_string(),
@@ -446,6 +455,7 @@ mod tests {
                     tool_call: None,
                     questions: Vec::new(),
                     created_at_epoch_seconds: 3,
+                    image_url: None,
                 },
                 ConversationMessage {
                     id: "coach-2".to_string(),
@@ -454,6 +464,7 @@ mod tests {
                     tool_call: None,
                     questions: Vec::new(),
                     created_at_epoch_seconds: 4,
+                    image_url: None,
                 },
             ],
             &[
@@ -478,6 +489,7 @@ mod tests {
             ],
             "Third question",
             5,
+            None,
         );
 
         assert_eq!(conversation[1].tool_calls[0].id, "tool-1");
@@ -492,7 +504,7 @@ mod tests {
 
     #[test]
     fn build_conversation_uses_fallback_timestamp_when_history_has_no_user_message() {
-        let conversation = build_conversation(&[], &[], "Fresh question", 1_746_489_600);
+        let conversation = build_conversation(&[], &[], "Fresh question", 1_746_489_600, None);
 
         assert_eq!(conversation.len(), 1);
         assert_eq!(

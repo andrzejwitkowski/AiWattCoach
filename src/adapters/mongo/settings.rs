@@ -51,6 +51,10 @@ struct AiAgentsDocument {
     deepseek_api_key: Option<String>,
     #[serde(default)]
     zai_api_key: Option<String>,
+    #[serde(default)]
+    openai_compatible_api_key: Option<String>,
+    #[serde(default)]
+    openai_compatible_base_url: Option<String>,
     selected_provider: Option<String>,
     selected_model: Option<String>,
     #[serde(default)]
@@ -65,6 +69,8 @@ struct AiAgentsDocument {
     meso_cycle_provider: Option<String>,
     #[serde(default)]
     meso_cycle_model: Option<String>,
+    #[serde(default)]
+    include_power_image: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -538,6 +544,8 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "ai_agents.openrouter_api_key": &ai_agents.openrouter_api_key,
                             "ai_agents.deepseek_api_key": &ai_agents.deepseek_api_key,
                             "ai_agents.zai_api_key": &ai_agents.zai_api_key,
+                            "ai_agents.openai_compatible_api_key": &ai_agents.openai_compatible_api_key,
+                            "ai_agents.openai_compatible_base_url": &ai_agents.openai_compatible_base_url,
                             "ai_agents.selected_provider": ai_agents.selected_provider.as_ref().map(|provider| provider.as_str()),
                             "ai_agents.selected_model": &ai_agents.selected_model,
                             "ai_agents.workout_chat_provider": ai_agents.workout_chat_provider.as_ref().map(|provider| provider.as_str()),
@@ -546,6 +554,7 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "ai_agents.workout_planning_model": &ai_agents.workout_planning_model,
                             "ai_agents.meso_cycle_provider": ai_agents.meso_cycle_provider.as_ref().map(|provider| provider.as_str()),
                             "ai_agents.meso_cycle_model": &ai_agents.meso_cycle_model,
+                            "ai_agents.include_power_image": ai_agents.include_power_image,
                             "updated_at_epoch_seconds": updated_at,
                             "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at), "updated_at")
                                 .map_err(SettingsError::Repository)?,
@@ -700,6 +709,8 @@ fn map_document_to_domain(doc: SettingsDocument) -> Result<UserSettings, Setting
             openrouter_api_key: doc.ai_agents.openrouter_api_key,
             deepseek_api_key: doc.ai_agents.deepseek_api_key,
             zai_api_key: doc.ai_agents.zai_api_key,
+            openai_compatible_api_key: doc.ai_agents.openai_compatible_api_key,
+            openai_compatible_base_url: doc.ai_agents.openai_compatible_base_url,
             selected_provider: doc
                 .ai_agents
                 .selected_provider
@@ -724,6 +735,7 @@ fn map_document_to_domain(doc: SettingsDocument) -> Result<UserSettings, Setting
                 .as_deref()
                 .and_then(LlmProvider::parse),
             meso_cycle_model: doc.ai_agents.meso_cycle_model,
+            include_power_image: doc.ai_agents.include_power_image,
         },
         intervals: IntervalsConfig {
             api_key: doc.intervals.api_key,
@@ -774,6 +786,8 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
             openrouter_api_key: settings.ai_agents.openrouter_api_key.clone(),
             deepseek_api_key: settings.ai_agents.deepseek_api_key.clone(),
             zai_api_key: settings.ai_agents.zai_api_key.clone(),
+            openai_compatible_api_key: settings.ai_agents.openai_compatible_api_key.clone(),
+            openai_compatible_base_url: settings.ai_agents.openai_compatible_base_url.clone(),
             selected_provider: settings
                 .ai_agents
                 .selected_provider
@@ -798,6 +812,7 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
                 .as_ref()
                 .map(|provider| provider.as_str().to_string()),
             meso_cycle_model: settings.ai_agents.meso_cycle_model.clone(),
+            include_power_image: settings.ai_agents.include_power_image,
         },
         intervals: IntervalsDocument {
             api_key: settings.intervals.api_key.clone(),

@@ -40,6 +40,7 @@ pub struct WorkoutSummaryCoachPromptInput {
     pub data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
     pub reusable_cache_id: Option<String>,
     pub meso_roadmap_stable_context: Option<String>,
+    pub power_chart_base64: Option<String>,
 }
 
 pub fn assemble_workout_summary_coach_request(
@@ -75,6 +76,7 @@ pub fn assemble_workout_summary_coach_request(
         &input.summary.provider_transcript,
         &input.user_message,
         input.conversation_epoch_seconds,
+        input.power_chart_base64.as_deref(),
     );
     let cache_scope_key = Some(format!(
         "workout-summary:{}:{}",
@@ -187,6 +189,7 @@ pub fn build_conversation(
     provider_transcript: &[LlmChatMessage],
     user_message: &str,
     fallback_user_message_epoch_seconds: i64,
+    power_chart_base64: Option<&str>,
 ) -> Vec<LlmChatMessage> {
     let conversation = messages
         .iter()
@@ -200,6 +203,11 @@ pub fn build_conversation(
                 tool_calls: Vec::new(),
                 tool_call_id: None,
                 reasoning_content: None,
+                // ponytail: re-renders PNG each turn to keep it in LLM context; cache by workout if token cost bites
+                image_base64: message
+                    .image_url
+                    .as_ref()
+                    .and_then(|_| power_chart_base64.map(str::to_string)),
             }),
             MessageRole::Coach => Some(LlmChatMessage {
                 role: LlmMessageRole::Assistant,
@@ -210,6 +218,7 @@ pub fn build_conversation(
                 tool_calls: Vec::new(),
                 tool_call_id: None,
                 reasoning_content: None,
+                image_base64: None,
             }),
             MessageRole::Tool => None,
         })

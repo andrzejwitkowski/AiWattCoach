@@ -48,6 +48,8 @@ pub(super) struct ConversationMessageDocument {
     pub(super) created_at_epoch_seconds: Option<i64>,
     #[serde(default)]
     pub(super) created_at: Option<DateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) image_url: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

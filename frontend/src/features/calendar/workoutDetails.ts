@@ -140,6 +140,18 @@ export function isPlannedWorkoutEvent(
     || Boolean(event.eventDefinition.rawWorkoutDoc?.trim());
 }
 
+export function actualWorkoutElapsedSeconds(
+  actualWorkout: IntervalEvent['actualWorkout'],
+): number {
+  if (!actualWorkout?.matchedIntervals.length) {
+    return 0;
+  }
+  return actualWorkout.matchedIntervals.reduce((maxDuration, interval) => {
+    const intervalEnd = interval.actualEndTimeSeconds ?? 0;
+    return Math.max(maxDuration, intervalEnd);
+  }, 0);
+}
+
 export function buildPlannedWorkoutBars(event: IntervalEvent): WorkoutBar[] {
   const groupedChartSteps = buildExpandedGroupedPlannedChartSteps(event);
   if (groupedChartSteps.length > 0) {

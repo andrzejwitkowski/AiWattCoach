@@ -118,6 +118,8 @@ pub struct ConversationMessage {
     pub tool_call: Option<PublicToolCall>,
     pub questions: Vec<CoachQuestion>,
     pub created_at_epoch_seconds: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -17,6 +17,7 @@
 - **Enum changes**: When a backend enum gains a new variant, grep every frontend Zod enum, TypeScript union, and UI branch for the old closed set.
 - **Type inference traps**: When a frontend test fixture starts with `messages: []`, do not derive async resolver types from `typeof fixture` unless explicitly annotated. TypeScript can infer `never[]`. Prefer the exported feature type. Run `bun run --cwd frontend build` to catch these.
 - **New API fields**: When adding a field to a shared schema, grep every serializer, extractor, match arm, and test fixture for the old field enumeration.
+- **Partial PATCH body builders**: If Zod validates a request then a helper rebuilds the fetch body from a field allowlist, every schema field that must persist must be in that allowlist. Mocking the API wrapper (not `fetch`) will not catch dropped fields — assert the outbound JSON body.
 
 ### Error and fallback handling
 - **Fallback UX**: When a fallback path intentionally recovers from an earlier transport error, clear stale error state before awaiting the fallback request, not only after success.

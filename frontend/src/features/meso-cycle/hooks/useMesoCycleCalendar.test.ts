@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import { buildTestSettings } from '../../settings/mockData';
 import type { UserSettingsResponse } from '../../settings/types';
 import { canGenerateMesoCycle } from './useMesoCycleCalendar';
 
 function buildSettings(
   overrides?: Partial<UserSettingsResponse['aiAgents']>,
 ): UserSettingsResponse {
-  return {
+  return buildTestSettings({
     aiAgents: {
       openaiApiKey: null,
       openaiApiKeySet: true,
@@ -30,35 +31,7 @@ function buildSettings(
       athleteId: 'i123',
       connected: true,
     },
-    wahoo: {
-      available: false,
-      accessToken: null,
-      accessTokenSet: false,
-      refreshTokenSet: false,
-      expiresAtEpochSeconds: null,
-      connected: false,
-    },
-    options: {
-      analyzeWithoutHeartRate: false,
-    },
-    availability: {
-      configured: false,
-      days: [],
-    },
-    cycling: {
-      fullName: null,
-      age: null,
-      heightCm: null,
-      weightKg: null,
-      ftpWatts: null,
-      hrMaxBpm: null,
-      vo2Max: null,
-      athletePrompt: null,
-      medications: null,
-      athleteNotes: null,
-      lastZoneUpdateEpochSeconds: null,
-    },
-  };
+  });
 }
 
 describe('canGenerateMesoCycle', () => {

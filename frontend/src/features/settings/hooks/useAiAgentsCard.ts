@@ -44,6 +44,7 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
   const persistedDraft = useMemo(
     () =>
       createEmptyAiAgentsDraft({
+        openaiCompatibleBaseUrl: aiAgents.openaiCompatibleBaseUrl ?? '',
         selectedProvider: aiAgents.selectedProvider ?? '',
         selectedModel: aiAgents.selectedModel ?? '',
         workoutChatProvider: aiAgents.workoutChatProvider ?? '',
@@ -52,10 +53,13 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
         workoutPlanningModel: aiAgents.workoutPlanningModel ?? '',
         mesoCycleProvider: aiAgents.mesoCycleProvider ?? '',
         mesoCycleModel: aiAgents.mesoCycleModel ?? '',
+        includePowerImage: aiAgents.includePowerImage ?? false,
       }),
     [
+      aiAgents.includePowerImage,
       aiAgents.mesoCycleModel,
       aiAgents.mesoCycleProvider,
+      aiAgents.openaiCompatibleBaseUrl,
       aiAgents.selectedModel,
       aiAgents.selectedProvider,
       aiAgents.workoutChatModel,
@@ -126,6 +130,11 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
   ) => {
     clearTestStatus();
     setDraft((current) => updateProviderDraft(current, providerField, modelField, value));
+  };
+
+  const toggleIncludePowerImage = (value: boolean) => {
+    clearTestStatus();
+    setDraft((current) => ({ ...current, includePowerImage: value }));
   };
 
   const handleSave = async () => {
@@ -219,6 +228,7 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
     updateDraft,
     updateProvider,
     updateOverrideProvider,
+    toggleIncludePowerImage,
     handleSave,
     handleTest,
   };
@@ -231,6 +241,8 @@ function hasAnyPersistedConnectionValue(aiAgents: UserSettingsResponse['aiAgents
     aiAgents.openrouterApiKeySet ||
     aiAgents.deepseekApiKeySet ||
     aiAgents.zaiApiKeySet ||
+    aiAgents.openaiCompatibleApiKeySet ||
+    Boolean(aiAgents.openaiCompatibleBaseUrl) ||
     Boolean(aiAgents.selectedProvider) ||
     Boolean(aiAgents.selectedModel)
   );
@@ -262,12 +274,36 @@ function resolveProviderValidationMessage(
   if (draft.selectedModel.trim() && !draft.selectedProvider) {
     return 'Choose a provider for the selected model.';
   }
+  const usesOpenaiCompatible = [
+    draft.selectedProvider,
+    draft.workoutChatProvider,
+    draft.workoutPlanningProvider,
+    draft.mesoCycleProvider,
+  ].some((provider) => provider === 'openai_compatible');
+  if (usesOpenaiCompatible) {
+    const baseUrl = draft.openaiCompatibleBaseUrl.trim();
+    if (!baseUrl) {
+      return 'Add a base URL for the OpenAI Compatible provider.';
+    }
+    if (!isAbsoluteHttpUrl(baseUrl)) {
+      return 'OpenAI Compatible base URL must be an absolute http(s) URL.';
+    }
+  }
   const hasMatchingProviderKey =
     providerKeyState.draftValue.length > 0 || providerKeyState.hasPersistedKey;
   if (draft.selectedProvider && draft.selectedModel.trim() && !hasMatchingProviderKey) {
     return `Add a ${providerKeyState.label} API key or keep the saved one before testing or saving this provider.`;
   }
   return null;
+}
+
+function isAbsoluteHttpUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function updateProviderDraft(

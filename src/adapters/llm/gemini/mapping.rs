@@ -7,7 +7,7 @@ use crate::adapters::llm::context_prelude::non_empty_context_parts;
 
 use super::dto::{
     GeminiContent, GeminiCreateCacheRequest, GeminiGenerateContentRequest,
-    GeminiGenerateContentResponse, GeminiTextPart,
+    GeminiGenerateContentResponse, GeminiInlineData, GeminiPart,
 };
 
 pub fn map_generate_request(
@@ -32,7 +32,7 @@ pub fn map_generate_request(
         .filter(|parts| !parts.is_empty())
         .map(|_| GeminiContent {
             role: "user".to_string(),
-            parts: vec![GeminiTextPart {
+            parts: vec![GeminiPart::Text {
                 text: format!("{}\n\n{}", request.system_prompt, request.stable_context)
                     .trim()
                     .to_string(),
@@ -45,7 +45,7 @@ pub fn map_generate_request(
             .skip(2)
             .map(|(_, content)| GeminiContent {
                 role: "user".to_string(),
-                parts: vec![GeminiTextPart {
+                parts: vec![GeminiPart::Text {
                     text: (*content).to_string(),
                 }],
             })
@@ -74,14 +74,14 @@ pub fn map_create_cache_request(
         } else {
             vec![GeminiContent {
                 role: "user".to_string(),
-                parts: vec![GeminiTextPart {
+                parts: vec![GeminiPart::Text {
                     text: stable_context,
                 }],
             }]
         },
         system_instruction: (!system_prompt.is_empty()).then(|| GeminiContent {
             role: "user".to_string(),
-            parts: vec![GeminiTextPart {
+            parts: vec![GeminiPart::Text {
                 text: system_prompt,
             }],
         }),
@@ -101,9 +101,12 @@ pub fn map_response(
         .into_iter()
         .find_map(|candidate| candidate.content)
         .and_then(|content| {
-            content.parts.into_iter().find_map(|part| {
-                let text = part.text.trim().to_string();
-                (!text.is_empty()).then_some(text)
+            content.parts.into_iter().find_map(|part| match part {
+                GeminiPart::Text { text } => {
+                    let text = text.trim().to_string();
+                    (!text.is_empty()).then_some(text)
+                }
+                GeminiPart::InlineData { .. } => None,
             })
         })
         .ok_or_else(|| {
@@ -145,6 +148,17 @@ pub fn map_response(
 }
 
 fn map_message(message: LlmChatMessage) -> GeminiContent {
+    let mut parts = vec![GeminiPart::Text {
+        text: message.content,
+    }];
+    if let Some(b64) = message.image_base64 {
+        parts.push(GeminiPart::InlineData {
+            inline_data: GeminiInlineData {
+                mime_type: "image/png".to_string(),
+                data: b64,
+            },
+        });
+    }
     GeminiContent {
         role: match message.role {
             LlmMessageRole::System => "user".to_string(),
@@ -152,8 +166,6 @@ fn map_message(message: LlmChatMessage) -> GeminiContent {
             LlmMessageRole::Assistant => "model".to_string(),
             LlmMessageRole::Tool => "user".to_string(),
         },
-        parts: vec![GeminiTextPart {
-            text: message.content,
-        }],
+        parts,
     }
 }

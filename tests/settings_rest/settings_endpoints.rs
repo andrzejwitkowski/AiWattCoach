@@ -68,6 +68,12 @@ async fn get_settings_returns_default_settings_for_authenticated_user() {
         .as_bool()
         .unwrap());
     assert!(!ai_agents.get("zaiApiKeySet").unwrap().as_bool().unwrap());
+    assert!(!ai_agents
+        .get("openaiCompatibleApiKeySet")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+    assert!(ai_agents.get("openaiCompatibleBaseUrl").unwrap().is_null());
 
     let intervals = body.get("intervals").unwrap();
     assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
@@ -840,6 +846,68 @@ async fn update_ai_agents_persists_post_workout_model_overrides() {
 }
 
 #[tokio::test]
+async fn update_ai_agents_supports_openai_compatible_provider_key_and_base_url() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "openaiCompatibleApiKey": "sk-compat-key-789012",
+        "openaiCompatibleBaseUrl": "http://127.0.0.1:11434/v1/",
+        "selectedProvider": "openai_compatible",
+        "selectedModel": "llama3.2"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/ai-agents")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    let ai_agents = response_body.get("aiAgents").unwrap();
+
+    assert!(ai_agents
+        .get("openaiCompatibleApiKeySet")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+    assert_eq!(
+        ai_agents
+            .get("openaiCompatibleBaseUrl")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "http://127.0.0.1:11434/v1"
+    );
+    let masked = ai_agents
+        .get("openaiCompatibleApiKey")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert!(masked.starts_with("***..."));
+    assert_eq!(
+        ai_agents.get("selectedProvider").unwrap().as_str().unwrap(),
+        "openai_compatible"
+    );
+    assert_eq!(
+        ai_agents.get("selectedModel").unwrap().as_str().unwrap(),
+        "llama3.2"
+    );
+}
+
+#[tokio::test]
 async fn update_ai_agents_supports_deepseek_provider_and_model() {
     let app = settings_test_app(
         TestIdentityServiceWithSession::default(),
@@ -1449,6 +1517,8 @@ async fn test_ai_agents_connection_returns_bad_request_when_provider_changes_wit
         openrouter_api_key: Some("or-existing-openrouter".to_string()),
         deepseek_api_key: None,
         zai_api_key: None,
+        openai_compatible_api_key: None,
+        openai_compatible_base_url: None,
         selected_provider: Some(aiwattcoach::domain::llm::LlmProvider::OpenAi),
         selected_model: Some("gpt-4o-mini".to_string()),
         workout_chat_provider: None,
@@ -1457,6 +1527,7 @@ async fn test_ai_agents_connection_returns_bad_request_when_provider_changes_wit
         workout_planning_model: None,
         meso_cycle_provider: None,
         meso_cycle_model: None,
+        include_power_image: false,
     };
     let app = settings_test_app_with_services(
         TestIdentityServiceWithSession::default(),
