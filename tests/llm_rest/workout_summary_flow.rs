@@ -16,9 +16,12 @@ use tokio_tungstenite::{
 };
 use tower::util::ServiceExt;
 
-use crate::support::{ai_config, get_json, llm_rest_test_context};
+use crate::support::{
+    ai_config, get_json, llm_rest_test_context, sample_planned_workout_for_activity,
+};
 
 const COMPLETED_WORKOUT_ID: &str = "activity-1";
+const PLANNED_WORKOUT_ID: &str = "plan-1";
 
 struct SpawnedApp {
     address: SocketAddr,
@@ -54,7 +57,14 @@ async fn send_message_uses_saved_openrouter_settings_through_live_adapter() {
     );
     context.seed_user_settings(settings);
     context.seed_summary(context.default_summary(COMPLETED_WORKOUT_ID));
-    context.seed_activity(context.default_activity("user-1", COMPLETED_WORKOUT_ID));
+    let activity = context.default_activity("user-1", COMPLETED_WORKOUT_ID);
+    let date = activity.start_date_local.get(..10).expect("activity date");
+    context.seed_planned_workout(sample_planned_workout_for_activity(
+        "user-1",
+        PLANNED_WORKOUT_ID,
+        date,
+    ));
+    context.seed_activity(activity, Some(PLANNED_WORKOUT_ID));
 
     let response = context
         .app
@@ -108,9 +118,11 @@ async fn send_message_uses_saved_openrouter_settings_through_live_adapter() {
 
     assert!(message_contains("training_context_stable="));
     assert!(message_contains("training_context_volatile="));
-    assert!(message_contains("\"ps\":"));
-    assert!(!message_contains("\"p3\":"));
-    assert!(!message_contains("\"p5\":"));
+    assert!(message_contains("\"sa\""));
+    assert!(message_contains("\"interval_index\""));
+    assert!(!message_contains("[[300,300,3]]"));
+    assert!(!message_contains("\"p3\""));
+    assert!(!message_contains("\"p5\""));
 }
 
 #[tokio::test]
@@ -120,7 +132,10 @@ async fn workout_summary_websocket_creates_and_reuses_gemini_cache() {
     settings.ai_agents = ai_config(LlmProvider::Gemini, "gemini-2.5-flash", "gemini-key");
     context.seed_user_settings(settings);
     context.seed_summary(context.default_summary(COMPLETED_WORKOUT_ID));
-    context.seed_activity(context.default_activity("user-1", COMPLETED_WORKOUT_ID));
+    context.seed_activity(
+        context.default_activity("user-1", COMPLETED_WORKOUT_ID),
+        None,
+    );
     context.seed_athlete_summary(
         "user-1",
         Some(AthleteSummary {
@@ -216,7 +231,10 @@ async fn workout_summary_websocket_sends_system_message_before_reply_when_summar
     settings.intervals.athlete_id = Some("i248035".to_string());
     context.seed_user_settings(settings);
     context.seed_summary(context.default_summary(COMPLETED_WORKOUT_ID));
-    context.seed_activity(context.default_activity("user-1", COMPLETED_WORKOUT_ID));
+    context.seed_activity(
+        context.default_activity("user-1", COMPLETED_WORKOUT_ID),
+        None,
+    );
     context.seed_athlete_summary("user-1", None, true);
 
     let server = SpawnedApp::start(context.app.clone()).await;
@@ -274,7 +292,10 @@ async fn workout_summary_websocket_skips_system_message_when_athlete_summary_is_
     settings.intervals.athlete_id = Some("i248035".to_string());
     context.seed_user_settings(settings);
     context.seed_summary(context.default_summary(COMPLETED_WORKOUT_ID));
-    context.seed_activity(context.default_activity("user-1", COMPLETED_WORKOUT_ID));
+    context.seed_activity(
+        context.default_activity("user-1", COMPLETED_WORKOUT_ID),
+        None,
+    );
     context.seed_athlete_summary(
         "user-1",
         Some(AthleteSummary {

@@ -177,6 +177,17 @@ pub trait CompletedWorkoutTargetUseCases: Send + Sync {
         workout_id: &str,
     ) -> BoxFuture<Result<bool, WorkoutSummaryError>>;
 
+    fn load_completed_workout(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> BoxFuture<
+        Result<Option<crate::domain::completed_workouts::CompletedWorkout>, WorkoutSummaryError>,
+    > {
+        let _ = (user_id, workout_id);
+        Box::pin(async { Ok(None) })
+    }
+
     fn resolve_completed_workout_target(
         &self,
         user_id: &str,

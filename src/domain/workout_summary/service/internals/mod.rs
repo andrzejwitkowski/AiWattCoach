@@ -12,6 +12,7 @@ pub(super) struct AppendMessageInput {
     tool_call: Option<crate::domain::workout_summary::PublicToolCall>,
     questions: Vec<crate::domain::workout_summary::CoachQuestion>,
     require_open_summary: bool,
+    image_url: Option<String>,
 }
 
 impl AppendMessageInput {
@@ -27,6 +28,7 @@ impl AppendMessageInput {
             tool_call: None,
             questions,
             require_open_summary: false,
+            image_url: None,
         }
     }
 }

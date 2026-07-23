@@ -48,6 +48,7 @@ impl WorkoutCoach for CountingCoach {
         _summary: &WorkoutSummary,
         user_message: &str,
         _athlete_summary_text: Option<&str>,
+        _power_chart_base64: Option<&str>,
     ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
         self.calls.lock().unwrap().push(user_message.to_string());
         let message = format!("Coach reply to: {user_message}");
@@ -74,6 +75,7 @@ impl WorkoutCoach for CapturingAthleteSummaryCoach {
         _summary: &WorkoutSummary,
         user_message: &str,
         athlete_summary_text: Option<&str>,
+        _power_chart_base64: Option<&str>,
     ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
         self.athlete_summary_texts
             .lock()
@@ -393,6 +395,7 @@ impl WorkoutCoach for AlwaysFailingCoach {
         _summary: &WorkoutSummary,
         _user_message: &str,
         _athlete_summary_text: Option<&str>,
+        _power_chart_base64: Option<&str>,
     ) -> aiwattcoach::domain::llm::BoxFuture<
         Result<
             aiwattcoach::domain::llm_tools::LlmToolLoopOutput,
@@ -425,6 +428,7 @@ impl WorkoutCoach for OneTimeFailureCoach {
         _summary: &WorkoutSummary,
         user_message: &str,
         _athlete_summary_text: Option<&str>,
+        _power_chart_base64: Option<&str>,
     ) -> aiwattcoach::domain::llm::BoxFuture<
         Result<
             aiwattcoach::domain::llm_tools::LlmToolLoopOutput,
@@ -540,6 +544,7 @@ impl WorkoutCoach for OversizedContextCoach {
         _summary: &WorkoutSummary,
         _user_message: &str,
         _athlete_summary_text: Option<&str>,
+        _power_chart_base64: Option<&str>,
     ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
         Box::pin(async move {
             Err(LlmError::ContextTooLarge(
@@ -688,6 +693,7 @@ async fn generate_coach_reply_marks_fresh_tool_only_response_as_failed() {
             _summary: &WorkoutSummary,
             _user_message: &str,
             _athlete_summary_text: Option<&str>,
+            _power_chart_base64: Option<&str>,
         ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
             Box::pin(async move {
                 Ok(LlmToolLoopOutput::from_response(LlmChatResponse {
@@ -918,6 +924,7 @@ async fn generate_coach_reply_recovers_existing_message_without_losing_provider_
         tool_call: None,
         questions: Vec::new(),
         created_at_epoch_seconds: 1_699_999_000,
+        image_url: None,
     };
     let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
         id: "message-coach-1".to_string(),
@@ -926,6 +933,7 @@ async fn generate_coach_reply_recovers_existing_message_without_losing_provider_
         tool_call: None,
         questions: Vec::new(),
         created_at_epoch_seconds: 1_699_999_001,
+        image_url: None,
     };
     summary.messages = vec![user_message.clone(), coach_message.clone()];
 
@@ -1072,6 +1080,7 @@ async fn generate_coach_reply_retries_completion_write_when_recovering_existing_
         tool_call: None,
         questions: Vec::new(),
         created_at_epoch_seconds: 1_699_999_000,
+        image_url: None,
     };
     let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
         id: "message-coach-recovery".to_string(),
@@ -1080,6 +1089,7 @@ async fn generate_coach_reply_retries_completion_write_when_recovering_existing_
         tool_call: None,
         questions: Vec::new(),
         created_at_epoch_seconds: 1_699_999_001,
+        image_url: None,
     };
     summary.messages = vec![user_message.clone(), coach_message.clone()];
 
@@ -1311,6 +1321,7 @@ async fn generate_coach_reply_replays_persisted_response_for_saved_summary() {
         tool_call: None,
         questions: Vec::new(),
         created_at_epoch_seconds: 1_699_999_000,
+        image_url: None,
     };
     repository
         .append_message("user-1", "workout-1", user_message.clone(), 1_699_999_000)
@@ -1369,6 +1380,7 @@ async fn generate_coach_reply_accumulates_provider_transcript_across_turns() {
             tool_call: None,
             questions: Vec::new(),
             created_at_epoch_seconds: 1,
+            image_url: None,
         },
         aiwattcoach::domain::workout_summary::ConversationMessage {
             id: "message-coach-0".to_string(),
@@ -1377,6 +1389,7 @@ async fn generate_coach_reply_accumulates_provider_transcript_across_turns() {
             tool_call: None,
             questions: Vec::new(),
             created_at_epoch_seconds: 2,
+            image_url: None,
         },
     ];
 

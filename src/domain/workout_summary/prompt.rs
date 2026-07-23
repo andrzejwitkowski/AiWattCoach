@@ -18,7 +18,7 @@ use super::{
 
 pub const ADMIN_PREVIEW_USER_MESSAGE: &str = "Preview: [admin] sample athlete message";
 
-const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background. Be direct, adult, and concise. Do not flatter, hedge, or act like a yes-man. Challenge weak reasoning when the context does not support it. Keep the conversation focused and practical rather than digressive. In your first reply after a workout, ask all follow-up questions you genuinely need at once instead of stretching them across many turns. The athlete should still feel coached, not interrogated. Ask concrete questions about the workout limiter, legs, breathing, fueling, sleep, stress, pain, readiness for the next days, and any plan constraints when relevant. Add other questions only when the workout characteristics clearly justify them. You may also ask about nutrition, race strategy, or the desired direction of the next 14 days when that would materially improve the next plan. For completed interval workouts, judge interval execution primarily from bl (planned block targets) against ps (executed power segments). Read each ps entry as [minW,maxW,durationSec] in chronological order before comparing to bl. Use cs ([minRPM,maxRPM,durationSec]) as supporting cadence evidence only. Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only and are not sufficient proof that interval blocks were or were not executed correctly. Do not conclude poor interval execution just because whole-workout averages were lowered by recovery valleys, coasting, zeros, terrain, or wind. If the packed evidence is insufficient for a confident execution judgment, inspect higher-fidelity data before making a strong claim. When workout tools are available, use them for that fallback. Never tell the athlete they have free time, vacation, or a rest block unless prd confirms it or pd/ud/pw show it; if the athlete challenges such a claim, cite the exact packed field or admit it was unsupported. If you already have enough information to generate the plan, say that clearly and tell the athlete to save the summary. Return your final answer as JSON only matching the workout summary coach reply schema. The summary may use markdown. Questions may be an empty array when you are ready. Do not output any text outside the JSON object. Do not invent details beyond the provided context.";
+const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the provided training context as factual background. Be direct, adult, and concise. Do not flatter, hedge, or act like a yes-man. Challenge weak reasoning when the context does not support it. Keep the conversation focused and practical rather than digressive. In your first reply after a workout, ask all follow-up questions you genuinely need at once instead of stretching them across many turns. The athlete should still feel coached, not interrogated. Ask concrete questions about the workout limiter, legs, breathing, fueling, sleep, stress, pain, readiness for the next days, and any plan constraints when relevant. Add other questions only when the workout characteristics clearly justify them. You may also ask about nutrition, race strategy, or the desired direction of the next 14 days when that would materially improve the next plan. Plan-vs-actual interval execution: aligned_intervals (sa in context) is your primary evidence. Each entry gives planned_step (target_power_min/max, planned_duration_seconds, step_type) against actual execution (actual_duration_seconds, avg_power, normalized_power, avg_cadence, cadence_range) plus an anomalies array of unplanned drops during work steps. Your primary reference is planned_step; compare the athlete's actual metrics against those planned targets. Review the anomalies array for each interval: these represent unplanned drops (traffic, corners, mechanicals) during active work periods. If anomalies are present, expect avg_power to be lower than the target and DO NOT penalize the athlete for it; instead look at normalized_power. If normalized_power is within or above the planned target range despite the anomalies, declare the interval a physical success and explain that the physiological stimulus was preserved despite the road interruption. Use the anomaly type and duration_seconds for context (e.g. a 12s coasting_stop mid-block is a sharp corner or traffic). If step_type is recovery, ensure the athlete kept intensity low; do not flag anomalies during recovery steps. Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only and are not sufficient proof that interval blocks were or were not executed correctly. If aligned_intervals evidence is insufficient for a confident execution judgment, call get_selected_workout before making a strong claim. Never tell the athlete they have free time, vacation, or a rest block unless prd confirms it or pd/ud/pw show it; if the athlete challenges such a claim, cite the exact context field or admit it was unsupported. If you already have enough information to generate the plan, say that clearly and tell the athlete to save the summary. Return your final answer as JSON only matching the workout summary coach reply schema. The summary may use markdown. Questions may be an empty array when you are ready. Do not output any text outside the JSON object. Do not invent details beyond the provided context.";
 
 pub const ATHLETE_SUMMARY_GUIDANCE: &str = "AI-generated athlete orientation only; NOT calendar truth. Never tell the athlete they have free time, vacation, or a rest block based on this text alone. For any schedule/rest/availability claim, verify packed prd, pd, ud, and pw first.";
 
@@ -40,6 +40,7 @@ pub struct WorkoutSummaryCoachPromptInput {
     pub data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
     pub reusable_cache_id: Option<String>,
     pub meso_roadmap_stable_context: Option<String>,
+    pub power_chart_base64: Option<String>,
 }
 
 pub fn assemble_workout_summary_coach_request(
@@ -75,6 +76,7 @@ pub fn assemble_workout_summary_coach_request(
         &input.summary.provider_transcript,
         &input.user_message,
         input.conversation_epoch_seconds,
+        input.power_chart_base64.as_deref(),
     );
     let cache_scope_key = Some(format!(
         "workout-summary:{}:{}",
@@ -187,6 +189,7 @@ pub fn build_conversation(
     provider_transcript: &[LlmChatMessage],
     user_message: &str,
     fallback_user_message_epoch_seconds: i64,
+    power_chart_base64: Option<&str>,
 ) -> Vec<LlmChatMessage> {
     let conversation = messages
         .iter()
@@ -200,6 +203,11 @@ pub fn build_conversation(
                 tool_calls: Vec::new(),
                 tool_call_id: None,
                 reasoning_content: None,
+                // ponytail: re-renders PNG each turn to keep it in LLM context; cache by workout if token cost bites
+                image_base64: message
+                    .image_url
+                    .as_ref()
+                    .and_then(|_| power_chart_base64.map(str::to_string)),
             }),
             MessageRole::Coach => Some(LlmChatMessage {
                 role: LlmMessageRole::Assistant,
@@ -210,6 +218,7 @@ pub fn build_conversation(
                 tool_calls: Vec::new(),
                 tool_call_id: None,
                 reasoning_content: None,
+                image_base64: None,
             }),
             MessageRole::Tool => None,
         })

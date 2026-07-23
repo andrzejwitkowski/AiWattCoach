@@ -3,9 +3,10 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::domain::{
-    completed_workouts::{CompletedWorkout, CompletedWorkoutSeries},
-    planned_workouts::PlannedWorkout,
+    completed_workouts::{CompletedWorkout, CompletedWorkoutSeries, CompletedWorkoutStream},
+    planned_workouts::{serialize_canonical_planned_workout, PlannedWorkout},
     races::Race,
+    workout_alignment::{align_workout_from_doc, AlignedInterval},
     workout_streams::{
         bucket_and_encode_cadence_segments, bucket_and_encode_power_segments,
         is_llm_workout_stream_type, SegmentTriplet,
@@ -45,6 +46,8 @@ enum WorkoutEntry {
         duration_seconds: Option<i32>,
         distance_meters: Option<f64>,
         metrics: CompletedWorkoutMetricsDto,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        aligned_intervals: Option<Vec<AlignedInterval>>,
         streams: Vec<StreamDto>,
         ai_conversation: Vec<ConversationMessageDto>,
         ai_summary: Option<String>,
@@ -125,7 +128,11 @@ fn build_workout_entries(
     let mut workouts: Vec<WorkoutEntry> = Vec::new();
 
     for workout in &data.completed {
-        workouts.push(map_completed_workout(workout, &data.summaries));
+        workouts.push(map_completed_workout(
+            workout,
+            &data.planned,
+            &data.summaries,
+        ));
     }
 
     for plan in &data.planned {
@@ -142,10 +149,18 @@ fn build_workout_entries(
     workouts
 }
 
-fn map_completed_workout(workout: &CompletedWorkout, summaries: &[WorkoutSummary]) -> WorkoutEntry {
+fn map_completed_workout(
+    workout: &CompletedWorkout,
+    planned: &[PlannedWorkout],
+    summaries: &[WorkoutSummary],
+) -> WorkoutEntry {
     let summary = summaries
         .iter()
         .find(|summary| summary_matches_completed_workout(summary, workout));
+    let matched_plan = workout
+        .planned_workout_id
+        .as_ref()
+        .and_then(|id| planned.iter().find(|plan| &plan.planned_workout_id == id));
 
     WorkoutEntry::Completed {
         workout_id: workout.completed_workout_id.clone(),
@@ -153,6 +168,7 @@ fn map_completed_workout(workout: &CompletedWorkout, summaries: &[WorkoutSummary
         start_date_local: workout.start_date_local.clone(),
         duration_seconds: workout.duration_seconds,
         distance_meters: workout.distance_meters,
+        aligned_intervals: compute_aligned_intervals(workout, matched_plan),
         metrics: CompletedWorkoutMetricsDto {
             training_stress_score: workout.metrics.training_stress_score,
             normalized_power_watts: workout.metrics.normalized_power_watts,
@@ -204,6 +220,33 @@ fn map_conversation_message(
         },
         content: message.content.clone(),
     }
+}
+
+fn compute_aligned_intervals(
+    workout: &CompletedWorkout,
+    planned: Option<&PlannedWorkout>,
+) -> Option<Vec<AlignedInterval>> {
+    let plan = planned?;
+    let ftp = workout.metrics.ftp_watts;
+    let doc = serialize_canonical_planned_workout(plan);
+    let power = raw_completed_stream(&workout.details.streams, "watts");
+    let cadence = raw_completed_stream(&workout.details.streams, "cadence");
+    align_workout_from_doc(Some(&doc), ftp, &power, &cadence)
+}
+
+fn raw_completed_stream(streams: &[CompletedWorkoutStream], stream_type: &str) -> Vec<i32> {
+    streams
+        .iter()
+        .find(|stream| stream.stream_type.eq_ignore_ascii_case(stream_type))
+        .and_then(|stream| stream.primary_series.as_ref())
+        .map(|series| match series {
+            CompletedWorkoutSeries::Integers(values) => values
+                .iter()
+                .map(|&value| i32::try_from(value).unwrap_or(0))
+                .collect(),
+            _ => Vec::new(),
+        })
+        .unwrap_or_default()
 }
 
 fn serialize_primary_stream(

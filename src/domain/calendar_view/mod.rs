@@ -33,5 +33,6 @@ pub use projection::{
 pub use rebuild::{merge_workout_entries, rebuild_calendar_entries};
 pub use refresh::{
     CalendarEntryViewRefreshPort, CalendarEntryViewRefreshService, NoopCalendarEntryViewRefresh,
+    NoopPlannedCompletedWorkoutLinkRepository,
 };
 pub use service::CalendarEntryViewService;

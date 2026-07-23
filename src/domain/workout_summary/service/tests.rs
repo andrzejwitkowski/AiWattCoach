@@ -113,6 +113,7 @@ async fn materialize_public_tool_messages_records_existing_message_without_dupli
             }),
             questions: Vec::new(),
             created_at_epoch_seconds: 1_700_000_000,
+            image_url: None,
         }]),
         StubReplyOperations,
         FixedClock,
@@ -160,6 +161,7 @@ async fn materialize_public_tool_messages_appends_only_missing_calls_in_order() 
         }),
         questions: Vec::new(),
         created_at_epoch_seconds: 1_700_000_000,
+        image_url: None,
     }]);
     let service = WorkoutSummaryService::with_coach(
         repository.clone(),

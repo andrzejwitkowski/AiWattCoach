@@ -111,6 +111,8 @@ pub(super) struct ConversationMessageDto {
     pub questions: Vec<CoachQuestionDto>,
     #[serde(rename = "createdAtEpochSeconds")]
     pub created_at_epoch_seconds: i64,
+    #[serde(rename = "imageUrl", skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<String>,
 }
 
 #[derive(Serialize)]

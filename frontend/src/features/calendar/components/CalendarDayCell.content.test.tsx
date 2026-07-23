@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import '../../../i18n';
-import { makeActivity, makeCalendarDay, makeEvent } from '../testData';
+import { makeActivity, makeCalendarDay, makeEvent, makeMatchedInterval } from '../testData';
 import { CalendarDayCell } from './CalendarDayCell';
 
 describe('CalendarDayCell content', () => {
@@ -784,6 +784,54 @@ describe('CalendarDayCell content', () => {
     expect(within(dayCell).getByText('Completed Build Outside')).toBeInTheDocument();
     expect(dayCell).toHaveTextContent('20 min');
     expect(dayCell).toHaveTextContent('30 TSS');
+  });
+
+  it('shows completed badge for plan-linked workouts even when activity id is not in day.activities', () => {
+    const day = makeCalendarDay({
+      events: [
+        makeEvent({
+          id: 42,
+          name: 'Sub-Threshold Light',
+          linkedIntervalsEventId: 123651861,
+          actualWorkout: {
+            activityId: 'i168123695',
+            activityName: 'Sub-Threshold Light',
+            trainingStressScore: 40,
+            matchedIntervals: [
+              makeMatchedInterval({
+                plannedDurationSeconds: 3191,
+                actualStartTimeSeconds: 0,
+                actualEndTimeSeconds: 3191,
+              }),
+            ],
+          },
+          eventDefinition: {
+            intervals: [
+              {
+                definition: '10min 90%',
+                repeatCount: 1,
+                durationSeconds: 600,
+                targetPercentFtp: 90,
+                zoneId: 3,
+              },
+            ],
+            summary: {
+              totalDurationSeconds: 600,
+              estimatedTrainingStressScore: 25,
+            },
+          },
+        }),
+      ],
+      activities: [],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('Completed Workout')).toBeInTheDocument();
+    expect(within(dayCell).queryByText('Planned Workout')).not.toBeInTheDocument();
+    expect(within(dayCell).getByText('Sub-Threshold Light')).toBeInTheDocument();
+    expect(dayCell).toHaveTextContent('40 TSS');
   });
 
   it('greys out unmatched planned workouts from past days and marks them as not done', () => {

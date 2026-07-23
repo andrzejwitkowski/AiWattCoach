@@ -1,20 +1,36 @@
 use std::sync::LazyLock;
 
-pub const PACKED_STREAM_SEGMENT_GUIDANCE: &str = "Stream segment fields: ps=executed power segments; each entry is [minW,maxW,durationSec]. cs=executed cadence segments; each entry is [minRPM,maxRPM,durationSec]. Read each triplet as a chronological block: min/max bound the values in that block and durationSec is how long that block lasted. When min==max the value was steady. Segments come from 3s-average watts and 5s-average cadence merged within tolerance (±5W power, ±2RPM cadence); this is compressed executed evidence, not raw 1Hz streams. Reconstruct timelines by walking segments left to right. Power segments with max<10 indicate coasting. Cadence segments with max==0 indicate no pedaling; do not merge these with pedaling segments when reconstructing timeline. For interval execution, compare ps work segments against bl targets (minw/maxw or minp/maxp with ftp); recovery valleys between work segments are expected. cs is supporting cadence context only. Executed stream segments for recent completed workouts appear only in volatile rd.w entries, not in stable h.w; use h.w for long-range metadata and load trends and rd.w for recent execution streams. get_selected_workout watts/cadence stream data uses the same triplet format. Example ps: [[240,260,180],[55,60,240],[300,310,120]] means ~3m at 240-260W, ~4m easy, ~2m at 300-310W.";
+pub const ALIGNED_INTERVAL_GUIDANCE: &str = "Plan-vs-actual execution uses aligned_intervals (training context key sa; get_selected_workout field aligned_intervals): sa is a JSON object keyed by workout id, each value an array of {interval_index, planned_step{step_type,target_power_min,target_power_max,planned_duration_seconds}, actual_duration_seconds, avg_power, normalized_power, avg_cadence, cadence_range, anomalies[{type,offset_seconds,duration_seconds,avg_power,avg_cadence}]}. step_type is work or recovery. anomaly type is coasting_stop, coasting_turn, or significant_power_drop. Use as primary execution evidence; compare actual metrics to planned_step; when anomalies exist trust normalized_power over avg_power for work steps.";
 
-pub const PACKED_CALENDAR_AUTHORITY_GUIDANCE: &str = "Calendar authority: prd is the only source for athlete-declared vacation or planned rest ranges. pd is the active AI coach plan after a saved workout summary and is authoritative for projected training days. ud/fe/pw are Intervals calendar planned events. fr means calendar-empty in that section (no pw/sd/w entries); it is NOT vacation, NOT prd, and NOT proof the athlete is unavailable. For what is planned ahead, pd workouts override fr:true on the same dates. Never infer multi-day breaks or vacation from consecutive fr:true days, sparse history, or athlete_summary_text.";
-
-pub const PACKED_TRAINING_CONTEXT_LEGEND: &str = "Packed context legend: v=schema version (2 adds ps/cs segment encoding), i=intervals status, p=athlete profile, rc=race calendar, fe=future planned calendar events, prd=the only packed source for athlete-declared planned rest day ranges from the app calendar (Planned Rest Days); each entry uses sd/ed inclusive dates; if a vacation or multi-day break is not listed in prd, claiming it is configured anywhere else (including Intervals.icu) is false; distinct from pd AI rest days and av weekly availability, h=historical training, g=generated_at epoch seconds, fx=focus, rd=recent days, wr=saved workout recaps for the recent window, ud=upcoming days, pd=projected days, rs=race strategy window (races from rc in the next 14 days from focus; days_out=days from focus to race). Common inner fields: id=identifier, k=kind, d=date, sd=start_date_local, n=name, ty=activity type, c=category, desc=description, fr=calendar-empty day in that section (no pw/sd/w entries; NOT vacation), sick=sick day flag, sickn=sick note, w=workouts, pw=planned workouts, doc=raw workout doc, done=completed flag, dur=duration seconds, tss=training stress score, ifv=intensity_factor, ef=efficiency_factor, np=normalized_power_watts, ftp=ftp_watts, vi=variability_index, rpe=session rpe, recap=inline saved workout recap on a recent workout entry, bl=interval blocks, minp/maxp=target percent FTP bounds, minw/maxw=target watt bounds, ps=executed power segments [minW,maxW,durationSec], cs=executed cadence segments [minRPM,maxRPM,durationSec], km=distance in kilometers, disc=race discipline, pri=race priority. Saved workout recaps in wr list each completed session summary by date; prefer wr as the complete set of saved summaries for the recent window and treat each recap as authoritative for that workout. Intervals status uses a=activities status and e=events status. Profile fields include fnm=full name, hcm=height cm, wkg=weight kg, hrm=max heart rate, vo2=VO2 max, ap=athlete prompt, acfg=availability configured, av=weekly availability, wd=weekday, a=available, mdm=max duration minutes. Race entries in rc describe the athlete's broader race calendar and can be used to infer goal events, discipline specificity, and event importance from pri (A/B/C). Future planned calendar events in fe summarize the athlete's upcoming Intervals calendar over the stable planning horizon; use ty, c, n, desc, and any available dur/tss/ifv/np estimates to understand the planned workload and intent.";
+pub const PACKED_CALENDAR_AUTHORITY_GUIDANCE: &str = "Calendar authority: prd=only athlete-declared vacation/rest ranges. pd=AI coach plan after saved summary (authoritative projected days). ud/fe/pw=Intervals planned events. fr=calendar-empty in that section (no pw/sd/w); NOT vacation. pd overrides fr:true on same dates. Never infer vacation from fr:true gaps or sparse history.";
 
 pub const ATHLETE_SUMMARY_CALENDAR_GUARD: &str =
-    "Never state the athlete has a future vacation, holiday, break, or multi-day rest period unless it appears in packed prd. Never infer rest blocks from low TSS, sparse training history, fr:true, empty ud days, or gaps between workouts.";
+    "Never state future vacation/break unless in prd. Never infer rest from low TSS, fr:true, sparse history, or ud gaps.";
 
-static PACKED_TRAINING_CONTEXT_LEGEND_WITH_GUIDANCE: LazyLock<String> = LazyLock::new(|| {
-    format!(
-        "{PACKED_TRAINING_CONTEXT_LEGEND} {PACKED_STREAM_SEGMENT_GUIDANCE} {PACKED_CALENDAR_AUTHORITY_GUIDANCE}"
-    )
-});
+static TRAINING_CONTEXT_PROMPT_GUIDANCE: LazyLock<String> =
+    LazyLock::new(|| format!("{ALIGNED_INTERVAL_GUIDANCE} {PACKED_CALENDAR_AUTHORITY_GUIDANCE}"));
 
 pub fn packed_training_context_legend_with_guidance() -> &'static str {
-    PACKED_TRAINING_CONTEXT_LEGEND_WITH_GUIDANCE.as_str()
+    TRAINING_CONTEXT_PROMPT_GUIDANCE.as_str()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prompt_guidance_documents_aligned_intervals() {
+        let guidance = packed_training_context_legend_with_guidance();
+        assert!(guidance.contains("aligned_intervals"));
+        assert!(guidance.contains("coasting_stop"));
+        assert!(guidance.contains("normalized_power"));
+        assert!(!guidance.contains("ps=power"));
+        assert!(!guidance.contains("header-mapped"));
+    }
+
+    #[test]
+    fn prompt_guidance_keeps_calendar_authority() {
+        let guidance = packed_training_context_legend_with_guidance();
+        assert!(guidance.contains(PACKED_CALENDAR_AUTHORITY_GUIDANCE));
+    }
 }

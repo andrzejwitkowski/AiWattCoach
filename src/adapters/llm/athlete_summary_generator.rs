@@ -88,6 +88,7 @@ where
                     tool_calls: Vec::new(),
                     tool_call_id: None,
                     reasoning_content: None,
+                    image_base64: None,
                 }],
                 cache_scope_key: Some("athlete-summary".to_string()),
                 cache_key: Some(hash_text(&stable_context)),
@@ -104,7 +105,7 @@ mod tests {
     #[test]
     fn athlete_summary_system_prompt_forbids_unconfigured_vacation_claims() {
         let prompt = super::athlete_summary_system_prompt();
-        assert!(prompt.contains("unless it appears in packed prd"));
+        assert!(prompt.contains("unless in prd"));
         assert!(prompt.contains("fr:true"));
     }
 

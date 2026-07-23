@@ -596,6 +596,8 @@ fn should_invalidate_llm_cache(previous: &AiAgentsConfig, updated: &AiAgentsConf
         || previous.openrouter_api_key != updated.openrouter_api_key
         || previous.deepseek_api_key != updated.deepseek_api_key
         || previous.zai_api_key != updated.zai_api_key
+        || previous.openai_compatible_api_key != updated.openai_compatible_api_key
+        || previous.openai_compatible_base_url != updated.openai_compatible_base_url
 }
 
 #[cfg(test)]

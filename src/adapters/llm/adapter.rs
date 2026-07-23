@@ -62,7 +62,7 @@ impl LlmChatPort for LlmAdapter {
                 gemini,
                 openrouter,
             } => match config.provider {
-                LlmProvider::OpenAi => openai.chat(config, request),
+                LlmProvider::OpenAi | LlmProvider::OpenAiCompatible => openai.chat(config, request),
                 LlmProvider::DeepSeek => deepseek.chat(config, request),
                 LlmProvider::Zai => zai.chat(config, request),
                 LlmProvider::Gemini => gemini.chat(config, request),
@@ -124,6 +124,7 @@ mod tests {
                 provider: LlmProvider::OpenAi,
                 model: "o1-mini".to_string(),
                 api_key: "test-key".to_string(),
+                base_url: None,
             },
             Duration::from_millis(20),
             Box::pin(async {

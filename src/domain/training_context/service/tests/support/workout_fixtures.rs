@@ -299,7 +299,7 @@ pub(crate) fn sample_planned_workout(event_id: i64, date: &str) -> CanonicalPlan
     )
     .with_event_metadata(
         Some(name.to_string()),
-        description.or_else(|| Some(workout_doc.to_string()).filter(|_| event_id != 101)),
+        description.or_else(|| (event_id != 101).then(|| workout_doc.to_string())),
         Some("Ride".to_string()),
     )
 }

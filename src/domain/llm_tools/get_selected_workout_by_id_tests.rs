@@ -246,6 +246,7 @@ fn sample_summary_with_workout_id(workout_id: &str) -> WorkoutSummary {
             tool_call: None,
             questions: Vec::new(),
             created_at_epoch_seconds: 1,
+            image_url: None,
         }],
         provider_transcript: vec![LlmChatMessage::assistant(
             crate::domain::workout_summary::coach_reply_json("Great threshold work"),

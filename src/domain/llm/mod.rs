@@ -11,10 +11,13 @@ mod preview_messages;
 mod request_builder;
 mod transcript;
 
-pub use coach_planning_literature::coach_planning_literature_guidance;
+pub use coach_planning_literature::{
+    coach_planning_literature_guidance, COACH_SCIENTIFIC_FOUNDATIONS,
+    RACING_STRATEGIST_APP_EVIDENCE_CONTRACT, RACING_STRATEGIST_OPERATIONAL_GUIDELINES,
+};
 pub use context_prelude::{
-    packed_training_context_legend_with_guidance, ATHLETE_SUMMARY_CALENDAR_GUARD,
-    PACKED_CALENDAR_AUTHORITY_GUIDANCE, PACKED_TRAINING_CONTEXT_LEGEND,
+    packed_training_context_legend_with_guidance, ALIGNED_INTERVAL_GUIDANCE,
+    ATHLETE_SUMMARY_CALENDAR_GUARD, PACKED_CALENDAR_AUTHORITY_GUIDANCE,
 };
 pub(crate) use transcript::{
     final_assistant_text, last_nonempty_assistant_content, merge_provider_transcript_entries,
@@ -25,9 +28,10 @@ pub(crate) use transcript::{
 pub use error::LlmError;
 pub use logging::{llm_full_debug_logging_enabled, serialize_logged_body, truncate_logged_body};
 pub use model::{
-    hash_text, llm_request_timeout, LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse,
-    LlmContextCache, LlmFinishReason, LlmMessageRole, LlmProvider, LlmProviderConfig,
-    LlmTokenUsage, LlmToolCall, LlmToolChoice, LlmToolDefinition, LLM_REQUEST_TIMEOUT_SECONDS,
+    hash_text, llm_request_timeout, normalize_openai_compatible_base_url, LlmCacheUsage,
+    LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmContextCache, LlmFinishReason,
+    LlmMessageRole, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolCall, LlmToolChoice,
+    LlmToolDefinition, LLM_REQUEST_TIMEOUT_SECONDS,
 };
 pub use operation::{
     deserialize_llm_error, serialize_llm_error, CompletedLlmReply, LlmReplyClaimResult,

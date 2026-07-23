@@ -4,10 +4,12 @@ type AiAgentsFieldKey =
   | 'openrouterApiKey'
   | 'deepseekApiKey'
   | 'zaiApiKey'
+  | 'openaiCompatibleApiKey'
+  | 'openaiCompatibleBaseUrl'
   | 'selectedProvider'
   | 'selectedModel';
 
-type OptionalProviderOverrideField =
+type AgentOverrideFieldKey =
   | 'workoutChatProvider'
   | 'workoutChatModel'
   | 'workoutPlanningProvider'
@@ -15,16 +17,7 @@ type OptionalProviderOverrideField =
   | 'mesoCycleProvider'
   | 'mesoCycleModel';
 
-type ValidatedAiAgents = Partial<Record<AiAgentsFieldKey | OptionalProviderOverrideField, string | null>>;
-
-const OPTIONAL_PROVIDER_OVERRIDE_FIELDS: OptionalProviderOverrideField[] = [
-  'workoutChatProvider',
-  'workoutChatModel',
-  'workoutPlanningProvider',
-  'workoutPlanningModel',
-  'mesoCycleProvider',
-  'mesoCycleModel',
-];
+type ValidatedAiAgents = Partial<Record<AiAgentsFieldKey | AgentOverrideFieldKey, string | null>>;
 
 function trimToUndefined(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -75,18 +68,29 @@ export function getOptionalStringFieldValue(
   return trimToUndefined(validatedValue);
 }
 
+const AGENT_OVERRIDE_FIELDS: AgentOverrideFieldKey[] = [
+  'workoutChatProvider',
+  'workoutChatModel',
+  'workoutPlanningProvider',
+  'workoutPlanningModel',
+  'mesoCycleProvider',
+  'mesoCycleModel',
+];
+
 export function buildAiAgentsConnectionBody(
   data: unknown,
   validated: ValidatedAiAgents,
-  options?: { includeProviderOverrides?: boolean },
-): Record<string, string | null> {
-  const body: Record<string, string | null> = {};
+  options?: { includeAgentOverrides?: boolean },
+): Record<string, string | null | boolean> {
+  const body: Record<string, string | null | boolean> = {};
   const fields: AiAgentsFieldKey[] = [
     'openaiApiKey',
     'geminiApiKey',
     'openrouterApiKey',
     'deepseekApiKey',
     'zaiApiKey',
+    'openaiCompatibleApiKey',
+    'openaiCompatibleBaseUrl',
     'selectedProvider',
     'selectedModel',
   ];
@@ -98,12 +102,19 @@ export function buildAiAgentsConnectionBody(
     }
   }
 
-  if (options?.includeProviderOverrides) {
-    for (const field of OPTIONAL_PROVIDER_OVERRIDE_FIELDS) {
+  if (options?.includeAgentOverrides) {
+    for (const field of AGENT_OVERRIDE_FIELDS) {
       const value = getOptionalStringFieldValue(data, field, validated[field]);
       if (value !== undefined) {
         body[field] = value;
       }
+    }
+  }
+
+  if (data && typeof data === 'object' && 'includePowerImage' in data) {
+    const includePowerImage = (data as Record<string, unknown>).includePowerImage;
+    if (typeof includePowerImage === 'boolean') {
+      body.includePowerImage = includePowerImage;
     }
   }
 

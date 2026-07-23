@@ -22,7 +22,7 @@ async fn llm_workout_coach_does_not_fail_when_gemini_cache_lookup_errors() {
     .with_context_cache_repository(Arc::new(FailingReusableCacheRepository));
 
     let response = coach
-        .reply("user-1", &sample_summary(), "How did I do?", None)
+        .reply("user-1", &sample_summary(), "How did I do?", None, None)
         .await
         .unwrap();
 
@@ -54,7 +54,7 @@ async fn llm_workout_coach_logs_redacted_builder_request_metadata_only() {
 
     let (_, logs) = capture_tracing_logs(|| async {
         coach
-            .reply("user-1", &sample_summary(), "How did I do?", None)
+            .reply("user-1", &sample_summary(), "How did I do?", None, None)
             .await
             .unwrap()
     })
@@ -91,6 +91,7 @@ async fn llm_workout_coach_includes_athlete_summary_in_stable_context() {
             &sample_summary(),
             "How did I do?",
             Some("Athlete is durable, handles load well, but fades on repeated anaerobic work."),
+            None,
         )
         .await
         .unwrap();
@@ -118,7 +119,7 @@ async fn llm_workout_coach_includes_current_workout_recap_in_stable_context() {
     summary.workout_recap_text = Some("Finished 12th in the masters field.".to_string());
 
     coach
-        .reply("user-1", &summary, "How did I do?", None)
+        .reply("user-1", &summary, "How did I do?", None, None)
         .await
         .unwrap();
 
@@ -130,7 +131,7 @@ async fn llm_workout_coach_includes_current_workout_recap_in_stable_context() {
 }
 
 #[tokio::test]
-async fn llm_workout_coach_describes_ps_cs_segments_in_system_prompt() {
+async fn llm_workout_coach_describes_aligned_intervals_in_system_prompt() {
     let chat_port = Arc::new(CapturingChatPort::default());
     let coach = LlmWorkoutCoach::new(
         chat_port.clone(),
@@ -140,18 +141,18 @@ async fn llm_workout_coach_describes_ps_cs_segments_in_system_prompt() {
     );
 
     coach
-        .reply("user-1", &sample_summary(), "How did I do?", None)
+        .reply("user-1", &sample_summary(), "How did I do?", None, None)
         .await
         .unwrap();
 
     let prompt = &chat_port.requests()[0].system_prompt;
-    assert!(prompt.contains("ps (executed power segments)"));
-    assert!(prompt.contains("ps=executed power segments"));
-    assert!(prompt.contains("cs=executed cadence segments"));
-    assert!(prompt.contains("max==0 indicate no pedaling"));
-    assert!(prompt.contains("do not merge these with pedaling segments"));
-    assert!(prompt.contains("appear only in volatile rd.w entries, not in stable h.w"));
-    assert!(prompt.contains("judge interval execution primarily from bl"));
+    assert!(prompt.contains("aligned_intervals"));
+    assert!(prompt.contains("coasting_stop"));
+    assert!(prompt.contains("normalized_power"));
+    assert!(prompt.contains("get_selected_workout"));
+    assert!(!prompt.contains("ps=power"));
+    assert!(!prompt.contains("cs=cadence"));
+    assert!(!prompt.contains("header-mapped"));
     assert!(!prompt.contains("p3=power watts"));
     assert!(!prompt.contains("c5=cadence values"));
     assert!(!prompt.contains("level:seconds"));
@@ -163,6 +164,7 @@ fn llm_debug_output_redacts_secrets_and_prompt_contents() {
         provider: aiwattcoach::domain::llm::LlmProvider::OpenAi,
         model: "gpt-4o-mini".to_string(),
         api_key: "sk-secret-value".to_string(),
+        base_url: None,
     };
     let request = sample_request();
 

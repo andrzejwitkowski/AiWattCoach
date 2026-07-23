@@ -17,6 +17,7 @@
 - **Enum changes**: When a backend enum gains a new variant, grep every frontend Zod enum, TypeScript union, and UI branch for the old closed set.
 - **Type inference traps**: When a frontend test fixture starts with `messages: []`, do not derive async resolver types from `typeof fixture` unless explicitly annotated. TypeScript can infer `never[]`. Prefer the exported feature type. Run `bun run --cwd frontend build` to catch these.
 - **New API fields**: When adding a field to a shared schema, grep every serializer, extractor, match arm, and test fixture for the old field enumeration.
+- **Partial PATCH body builders**: If Zod validates a request then a helper rebuilds the fetch body from a field allowlist, every schema field that must persist must be in that allowlist. Mocking the API wrapper (not `fetch`) will not catch dropped fields — assert the outbound JSON body.
 
 ### Error and fallback handling
 - **Fallback UX**: When a fallback path intentionally recovers from an earlier transport error, clear stale error state before awaiting the fallback request, not only after success.
@@ -70,6 +71,9 @@
 - If a provider intermittently returns neither text nor tool calls, contain it at the adapter boundary with a narrow retry for that exact shape. Do not broaden downstream validation.
 - For multi-provider shared clients, every provider identifier (response metadata, logs, errors) must use the runtime config, not hardcoded literals.
 - When adding a new provider field to cache invalidation or config comparisons, add it everywhere.
+- **Plan→actual alignment IDs**: Resolve `align_id` / focus matching against the **post-dedupe** packed activity set, not the first Mongo list match. Intervals+Wahoo share `source_activity_id` but pack different legacy `activity_id`s; pre-dedupe first-match makes `focus_kind=summary` and leaves raw `ps`/`cs`.
+- **Plan link on Wahoo winner**: Plans sync to Intervals so `planned_workout_id` often lives only on the Intervals completed sibling; Wahoo wins prompt dedupe for FIT. When preferring Wahoo, merge the loser's `planned_workout_id` onto the winner (`or`), same idea as import `merge_completed_workout`. Otherwise packed context keeps raw `ps` and never emits `sa`.
+- **Authoritative plan filter vs alignment**: `AuthoritativePlannedWorkoutRepository` hides plans already linked to completed workouts (calendar correctness). Training-context alignment still needs those plan blocks for `direct_match_count` / `sa`. After authoritative load, restore missing `planned_workout_id`s from the unfiltered planned-workout repo before building `planned_events_by_id`.
 
 ## Testing
 

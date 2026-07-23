@@ -271,20 +271,10 @@ async fn training_plan_generator_describes_packed_context_legend_in_system_promp
         .unwrap();
 
     let prompt = &chat_port.requests()[0].system_prompt;
-    assert!(prompt.contains("Packed context legend"));
-    assert!(prompt.contains("v=schema version"));
-    assert!(prompt.contains("rc=race calendar"));
-    assert!(prompt.contains("fe=future planned calendar events"));
-    assert!(prompt.contains("fx=focus"));
-    assert!(prompt.contains("rd=recent days"));
-    assert!(prompt.contains("ud=upcoming days"));
-    assert!(prompt.contains("pd=projected days"));
-    assert!(prompt.contains("ps=executed power segments"));
-    assert!(prompt.contains("[minW,maxW,durationSec]"));
-    assert!(prompt.contains("max==0 indicate no pedaling"));
-    assert!(prompt.contains("do not merge these with pedaling segments"));
-    assert!(prompt.contains("appear only in volatile rd.w entries, not in stable h.w"));
-    assert!(!prompt.contains("p3=power watts in 3-second buckets"));
+    assert!(prompt.contains("aligned_intervals"));
+    assert!(prompt.contains("coasting_stop"));
+    assert!(!prompt.contains("ps=power"));
+    assert!(!prompt.contains("header-mapped"));
 }
 
 #[tokio::test]

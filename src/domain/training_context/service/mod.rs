@@ -1,16 +1,16 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
 
 use chrono::{Duration, NaiveDate};
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::domain::{
     completed_workouts::{
-        completed_workout_activity_id, BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout,
-        CompletedWorkoutError, CompletedWorkoutMetrics, CompletedWorkoutRepository,
-        CompletedWorkoutSeries,
+        canonical_completed_workout_id, completed_workout_activity_id,
+        BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout, CompletedWorkoutError,
+        CompletedWorkoutMetrics, CompletedWorkoutRepository, CompletedWorkoutSeries,
     },
     identity::Clock,
     intervals::{
@@ -50,8 +50,8 @@ mod tests;
 
 use context::{
     build_event_activity_matches, build_future_planned_event_contexts, build_historical_context,
-    build_recent_day_contexts, build_upcoming_day_contexts, infer_focus_kind,
-    projected_interval_blocks, projected_raw_workout_doc, projected_workout_name,
+    build_recent_day_contexts, build_upcoming_day_contexts, compute_aligned_intervals,
+    infer_focus_kind, projected_interval_blocks, projected_raw_workout_doc, projected_workout_name,
     HistoricalLoadSources, HistoricalWorkoutSources, RecentWorkoutSummaryLookup,
 };
 use dates::{activity_date, epoch_seconds_to_date, event_date};
@@ -261,6 +261,9 @@ where
     completed_workout_target_service: Arc<dyn CompletedWorkoutTargetUseCases>,
     completed_workout_repository: Option<Arc<dyn CompletedWorkoutReadPort>>,
     planned_workout_repository: Option<Arc<dyn PlannedWorkoutReadPort>>,
+    /// Unfiltered planned-workout source used to restore plans hidden from calendar
+    /// once a completed workout already references them.
+    unfiltered_planned_workout_repository: Option<Arc<dyn PlannedWorkoutReadPort>>,
     special_day_repository: Option<Arc<dyn SpecialDayReadPort>>,
     ftp_history_repository: Option<Arc<dyn FtpHistoryReadPort>>,
     training_load_daily_snapshot_repository: Option<Arc<dyn TrainingLoadDailySnapshotReadPort>>,
@@ -286,6 +289,7 @@ where
             completed_workout_target_service,
             completed_workout_repository: None,
             planned_workout_repository: None,
+            unfiltered_planned_workout_repository: None,
             special_day_repository: None,
             ftp_history_repository: None,
             training_load_daily_snapshot_repository: None,
@@ -309,6 +313,17 @@ where
         Repository: PlannedWorkoutRepository,
     {
         self.planned_workout_repository = Some(Arc::new(repository));
+        self
+    }
+
+    pub fn with_unfiltered_planned_workout_repository<Repository>(
+        mut self,
+        repository: Repository,
+    ) -> Self
+    where
+        Repository: PlannedWorkoutRepository,
+    {
+        self.unfiltered_planned_workout_repository = Some(Arc::new(repository));
         self
     }
 
@@ -465,10 +480,16 @@ where
             .map_err(|error| LlmError::Internal(error.to_string()))?;
         let clock_today = epoch_seconds_to_date(self.clock.now_epoch_seconds());
         let today = as_of_focus_day.unwrap_or(clock_today);
-        let focus_date = self
-            .resolve_focus_date(user_id, workout_id)
-            .await
-            .unwrap_or(today);
+        let matched_completed = self
+            .find_completed_matching_selection(user_id, workout_id)
+            .await;
+        let focus_date = if let Some(workout) = matched_completed.as_ref() {
+            dates::parse_date(date_key(&workout.start_date_local))
+        } else {
+            self.resolve_non_completed_focus_date(user_id, workout_id)
+                .await
+                .unwrap_or(today)
+        };
         let history_trend_days = 24 * 7;
         let history_warmup_days = 120;
         let history_start =
@@ -505,6 +526,18 @@ where
             ),
             Err(_) => (Vec::new(), "internal_error".to_string()),
         };
+        log_alignment_candidates(user_id, workout_id, &history_completed_workouts);
+        // Align against the packed row: Intervals+Wahoo share source_activity_id but different legacy ids.
+        let align_id = history_completed_workouts
+            .iter()
+            .find(|workout| completed_workout_matches_selection(workout, workout_id))
+            .map(|workout| legacy_activity_id(&workout.completed_workout_id).to_string())
+            .or_else(|| {
+                matched_completed
+                    .as_ref()
+                    .map(|workout| legacy_activity_id(&workout.completed_workout_id).to_string())
+            })
+            .unwrap_or_else(|| workout_id.to_string());
         let history_activities = history_completed_workouts
             .iter()
             .map(map_completed_workout_to_activity)
@@ -519,7 +552,7 @@ where
             .unwrap_or_default();
         let ftp_history = self.list_ftp_history(user_id).await.unwrap_or_default();
 
-        let (planned_workouts, special_days, events_status) = match self
+        let (mut planned_workouts, special_days, events_status) = match self
             .load_event_sources(
                 user_id,
                 &events_range.oldest,
@@ -532,6 +565,30 @@ where
             }
             Err(_) => (Vec::new(), Vec::new(), "internal_error".to_string()),
         };
+        if let Err(error) = self
+            .merge_linked_planned_workouts_for_alignment(
+                user_id,
+                &history_completed_workouts,
+                &mut planned_workouts,
+            )
+            .await
+        {
+            warn!(
+                user_id = %user_id,
+                selected_workout_id = %workout_id,
+                align_activity_id = %align_id,
+                error = %error,
+                "training_context alignment: failed to restore linked planned workouts"
+            );
+        }
+        info!(
+            user_id = %user_id,
+            selected_workout_id = %workout_id,
+            align_activity_id = %align_id,
+            planned_workout_count = planned_workouts.len(),
+            special_day_count = special_days.len(),
+            "training_context alignment: loaded planned sources"
+        );
         let planned_events_by_id = planned_workouts
             .iter()
             .map(|workout| {
@@ -543,6 +600,14 @@ where
             .collect::<HashMap<_, _>>();
         let direct_event_matches =
             build_direct_event_matches(&history_completed_workouts, &planned_events_by_id);
+        info!(
+            user_id = %user_id,
+            selected_workout_id = %workout_id,
+            align_activity_id = %align_id,
+            direct_match_count = direct_event_matches.len(),
+            align_direct_match = direct_event_matches.get(&align_id).map(|event| event.id),
+            "training_context alignment: mapped completed workouts to planned events"
+        );
         let all_events = build_local_events(&planned_workouts, &special_days);
         let stable_future_events = all_events
             .iter()
@@ -683,7 +748,24 @@ where
             upcoming_end,
             &upcoming_events,
         );
-        let focus_kind = infer_focus_kind(workout_id, &recent_days, &upcoming_days);
+        let focus_kind = infer_focus_kind(&align_id, &recent_days, &upcoming_days);
+
+        let mut recent_days = recent_days;
+        let aligned_workout_count = attach_all_recent_aligned_intervals(
+            &mut recent_days,
+            &detailed_recent_activities,
+            configured_ftp,
+        );
+        if aligned_workout_count > 0 {
+            info!(
+                user_id = %user_id,
+                selected_workout_id = %workout_id,
+                align_activity_id = %align_id,
+                focus_kind = %focus_kind,
+                aligned_workout_count,
+                "training_context alignment: adjusted blocks built"
+            );
+        }
 
         let context = TrainingContext {
             generated_at_epoch_seconds: self.clock.now_epoch_seconds(),
@@ -846,23 +928,16 @@ where
         }
     }
 
-    async fn resolve_focus_date(&self, user_id: &str, workout_id: &str) -> Option<NaiveDate> {
+    async fn resolve_non_completed_focus_date(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> Option<NaiveDate> {
         if matches!(
             workout_id,
             ATHLETE_SUMMARY_FOCUS_ID | CALENDAR_OVERVIEW_FOCUS_ID | MESO_CYCLE_FOCUS_ID
         ) {
             return None;
-        }
-
-        if let Some(repository) = &self.completed_workout_repository {
-            if let Ok(workouts) = repository.list_by_user_id(user_id).await {
-                if let Some(workout) = workouts.into_iter().find(|workout| {
-                    workout.completed_workout_id == workout_id
-                        || legacy_activity_id(&workout.completed_workout_id) == workout_id
-                }) {
-                    return Some(dates::parse_date(date_key(&workout.start_date_local)));
-                }
-            }
         }
 
         if let Some(repository) = &self.planned_workout_repository {
@@ -898,6 +973,25 @@ where
                     || format!("{}:{}", day.operation_key, day.date) == workout_id
             })
             .map(|day| dates::parse_date(&day.date))
+    }
+
+    async fn find_completed_matching_selection(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> Option<CompletedWorkout> {
+        let repository = self.completed_workout_repository.as_ref()?;
+        let workouts = repository.list_by_user_id(user_id).await.ok()?;
+        workouts
+            .into_iter()
+            .filter(|workout| completed_workout_matches_selection(workout, workout_id))
+            .reduce(|best, next| {
+                if prefer_completed_workout_for_prompt(&next, &best) {
+                    merge_plan_link_for_prompt(next, best)
+                } else {
+                    merge_plan_link_for_prompt(best, next)
+                }
+            })
     }
 
     async fn list_completed_workouts(
@@ -939,6 +1033,64 @@ where
         Ok((planned_workouts, special_days))
     }
 
+    async fn merge_linked_planned_workouts_for_alignment(
+        &self,
+        user_id: &str,
+        history_completed_workouts: &[CompletedWorkout],
+        planned_workouts: &mut Vec<PlannedWorkout>,
+    ) -> Result<(), LlmError> {
+        let Some(unfiltered_repository) = &self.unfiltered_planned_workout_repository else {
+            return Ok(());
+        };
+
+        let linked_planned_workout_ids = history_completed_workouts
+            .iter()
+            .filter_map(|workout| workout.planned_workout_id.clone())
+            .collect::<HashSet<_>>();
+        if linked_planned_workout_ids.is_empty() {
+            return Ok(());
+        }
+
+        let loaded_ids = planned_workouts
+            .iter()
+            .map(|workout| workout.planned_workout_id.clone())
+            .collect::<HashSet<_>>();
+        let missing_ids = linked_planned_workout_ids
+            .difference(&loaded_ids)
+            .cloned()
+            .collect::<HashSet<_>>();
+        if missing_ids.is_empty() {
+            return Ok(());
+        }
+
+        // Restore by plan id, not calendar window — linked plans may sit outside
+        // the events date range after reschedule / authoritative hide+restore.
+        let unfiltered = unfiltered_repository
+            .list_by_user_id(user_id)
+            .await
+            .map_err(|error| LlmError::Internal(error.to_string()))?;
+        let mut restored = 0_usize;
+        let mut loaded_ids = loaded_ids;
+        for workout in unfiltered {
+            if missing_ids.contains(&workout.planned_workout_id)
+                && loaded_ids.insert(workout.planned_workout_id.clone())
+            {
+                planned_workouts.push(workout);
+                restored += 1;
+            }
+        }
+
+        if restored > 0 {
+            info!(
+                user_id = %user_id,
+                restored_linked_plan_count = restored,
+                "training_context alignment: restored authoritative-hidden linked plans"
+            );
+        }
+
+        Ok(())
+    }
+
     async fn list_training_load_daily_snapshots(
         &self,
         user_id: &str,
@@ -961,6 +1113,36 @@ where
 
         repository.list_by_user_id(user_id).await
     }
+}
+
+fn attach_all_recent_aligned_intervals(
+    recent_days: &mut [RecentDayContext],
+    detailed_activities: &[Activity],
+    configured_ftp: Option<i32>,
+) -> usize {
+    let activities_by_id = detailed_activities
+        .iter()
+        .map(|activity| (activity.id.as_str(), activity))
+        .collect::<HashMap<_, _>>();
+    let mut aligned_workout_count = 0_usize;
+    for day in recent_days.iter_mut() {
+        for workout in day.workouts.iter_mut() {
+            let Some(planned) = workout.planned_workout.as_ref() else {
+                continue;
+            };
+            let Some(activity) = activities_by_id.get(workout.activity_id.as_str()) else {
+                continue;
+            };
+            let Some(aligned) = compute_aligned_intervals(activity, planned, configured_ftp) else {
+                continue;
+            };
+            workout.aligned_intervals = Some(aligned);
+            workout.power_segments.clear();
+            workout.cadence_segments.clear();
+            aligned_workout_count += 1;
+        }
+    }
+    aligned_workout_count
 }
 
 pub(super) fn build_local_events(
@@ -1019,15 +1201,34 @@ fn dedup_completed_workouts_for_prompt(workouts: Vec<CompletedWorkout>) -> Vec<C
             .unwrap_or_else(|| legacy_activity_id(&workout.completed_workout_id).to_string());
         let key = (date, activity_id);
 
-        match best_by_key.get(&key) {
-            Some(existing) if !prefer_completed_workout_for_prompt(&workout, existing) => {}
-            _ => {
+        match best_by_key.remove(&key) {
+            Some(existing) => {
+                let preferred = if prefer_completed_workout_for_prompt(&workout, &existing) {
+                    merge_plan_link_for_prompt(workout, existing)
+                } else {
+                    merge_plan_link_for_prompt(existing, workout)
+                };
+                best_by_key.insert(key, preferred);
+            }
+            None => {
                 best_by_key.insert(key, workout);
             }
         }
     }
 
     best_by_key.into_values().collect()
+}
+
+/// Wahoo wins Intervals+Wahoo prompt dedupe for FIT, but the plan link often lives only on
+/// the Intervals sibling (plans sync to Intervals). Keep the loser's planned_workout_id.
+fn merge_plan_link_for_prompt(
+    preferred: CompletedWorkout,
+    other: CompletedWorkout,
+) -> CompletedWorkout {
+    CompletedWorkout {
+        planned_workout_id: preferred.planned_workout_id.or(other.planned_workout_id),
+        ..preferred
+    }
 }
 
 fn prefer_completed_workout_for_prompt(
@@ -1255,6 +1456,15 @@ fn legacy_activity_id(completed_workout_id: &str) -> &str {
     completed_workout_activity_id(completed_workout_id)
 }
 
+fn completed_workout_matches_selection(workout: &CompletedWorkout, workout_id: &str) -> bool {
+    workout.completed_workout_id == workout_id
+        || workout.completed_workout_id == canonical_completed_workout_id(workout_id)
+        || legacy_activity_id(&workout.completed_workout_id) == workout_id
+        || workout.source_activity_id.as_deref() == Some(workout_id)
+        || workout.external_id.as_deref() == Some(workout_id)
+        || workout.planned_workout_id.as_deref() == Some(workout_id)
+}
+
 fn canonical_event_id(entity_id: &str, date: &str) -> i64 {
     entity_id
         .strip_prefix("intervals-event:")
@@ -1309,6 +1519,62 @@ fn default_special_day_name(kind: &SpecialDayKind) -> String {
 
 fn date_key(value: &str) -> &str {
     value.get(..10).unwrap_or(value)
+}
+
+fn log_alignment_candidates(user_id: &str, workout_id: &str, workouts: &[CompletedWorkout]) {
+    let selected = workouts
+        .iter()
+        .filter(|workout| completed_workout_matches_selection(workout, workout_id))
+        .collect::<Vec<_>>();
+    if selected.is_empty() {
+        info!(
+            user_id = %user_id,
+            selected_workout_id = %workout_id,
+            "training_context alignment: no completed workout matched selection"
+        );
+        return;
+    }
+
+    for workout in selected {
+        let watts_points = completed_stream_points(workout, "watts");
+        let cadence_points = completed_stream_points(workout, "cadence");
+        info!(
+            user_id = %user_id,
+            selected_workout_id = %workout_id,
+            completed_workout_id = %workout.completed_workout_id,
+            source_activity_id = workout.source_activity_id.as_deref(),
+            legacy_activity_id = %legacy_activity_id(&workout.completed_workout_id),
+            planned_workout_id = workout.planned_workout_id.as_deref(),
+            is_wahoo = workout.completed_workout_id.starts_with("wahoo-workout:"),
+            watts_points,
+            cadence_points,
+            "training_context alignment: candidate completed workout details"
+        );
+    }
+}
+
+fn completed_stream_points(workout: &CompletedWorkout, stream_type: &str) -> usize {
+    workout
+        .details
+        .streams
+        .iter()
+        .filter(|stream| stream.stream_type.eq_ignore_ascii_case(stream_type))
+        .map(|stream| {
+            stream_point_count(stream.primary_series.as_ref())
+                .max(stream_point_count(stream.secondary_series.as_ref()))
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+fn stream_point_count(series: Option<&CompletedWorkoutSeries>) -> usize {
+    match series {
+        Some(CompletedWorkoutSeries::Integers(values)) => values.len(),
+        Some(CompletedWorkoutSeries::Floats(values)) => values.len(),
+        Some(CompletedWorkoutSeries::Bools(values)) => values.len(),
+        Some(CompletedWorkoutSeries::Strings(values)) => values.len(),
+        None => 0,
+    }
 }
 
 #[cfg(test)]
@@ -1411,5 +1677,43 @@ mod dedup_tests {
 
         assert_eq!(deduped.len(), 1);
         assert_eq!(deduped[0].completed_workout_id, wahoo.completed_workout_id);
+    }
+
+    #[test]
+    fn dedup_completed_workouts_for_prompt_keeps_intervals_plan_link_on_wahoo_winner() {
+        // Plans sync to Intervals → Intervals completed carries planned_workout_id.
+        // Real FIT lives on Wahoo → prompt prefers Wahoo but must not drop the plan link.
+        let mut intervals = sample_workout("intervals-activity:i166", "2026-07-16T18:00:00");
+        intervals.source_activity_id = Some("i166368784".to_string());
+        intervals.planned_workout_id = Some("intervals-event:101".to_string());
+        let mut wahoo = sample_workout("wahoo-workout:476396735", "2026-07-16T18:10:00");
+        wahoo.source_activity_id = Some("i166368784".to_string());
+        wahoo.planned_workout_id = None;
+
+        let deduped = dedup_completed_workouts_for_prompt(vec![intervals, wahoo.clone()]);
+
+        assert_eq!(deduped.len(), 1);
+        assert_eq!(deduped[0].completed_workout_id, wahoo.completed_workout_id);
+        assert_eq!(
+            deduped[0].planned_workout_id.as_deref(),
+            Some("intervals-event:101")
+        );
+    }
+
+    #[test]
+    fn dedup_completed_workouts_for_prompt_keeps_winner_plan_when_both_linked() {
+        let mut intervals = sample_workout("intervals-activity:i166", "2026-07-16T18:00:00");
+        intervals.source_activity_id = Some("i166368784".to_string());
+        intervals.planned_workout_id = Some("intervals-event:101".to_string());
+        let mut wahoo = sample_workout("wahoo-workout:476396735", "2026-07-16T18:10:00");
+        wahoo.source_activity_id = Some("i166368784".to_string());
+        wahoo.planned_workout_id = Some("intervals-event:202".to_string());
+
+        let deduped = dedup_completed_workouts_for_prompt(vec![intervals, wahoo]);
+
+        assert_eq!(
+            deduped[0].planned_workout_id.as_deref(),
+            Some("intervals-event:202")
+        );
     }
 }

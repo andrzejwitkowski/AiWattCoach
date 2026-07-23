@@ -1,7 +1,7 @@
 mod prompt;
 
 pub use prompt::{
-    high_frequency_racing_strategist_guidance, racing_strategist_calendar_guidance,
-    racing_strategist_plan_guidance, RACING_STRATEGIST_APP_EVIDENCE_CONTRACT,
-    RACING_STRATEGIST_LITERATURE_ANCHORS, RACING_STRATEGIST_OPERATIONAL_GUIDELINES,
+    racing_strategist_calendar_guidance, racing_strategist_plan_guidance,
+    RACING_STRATEGIST_APP_EVIDENCE_CONTRACT, RACING_STRATEGIST_LITERATURE_ANCHORS,
+    RACING_STRATEGIST_OPERATIONAL_GUIDELINES,
 };

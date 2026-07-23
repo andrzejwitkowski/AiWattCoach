@@ -30,6 +30,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     updateDraft,
     updateProvider,
     updateOverrideProvider,
+    toggleIncludePowerImage,
     handleSave,
     handleTest,
   } = useAiAgentsCard({ settings, apiBaseUrl, onSave });
@@ -114,6 +115,26 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         }
         onModelChange={(value) => updateDraft('mesoCycleModel', value)}
       />
+
+      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+        <input
+          id="include-power-image"
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 accent-cyan-400"
+          checked={draft.includePowerImage}
+          onChange={(event) => toggleIncludePowerImage(event.target.checked)}
+        />
+        <span>
+          <span className="block text-sm font-medium text-slate-200">
+            Attach power chart image to post-workout coach
+          </span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            Sends a rendered power chart (3s rolling average with MAX, NP, and AVG lines) to the coach on
+            your first message. Requires a vision/multimodal model (for Qwen: qwen3-vl-plus or qwen-vl-plus,
+            not text-only qwen-plus).
+          </span>
+        </span>
+      </label>
 
       {validationMessage ? (
         <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">

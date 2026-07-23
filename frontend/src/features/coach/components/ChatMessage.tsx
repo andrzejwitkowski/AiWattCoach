@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import { MarkdownContent } from '../../../lib/markdown/MarkdownContent';
 import { CoachQuestionnaire } from './CoachQuestionnaire';
 import type { ConversationMessage } from '../types';
@@ -12,6 +14,57 @@ function formatTimestamp(epochSeconds: number): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(epochSeconds * 1000));
+}
+
+function PowerChartImage({ src }: { src: string }) {
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  useEffect(() => {
+    if (!isMaximized) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMaximized(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isMaximized]);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setIsMaximized(true)}
+        className="mt-3 block overflow-hidden rounded-xl border border-white/10"
+        aria-label="Maximize power chart"
+      >
+        <img
+          src={src}
+          alt="Power chart"
+          width={1200}
+          height={500}
+          className="max-h-56 w-auto cursor-zoom-in"
+        />
+      </button>
+      {isMaximized ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6"
+          onClick={() => setIsMaximized(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <img
+            src={src}
+            alt="Power chart"
+            className="max-h-full max-w-full cursor-zoom-out rounded-xl"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 export function ChatMessage({ message, onSendMessage }: ChatMessageProps) {
@@ -54,6 +107,7 @@ export function ChatMessage({ message, onSendMessage }: ChatMessageProps) {
         ) : (
           <p className="whitespace-pre-wrap text-base leading-7">{message.content}</p>
         )}
+        {message.imageUrl ? <PowerChartImage src={message.imageUrl} /> : null}
         <p className="mt-3 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
           {formatTimestamp(message.createdAtEpochSeconds)}
         </p>

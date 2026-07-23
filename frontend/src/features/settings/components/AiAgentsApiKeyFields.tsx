@@ -16,6 +16,7 @@ export function AiAgentsApiKeyFields({ aiAgents, draft, onUpdate }: AiAgentsApiK
   const [showOpenrouter, setShowOpenrouter] = useState(false);
   const [showDeepseek, setShowDeepseek] = useState(false);
   const [showZai, setShowZai] = useState(false);
+  const [showOpenaiCompatible, setShowOpenaiCompatible] = useState(false);
 
   return (
     <div className="mt-6 space-y-4">
@@ -98,6 +99,49 @@ export function AiAgentsApiKeyFields({ aiAgents, draft, onUpdate }: AiAgentsApiK
         )}
         onVisibilityChange={() => setShowZai((value) => !value)}
         onChange={(value) => onUpdate('zaiApiKey', value)}
+      />
+      <div
+        className={
+          !draft.selectedProvider || draft.selectedProvider === 'openai_compatible'
+            ? 'opacity-100'
+            : 'opacity-60'
+        }
+      >
+        <label
+          htmlFor="openai-compatible-base-url"
+          className="mb-2 block text-xs uppercase tracking-widest text-slate-400"
+        >
+          OpenAI Compatible Base URL
+        </label>
+        <input
+          id="openai-compatible-base-url"
+          className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-400/50 focus:outline-none"
+          type="url"
+          placeholder="https://api.example.com/v1"
+          value={draft.openaiCompatibleBaseUrl}
+          onChange={(event) => onUpdate('openaiCompatibleBaseUrl', event.target.value)}
+        />
+        <p className="mt-1.5 text-xs text-slate-400">
+          {draft.selectedProvider === 'openai_compatible'
+            ? 'Required. Requests POST to /chat/completions on this base URL.'
+            : 'Used when you switch to OpenAI Compatible.'}
+        </p>
+      </div>
+      <ApiKeyField
+        id="openai-compatible-api-key"
+        label="OpenAI Compatible API Key"
+        placeholder={aiAgents.openaiCompatibleApiKeySet ? 'Already configured' : 'sk-...'}
+        value={draft.openaiCompatibleApiKey}
+        visible={showOpenaiCompatible}
+        configured={aiAgents.openaiCompatibleApiKeySet}
+        emphasized={!draft.selectedProvider || draft.selectedProvider === 'openai_compatible'}
+        helperText={apiKeyHelperText(
+          draft.selectedProvider,
+          'openai_compatible',
+          aiAgents.openaiCompatibleApiKeySet || draft.openaiCompatibleApiKey.trim().length > 0,
+        )}
+        onVisibilityChange={() => setShowOpenaiCompatible((value) => !value)}
+        onChange={(value) => onUpdate('openaiCompatibleApiKey', value)}
       />
     </div>
   );

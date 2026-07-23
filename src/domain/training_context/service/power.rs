@@ -22,6 +22,11 @@ fn extract_raw_stream(streams: &[ActivityStream], stream_type: &str) -> Vec<i32>
         .unwrap_or_default()
 }
 
+/// Raw per-second samples for a stream type (no bucketing).
+pub(super) fn raw_stream(streams: &[ActivityStream], stream_type: &str) -> Vec<i32> {
+    extract_raw_stream(streams, stream_type)
+}
+
 fn extract_numeric_values(value: &serde_json::Value) -> Vec<i32> {
     value
         .as_array()

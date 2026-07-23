@@ -124,11 +124,5 @@ pub(crate) fn is_valid_date(date: &str) -> bool {
 }
 
 fn normalize_optional_upload_field(value: Option<String>) -> Option<String> {
-    value.and_then(|value| {
-        if value.trim().is_empty() {
-            None
-        } else {
-            Some(value)
-        }
-    })
+    value.filter(|value| !value.trim().is_empty())
 }
