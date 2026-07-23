@@ -10,7 +10,7 @@ import { SettingsStatusBanner } from './SettingsStatusBanner';
 type AiAgentsCardProps = {
   settings: UserSettingsResponse;
   apiBaseUrl: string;
-  onSave: () => void;
+  onSave: (updatedSettings?: UserSettingsResponse) => void;
 };
 
 export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps) {

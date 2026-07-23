@@ -18,7 +18,7 @@ import type { TestAiAgentsConnectionResponse, UserSettingsResponse } from '../ty
 type UseAiAgentsCardOptions = {
   settings: UserSettingsResponse;
   apiBaseUrl: string;
-  onSave: () => void;
+  onSave: (updatedSettings?: UserSettingsResponse) => void;
 };
 
 type OptionalOverrideField =
@@ -150,7 +150,7 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
     });
 
     try {
-      await updateAiAgents(apiBaseUrl, visibleRequest);
+      const updatedSettings = await updateAiAgents(apiBaseUrl, visibleRequest);
       const clearedDraft = clearDraftApiKeys(draft);
       setDraft(clearedDraft);
       setCleanDraft(clearedDraft);
@@ -159,7 +159,7 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
         label: 'Saved',
         message: 'AI provider settings saved. New coach replies will use the latest provider setup.',
       });
-      onSave();
+      onSave(updatedSettings);
     } catch (err) {
       setStatus({
         tone: 'error',

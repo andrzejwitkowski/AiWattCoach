@@ -28,7 +28,8 @@ export async function loadSettings(apiBaseUrl: string) {
 export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
   const validated = updateAiAgentsRequestSchema.parse(normalizeAiAgentsPayload(data));
   const body = buildAiAgentsConnectionBody(data, validated, { includeAgentOverrides: true });
-  return patch(apiBaseUrl, '/api/settings/ai-agents', body);
+  const parsed = await patch<typeof body, unknown>(apiBaseUrl, '/api/settings/ai-agents', body);
+  return userSettingsResponseSchema.parse(parsed) as UserSettingsResponse;
 }
 
 export async function testAiAgentsConnection(apiBaseUrl: string, data: unknown) {

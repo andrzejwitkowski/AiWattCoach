@@ -14,6 +14,13 @@ import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 
 const originalFetch = global.fetch;
 
+function mockSettingsResponse(settings = buildTestSettings()) {
+  return new Response(JSON.stringify(settings), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
 afterEach(() => {
   global.fetch = originalFetch;
   vi.restoreAllMocks();
@@ -437,12 +444,7 @@ describe('settings api', () => {
   it('omits whitespace-only ai settings fields from update requests', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-      .mockResolvedValue(
-        new Response('{}', {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-      );
+      .mockResolvedValue(mockSettingsResponse());
 
     global.fetch = fetchMock as typeof fetch;
 
@@ -471,12 +473,7 @@ describe('settings api', () => {
   it('includes deepseek api key in update requests', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-      .mockResolvedValue(
-        new Response('{}', {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-      );
+      .mockResolvedValue(mockSettingsResponse());
 
     global.fetch = fetchMock as typeof fetch;
 
@@ -505,12 +502,7 @@ describe('settings api', () => {
   it('includes openai compatible key and base url in update requests', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-      .mockResolvedValue(
-        new Response('{}', {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-      );
+      .mockResolvedValue(mockSettingsResponse());
 
     global.fetch = fetchMock as typeof fetch;
 
@@ -541,12 +533,7 @@ describe('settings api', () => {
   it('preserves explicit provider and model clears in update requests', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-      .mockResolvedValue(
-        new Response('{}', {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-      );
+      .mockResolvedValue(mockSettingsResponse());
 
     global.fetch = fetchMock as typeof fetch;
 
@@ -573,16 +560,11 @@ describe('settings api', () => {
   it('includes post-workout and planning overrides in update requests', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-      .mockResolvedValue(
-        new Response('{}', {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-      );
+      .mockResolvedValue(mockSettingsResponse());
 
     global.fetch = fetchMock as typeof fetch;
 
-    await updateAiAgents('', {
+    const result = await updateAiAgents('', {
       workoutChatProvider: 'openai',
       workoutChatModel: 'gpt-5',
       workoutPlanningProvider: 'gemini',
@@ -608,6 +590,7 @@ describe('settings api', () => {
         mesoCycleModel: null,
       }),
     });
+    expect(result).toEqual(buildTestSettings());
   });
 
   it('trims athlete profile context fields in cycling updates', async () => {

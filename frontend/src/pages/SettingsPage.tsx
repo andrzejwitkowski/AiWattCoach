@@ -1,4 +1,5 @@
 import { useSettings } from '../features/settings/context/SettingsContext';
+import type { UserSettingsResponse } from '../features/settings/types';
 import { AiAgentsCard } from '../features/settings/components/AiAgentsCard';
 import { AvailabilityCard } from '../features/settings/components/AvailabilityCard';
 import { AthleteSummaryCard } from '../features/settings/components/AthleteSummaryCard';
@@ -46,7 +47,10 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
     );
   }
 
-  function handleSave() {
+  function handleSave(updatedSettings?: UserSettingsResponse) {
+    if (updatedSettings) {
+      setSettings(updatedSettings);
+    }
     void refreshSettings({ background: true });
   }
 
