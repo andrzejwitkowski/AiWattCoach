@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { testAiAgentsConnection, updateAiAgents } from '../api/settings';
 import { buildTestSettings } from '../mockData';
+import type { UserSettingsResponse } from '../types';
 import { AiAgentsCard } from './AiAgentsCard';
 
 vi.mock('../api/settings', () => ({
@@ -349,6 +350,57 @@ describe('AiAgentsCard', () => {
       });
     });
     expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps edits made while a save request is in flight', async () => {
+    let resolveSave:
+      | ((value: UserSettingsResponse) => void)
+      | undefined;
+    updateAiAgentsMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+
+    render(
+      <AiAgentsCard
+        settings={buildTestSettings({
+          aiAgents: {
+            selectedProvider: 'openai',
+            selectedModel: 'gpt-5',
+            geminiApiKeySet: true,
+            geminiApiKey: '***...1',
+          },
+        })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    // user switches provider
+    fireEvent.change(screen.getByLabelText(/active provider/i), {
+      target: { value: 'gemini' },
+    });
+    expect(activeModelField()).toHaveValue('gemini-3-flash-preview');
+
+    // user clicks Save; request is in flight
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+    expect(updateAiAgentsMock).toHaveBeenCalled();
+
+    // user keeps editing WHILE save is pending: changes the model
+    fireEvent.change(activeModelField(), { target: { value: 'gemini-2.5-flash' } });
+
+    // save completes
+    await act(async () => {
+      resolveSave?.(buildTestSettings());
+      await Promise.resolve();
+    });
+
+    // the user's latest edit must survive instead of being reverted to the
+    // click-time snapshot
+    expect(activeModelField()).toHaveValue('gemini-2.5-flash');
+    expect(screen.getByLabelText(/active provider/i)).toHaveValue('gemini');
   });
 
   it('does not claim an inactive provider key is saved when none exists', () => {

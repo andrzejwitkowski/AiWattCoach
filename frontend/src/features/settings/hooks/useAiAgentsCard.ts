@@ -4,7 +4,8 @@ import { testAiAgentsConnection, updateAiAgents } from '../api/settings';
 import {
   buildTestStatusMessage,
   buildVisibleAiAgentsRequest,
-  clearDraftApiKeys,
+  applyRequestToPersisted,
+  clearRequestedApiKeys,
   createEmptyAiAgentsDraft,
   isAiAgentsDraftDirty,
   mergeDraftWithPersisted,
@@ -151,9 +152,14 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
 
     try {
       await updateAiAgents(apiBaseUrl, visibleRequest);
-      const clearedDraft = clearDraftApiKeys(draft);
-      setDraft(clearedDraft);
-      setCleanDraft(clearedDraft);
+      // Base the draft and clean-draft on the values the server now has, not
+      // on a stale closure of the draft captured when Save was clicked. This
+      // keeps edits made while the request was in flight (and keys typed for
+      // other providers) instead of silently reverting them.
+      const savedPersisted = applyRequestToPersisted(persistedDraft, visibleRequest);
+      previousPersistedRef.current = savedPersisted;
+      setDraft((current) => clearRequestedApiKeys(current, visibleRequest));
+      setCleanDraft(savedPersisted);
       setStatus({
         tone: 'success',
         label: 'Saved',

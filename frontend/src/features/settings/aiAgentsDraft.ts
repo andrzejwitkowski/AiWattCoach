@@ -54,16 +54,67 @@ export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiA
   };
 }
 
-export function clearDraftApiKeys(draft: AiAgentsDraftState): AiAgentsDraftState {
-  return {
-    ...draft,
-    openaiApiKey: '',
-    geminiApiKey: '',
-    openrouterApiKey: '',
-    deepseekApiKey: '',
-    zaiApiKey: '',
-    openaiCompatibleApiKey: '',
-  };
+const API_KEY_FIELDS = [
+  'openaiApiKey',
+  'geminiApiKey',
+  'openrouterApiKey',
+  'deepseekApiKey',
+  'zaiApiKey',
+  'openaiCompatibleApiKey',
+] as const;
+
+const PERSISTED_REQUEST_FIELDS = [
+  'openaiCompatibleBaseUrl',
+  'selectedProvider',
+  'selectedModel',
+  'workoutChatProvider',
+  'workoutChatModel',
+  'workoutPlanningProvider',
+  'workoutPlanningModel',
+  'mesoCycleProvider',
+  'mesoCycleModel',
+] as const;
+
+/**
+ * Clear only the plaintext API key fields that were actually included in a
+ * save request. Keys typed after the request was built (or belonging to
+ * another provider) are left untouched so the user's latest input survives
+ * an in-flight save.
+ */
+export function clearRequestedApiKeys(
+  draft: AiAgentsDraftState,
+  request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>>,
+): AiAgentsDraftState {
+  const next = { ...draft };
+  for (const field of API_KEY_FIELDS) {
+    if (request[field] !== undefined) {
+      next[field] = '';
+    }
+  }
+  return next;
+}
+
+/**
+ * Compute the persisted snapshot that results from applying a save request to
+ * the current persisted values. Used after a successful save so the draft and
+ * clean-draft baselines follow the server truth instead of a stale closure of
+ * the draft captured when the save was clicked.
+ */
+export function applyRequestToPersisted(
+  persisted: AiAgentsDraftState,
+  request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>>,
+): AiAgentsDraftState {
+  const next: AiAgentsDraftState = { ...persisted };
+  for (const field of PERSISTED_REQUEST_FIELDS) {
+    const value = request[field];
+    if (value !== undefined) {
+      next[field] = value === null ? '' : String(value);
+    }
+  }
+  if (request.includePowerImage !== undefined) {
+    next.includePowerImage = Boolean(request.includePowerImage);
+  }
+  return next;
 }
 
 export function mergeDraftWithPersisted(
