@@ -378,27 +378,21 @@ describe('AiAgentsCard', () => {
       />,
     );
 
-    // user switches provider
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'gemini' },
     });
     expect(activeModelField()).toHaveValue('gemini-3-flash-preview');
 
-    // user clicks Save; request is in flight
     fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
     expect(updateAiAgentsMock).toHaveBeenCalled();
 
-    // user keeps editing WHILE save is pending: changes the model
     fireEvent.change(activeModelField(), { target: { value: 'gemini-2.5-flash' } });
 
-    // save completes
     await act(async () => {
       resolveSave?.(buildTestSettings());
       await Promise.resolve();
     });
 
-    // the user's latest edit must survive instead of being reverted to the
-    // click-time snapshot
     expect(activeModelField()).toHaveValue('gemini-2.5-flash');
     expect(screen.getByLabelText(/active provider/i)).toHaveValue('gemini');
   });

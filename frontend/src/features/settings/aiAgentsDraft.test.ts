@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  applyRequestToPersisted,
   clearRequestedApiKeys,
   createEmptyAiAgentsDraft,
   type AiAgentsDraftState,
@@ -44,56 +43,5 @@ describe('clearRequestedApiKeys', () => {
 
     expect(result.deepseekApiKey).toBe('sk-ds');
     expect(result).toEqual(draft);
-  });
-});
-
-describe('applyRequestToPersisted', () => {
-  it('applies provider/model changes to the persisted snapshot', () => {
-    const persisted = emptyPersisted();
-
-    const result = applyRequestToPersisted(persisted, {
-      selectedProvider: 'gemini',
-      selectedModel: 'gemini-3-flash-preview',
-    });
-
-    expect(result.selectedProvider).toBe('gemini');
-    expect(result.selectedModel).toBe('gemini-3-flash-preview');
-    expect(result.workoutChatProvider).toBe('');
-  });
-
-  it('applies explicit clears as empty strings', () => {
-    const persisted = emptyPersisted();
-
-    const result = applyRequestToPersisted(persisted, {
-      selectedProvider: '',
-      selectedModel: '',
-    });
-
-    expect(result.selectedProvider).toBe('');
-    expect(result.selectedModel).toBe('');
-  });
-
-  it('applies override fields and includePowerImage', () => {
-    const persisted = emptyPersisted();
-
-    const result = applyRequestToPersisted(persisted, {
-      workoutChatProvider: 'deepseek',
-      workoutChatModel: 'deepseek-v4-flash',
-      includePowerImage: true,
-    });
-
-    expect(result.workoutChatProvider).toBe('deepseek');
-    expect(result.workoutChatModel).toBe('deepseek-v4-flash');
-    expect(result.includePowerImage).toBe(true);
-    expect(result.selectedProvider).toBe('openai');
-  });
-
-  it('ignores API key fields (keys never live in the persisted snapshot)', () => {
-    const persisted = emptyPersisted();
-
-    const result = applyRequestToPersisted(persisted, { openaiApiKey: 'sk-abc' });
-
-    expect(result.openaiApiKey).toBe('');
-    expect(result.selectedProvider).toBe('openai');
   });
 });
