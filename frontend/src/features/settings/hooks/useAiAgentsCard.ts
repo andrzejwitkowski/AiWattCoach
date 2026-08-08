@@ -144,7 +144,8 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
 
     // The click-time draft is what this request actually persists; use it as
     // the clean baseline so edits made while the save is in flight stay dirty.
-    const submittedCleared = clearRequestedApiKeys(draft, visibleRequest);
+    const submittedDraft = draft;
+    const submittedCleared = clearRequestedApiKeys(submittedDraft, visibleRequest);
 
     setIsSaving(true);
     setStatus({
@@ -155,7 +156,7 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
 
     try {
       await updateAiAgents(apiBaseUrl, visibleRequest);
-      setDraft((current) => clearRequestedApiKeys(current, visibleRequest));
+      setDraft((current) => clearRequestedApiKeys(current, visibleRequest, submittedDraft));
       setCleanDraft(submittedCleared);
       setStatus({
         tone: 'success',

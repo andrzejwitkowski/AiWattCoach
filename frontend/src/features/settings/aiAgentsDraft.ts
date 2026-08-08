@@ -66,10 +66,13 @@ const API_KEY_FIELDS = [
 export function clearRequestedApiKeys(
   draft: AiAgentsDraftState,
   request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>>,
+  submittedDraft: AiAgentsDraftState = draft,
 ): AiAgentsDraftState {
   const next = { ...draft };
   for (const field of API_KEY_FIELDS) {
-    if (request[field] !== undefined) {
+    // Clear a sent key only when it is still the submitted value; a key
+    // replaced while the save was pending was not sent and must survive.
+    if (request[field] !== undefined && draft[field] === submittedDraft[field]) {
       next[field] = '';
     }
   }

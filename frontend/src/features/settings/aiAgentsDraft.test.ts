@@ -44,4 +44,13 @@ describe('clearRequestedApiKeys', () => {
     expect(result.deepseekApiKey).toBe('sk-ds');
     expect(result).toEqual(draft);
   });
+
+  it('retains a key replaced after the request was built', () => {
+    const submitted = { ...emptyPersisted(), openaiApiKey: 'sk-submitted' };
+    const current = { ...emptyPersisted(), openaiApiKey: 'sk-replacement' };
+
+    const result = clearRequestedApiKeys(current, { openaiApiKey: 'sk-submitted' }, submitted);
+
+    expect(result.openaiApiKey).toBe('sk-replacement');
+  });
 });
