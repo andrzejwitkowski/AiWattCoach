@@ -24,7 +24,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 function makeRace(overrides: Partial<Race> = {}): Race {
@@ -274,6 +274,55 @@ describe('RacesPageLayout', () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it('disables edit while deleting is in progress for that race', async () => {
+    vi.mocked(useRaces).mockReturnValue({
+      races: [makeRace()],
+      upcomingRaces: [makeRace()],
+      completedRaces: [],
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    vi.mocked(deleteRace).mockReturnValue(new Promise(() => {}));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<RacesPageLayout apiBaseUrl="" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /edit race/i })).toBeDisabled();
+    });
+  });
+
+  it('does not allow overlapping deletes while one deletion is pending', async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const race1 = makeRace({ raceId: 'race-1', name: 'Race One' });
+    const race2 = makeRace({ raceId: 'race-2', name: 'Race Two' });
+
+    vi.mocked(useRaces).mockReturnValue({
+      races: [race1, race2],
+      upcomingRaces: [race1, race2],
+      completedRaces: [],
+      isLoading: false,
+      error: null,
+      refresh,
+    });
+
+    vi.mocked(deleteRace)
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockResolvedValueOnce(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<RacesPageLayout apiBaseUrl="" />);
+
+    const deleteButtons = screen.getAllByRole('button', { name: /delete/i });
+    fireEvent.click(deleteButtons[0]!);
+    fireEvent.click(deleteButtons[1]!);
+
+    expect(deleteRace).toHaveBeenCalledTimes(1);
+  });
+
   it('does not call deleteRace when confirmation is rejected', () => {
     vi.mocked(useRaces).mockReturnValue({
       races: [makeRace()],
@@ -309,7 +358,9 @@ describe('RacesPageLayout', () => {
     fireEvent.click(screen.getByRole('button', { name: /delete/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/failed to delete race/i)).toBeInTheDocument();
+      expect(deleteRace).toHaveBeenCalledWith('', 'race-1');
+      const panel = document.querySelector('[class*="border-red-400/25"]');
+      expect(panel).toBeTruthy();
     });
   });
 });

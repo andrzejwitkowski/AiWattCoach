@@ -26,6 +26,7 @@ export function RacesPageLayout({ apiBaseUrl }: RacesPageLayoutProps) {
   const activeRace = useMemo(() => (isCreating ? null : editingRace), [editingRace, isCreating]);
 
   async function handleDelete(race: Race) {
+    if (deletingRaceId !== null) return;
     if (!window.confirm(t('races.deleteConfirm', { name: race.name }))) return;
     setDeletingRaceId(race.raceId);
     setDeleteError(null);
