@@ -8,9 +8,11 @@ import { formatRaceDate, formatRaceDistance, getPriorityTone, mapRaceDisciplineL
 type RaceCardProps = {
   race: Race;
   onEdit?: (race: Race) => void;
+  onDelete?: (race: Race) => void;
+  isDeleting?: boolean;
 };
 
-export function RaceCard({ race, onEdit }: RaceCardProps) {
+export function RaceCard({ race, onEdit, onDelete, isDeleting }: RaceCardProps) {
   const { i18n, t } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
   const DisciplineIcon = getDisciplineIcon(race.discipline);
@@ -42,14 +44,28 @@ export function RaceCard({ race, onEdit }: RaceCardProps) {
         <p className="text-slate-400">
           {race.result ? t(`races.result.${race.result}`) : t('races.result.pending')}
         </p>
-        {onEdit ? (
-          <button
-            type="button"
-            onClick={() => onEdit(race)}
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-200 transition hover:bg-white/10 hover:text-white"
-          >
-            {t('races.editRace')}
-          </button>
+        {(onDelete || onEdit) ? (
+          <div className="flex items-center gap-2">
+            {onDelete ? (
+              <button
+                type="button"
+                onClick={() => onDelete(race)}
+                disabled={isDeleting}
+                className="rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-red-400 transition hover:bg-red-500/20 hover:text-red-300 disabled:opacity-50"
+              >
+                {isDeleting ? t('races.deleting') : t('races.deleteRace')}
+              </button>
+            ) : null}
+            {onEdit ? (
+              <button
+                type="button"
+                onClick={() => onEdit(race)}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-200 transition hover:bg-white/10 hover:text-white"
+              >
+                {t('races.editRace')}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </article>

@@ -12,10 +12,11 @@ vi.mock('../hooks/useRaces', () => ({
 vi.mock('../api/races', () => ({
   createRace: vi.fn(),
   updateRace: vi.fn(),
+  deleteRace: vi.fn(),
 }));
 
 import { useRaces } from '../hooks/useRaces';
-import { createRace, updateRace } from '../api/races';
+import { createRace, deleteRace, updateRace } from '../api/races';
 
 beforeEach(async () => {
   await i18n.changeLanguage('en');
@@ -233,5 +234,82 @@ describe('RacesPageLayout', () => {
 
     expect(screen.getByRole('button', { name: /cat\. b/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /cat\. a/i })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('shows delete button on upcoming races but not on completed races', () => {
+    vi.mocked(useRaces).mockReturnValue({
+      races: [makeRace(), makeRace({ raceId: 'race-2', date: '2025-01-01', name: 'Past Race' })],
+      upcomingRaces: [makeRace()],
+      completedRaces: [makeRace({ raceId: 'race-2', date: '2025-01-01', name: 'Past Race' })],
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<RacesPageLayout apiBaseUrl="" />);
+
+    expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(1);
+  });
+
+  it('calls deleteRace and refreshes when confirmation is accepted', async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(useRaces).mockReturnValue({
+      races: [makeRace()],
+      upcomingRaces: [makeRace()],
+      completedRaces: [],
+      isLoading: false,
+      error: null,
+      refresh,
+    });
+    vi.mocked(deleteRace).mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<RacesPageLayout apiBaseUrl="" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+
+    await waitFor(() => {
+      expect(deleteRace).toHaveBeenCalledWith('', 'race-1');
+    });
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('does not call deleteRace when confirmation is rejected', () => {
+    vi.mocked(useRaces).mockReturnValue({
+      races: [makeRace()],
+      upcomingRaces: [makeRace()],
+      completedRaces: [],
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<RacesPageLayout apiBaseUrl="" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+
+    expect(deleteRace).not.toHaveBeenCalled();
+  });
+
+  it('shows an error message when deleteRace fails', async () => {
+    vi.mocked(useRaces).mockReturnValue({
+      races: [makeRace()],
+      upcomingRaces: [makeRace()],
+      completedRaces: [],
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    vi.mocked(deleteRace).mockRejectedValue(new Error('network'));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<RacesPageLayout apiBaseUrl="" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/failed to delete race/i)).toBeInTheDocument();
+    });
   });
 });
