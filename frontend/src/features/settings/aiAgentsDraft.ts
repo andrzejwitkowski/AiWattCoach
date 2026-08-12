@@ -54,16 +54,29 @@ export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiA
   };
 }
 
-export function clearDraftApiKeys(draft: AiAgentsDraftState): AiAgentsDraftState {
-  return {
-    ...draft,
-    openaiApiKey: '',
-    geminiApiKey: '',
-    openrouterApiKey: '',
-    deepseekApiKey: '',
-    zaiApiKey: '',
-    openaiCompatibleApiKey: '',
-  };
+const API_KEY_FIELDS = [
+  'openaiApiKey',
+  'geminiApiKey',
+  'openrouterApiKey',
+  'deepseekApiKey',
+  'zaiApiKey',
+  'openaiCompatibleApiKey',
+] as const;
+
+export function clearRequestedApiKeys(
+  draft: AiAgentsDraftState,
+  request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>>,
+  submittedDraft: AiAgentsDraftState = draft,
+): AiAgentsDraftState {
+  const next = { ...draft };
+  for (const field of API_KEY_FIELDS) {
+    // Clear a sent key only when it is still the submitted value; a key
+    // replaced while the save was pending was not sent and must survive.
+    if (request[field] !== undefined && draft[field] === submittedDraft[field]) {
+      next[field] = '';
+    }
+  }
+  return next;
 }
 
 export function mergeDraftWithPersisted(

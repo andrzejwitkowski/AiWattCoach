@@ -4,7 +4,7 @@ import { testAiAgentsConnection, updateAiAgents } from '../api/settings';
 import {
   buildTestStatusMessage,
   buildVisibleAiAgentsRequest,
-  clearDraftApiKeys,
+  clearRequestedApiKeys,
   createEmptyAiAgentsDraft,
   isAiAgentsDraftDirty,
   mergeDraftWithPersisted,
@@ -142,6 +142,11 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
       return;
     }
 
+    // The click-time draft is what this request actually persists; use it as
+    // the clean baseline so edits made while the save is in flight stay dirty.
+    const submittedDraft = draft;
+    const submittedCleared = clearRequestedApiKeys(submittedDraft, visibleRequest);
+
     setIsSaving(true);
     setStatus({
       tone: 'neutral',
@@ -151,9 +156,8 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
 
     try {
       await updateAiAgents(apiBaseUrl, visibleRequest);
-      const clearedDraft = clearDraftApiKeys(draft);
-      setDraft(clearedDraft);
-      setCleanDraft(clearedDraft);
+      setDraft((current) => clearRequestedApiKeys(current, visibleRequest, submittedDraft));
+      setCleanDraft(submittedCleared);
       setStatus({
         tone: 'success',
         label: 'Saved',

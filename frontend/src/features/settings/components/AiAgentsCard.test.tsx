@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { testAiAgentsConnection, updateAiAgents } from '../api/settings';
 import { buildTestSettings } from '../mockData';
+import type { UserSettingsResponse } from '../types';
 import { AiAgentsCard } from './AiAgentsCard';
 
 vi.mock('../api/settings', () => ({
@@ -349,6 +350,80 @@ describe('AiAgentsCard', () => {
       });
     });
     expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps edits made while a save request is in flight', async () => {
+    let resolveSave:
+      | ((value: UserSettingsResponse) => void)
+      | undefined;
+    updateAiAgentsMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+
+    render(
+      <AiAgentsCard
+        settings={buildTestSettings({
+          aiAgents: {
+            selectedProvider: 'openai',
+            selectedModel: 'gpt-5',
+            geminiApiKeySet: true,
+            geminiApiKey: '***...1',
+          },
+        })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/active provider/i), {
+      target: { value: 'gemini' },
+    });
+    expect(activeModelField()).toHaveValue('gemini-3-flash-preview');
+
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+    expect(updateAiAgentsMock).toHaveBeenCalled();
+
+    fireEvent.change(activeModelField(), { target: { value: 'gemini-2.5-flash' } });
+
+    await act(async () => {
+      resolveSave?.(buildTestSettings());
+      await Promise.resolve();
+    });
+
+    expect(activeModelField()).toHaveValue('gemini-2.5-flash');
+    expect(screen.getByLabelText(/active provider/i)).toHaveValue('gemini');
+  });
+
+  it('keeps an API key replaced while a save request is in flight', async () => {
+    let resolveSave:
+      | ((value: UserSettingsResponse) => void)
+      | undefined;
+    updateAiAgentsMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+
+    render(<AiAgentsCard settings={buildTestSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    const openrouterKeyInput = screen.getByLabelText(/openrouter api key/i) as HTMLInputElement;
+    fireEvent.change(openrouterKeyInput, { target: { value: 'or-first' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+    expect(updateAiAgentsMock).toHaveBeenCalled();
+
+    fireEvent.change(openrouterKeyInput, { target: { value: 'or-second' } });
+
+    await act(async () => {
+      resolveSave?.(buildTestSettings());
+      await Promise.resolve();
+    });
+
+    expect(openrouterKeyInput.value).toBe('or-second');
+    expect(screen.getByRole('button', { name: /^save ai config$/i })).toBeEnabled();
   });
 
   it('does not claim an inactive provider key is saved when none exists', () => {
