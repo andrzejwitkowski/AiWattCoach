@@ -4,6 +4,7 @@ import { CalendarDays, Flag, Plus, Trophy } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { Race } from '../types';
+import { deleteRace } from '../api/races';
 import { useRaces } from '../hooks/useRaces';
 import { formatRaceDate } from '../utils';
 import { RaceCard } from './RaceCard';
@@ -19,8 +20,26 @@ export function RacesPageLayout({ apiBaseUrl }: RacesPageLayoutProps) {
   const { upcomingRaces, completedRaces, isLoading, error, refresh } = useRaces({ apiBaseUrl });
   const [editingRace, setEditingRace] = useState<Race | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [deletingRaceId, setDeletingRaceId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const activeRace = useMemo(() => (isCreating ? null : editingRace), [editingRace, isCreating]);
+
+  async function handleDelete(race: Race) {
+    if (deletingRaceId !== null) return;
+    if (!window.confirm(t('races.deleteConfirm', { name: race.name }))) return;
+    setDeletingRaceId(race.raceId);
+    setDeleteError(null);
+    try {
+      await deleteRace(apiBaseUrl, race.raceId);
+      await refresh();
+    } catch {
+      setDeleteError(t('races.deleteError'));
+    } finally {
+      setDeletingRaceId(null);
+    }
+  }
+
   const isEditorOpen = isCreating || editingRace !== null;
   const nextRace = upcomingRaces[0] ?? null;
 
@@ -69,14 +88,29 @@ export function RacesPageLayout({ apiBaseUrl }: RacesPageLayoutProps) {
             </div>
           </section>
 
+        {deleteError ? (
+          <StatePanel tone="error">{deleteError}</StatePanel>
+        ) : null}
         {isLoading ? (
           <StatePanel tone="neutral">{t('races.loading')}</StatePanel>
         ) : error ? (
           <StatePanel tone="error">{t('races.loadError', { message: error })}</StatePanel>
         ) : (
           <>
-            <RaceSection title={t('races.upcomingTitle')} races={upcomingRaces} onEdit={setEditingRace} emptyLabel={t('races.noUpcoming')} />
-            <RaceSection title={t('races.completedTitle')} races={completedRaces} onEdit={setEditingRace} emptyLabel={t('races.noCompleted')} />
+            <RaceSection
+              title={t('races.upcomingTitle')}
+              races={upcomingRaces}
+              onEdit={setEditingRace}
+              onDelete={handleDelete}
+              isDeletingRace={(race) => deletingRaceId === race.raceId}
+              emptyLabel={t('races.noUpcoming')}
+            />
+            <RaceSection
+              title={t('races.completedTitle')}
+              races={completedRaces}
+              onEdit={setEditingRace}
+              emptyLabel={t('races.noCompleted')}
+            />
           </>
         )}
       </div>
@@ -104,11 +138,15 @@ function RaceSection({
   title,
   races,
   onEdit,
+  onDelete,
+  isDeletingRace,
   emptyLabel,
 }: {
   title: string;
   races: Race[];
   onEdit: (race: Race) => void;
+  onDelete?: (race: Race) => void;
+  isDeletingRace?: (race: Race) => boolean;
   emptyLabel: string;
 }) {
   return (
@@ -120,7 +158,13 @@ function RaceSection({
       {races.length > 0 ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {races.map((race) => (
-            <RaceCard key={race.raceId} race={race} onEdit={onEdit} />
+            <RaceCard
+              key={race.raceId}
+              race={race}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              isDeleting={isDeletingRace?.(race) ?? false}
+            />
           ))}
         </div>
       ) : (
