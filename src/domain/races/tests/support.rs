@@ -607,6 +607,50 @@ impl CalendarEntryViewRefreshPort for ClearingCalendarRefresh {
     }
 }
 
+#[derive(Clone, Default)]
+pub(super) struct RecordingRaceProjectionCleanup {
+    calls: Arc<Mutex<Vec<(String, String)>>>,
+}
+
+impl RecordingRaceProjectionCleanup {
+    pub(super) fn stored(&self) -> Vec<(String, String)> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl crate::domain::races::RaceProjectionCleanupPort for RecordingRaceProjectionCleanup {
+    fn supersede_for_deleted_race_date(
+        &self,
+        user_id: &str,
+        race_date: &str,
+    ) -> BoxFuture<Result<Option<(String, String)>, RaceError>> {
+        let calls = self.calls.clone();
+        let user_id = user_id.to_string();
+        let race_date = race_date.to_string();
+        Box::pin(async move {
+            calls.lock().unwrap().push((user_id, race_date));
+            Ok(None)
+        })
+    }
+}
+
+#[derive(Clone, Default)]
+pub(super) struct FailingRaceProjectionCleanup;
+
+impl crate::domain::races::RaceProjectionCleanupPort for FailingRaceProjectionCleanup {
+    fn supersede_for_deleted_race_date(
+        &self,
+        _user_id: &str,
+        _race_date: &str,
+    ) -> BoxFuture<Result<Option<(String, String)>, RaceError>> {
+        Box::pin(async {
+            Err(RaceError::Internal(
+                "race projection cleanup failed: boom".to_string(),
+            ))
+        })
+    }
+}
+
 impl RecordingIntervalsService {
     pub(super) fn with_failed_updates() -> Self {
         Self {

@@ -122,8 +122,8 @@ use aiwattcoach::{
     domain::training_context::DefaultTrainingContextBuilder,
     domain::training_load::{TrainingLoadDashboardReadService, TrainingLoadRecomputeService},
     domain::training_plan::{
-        training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
-        TrainingPlanGenerationService,
+        training_plan_generate_task_handler, RaceProjectionCleanupService,
+        SchedulerBackedTrainingPlanService, TrainingPlanGenerationService,
     },
     domain::wahoo::{WahooService, WahooWebhookService},
     domain::wahoo_fit_enrichment::{
@@ -474,15 +474,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     )
     .with_cleanup_planned_workouts(calendar_planned_workout_source.clone())
     .with_planned_completed_links(planned_completed_link_repository.clone());
-    let manual_calendar_refresh_service = Arc::new(ManualCalendarRefreshService::new(
-        calendar_entry_view_repository.clone(),
-        calendar_planned_workout_source.clone(),
-        authoritative_completed_workout_repository.clone(),
-        authoritative_race_repository.clone(),
-        authoritative_special_day_repository.clone(),
-        SystemClock,
-        calendar_entry_view_refresh_service.clone(),
-    ));
+    let race_projection_cleanup =
+        RaceProjectionCleanupService::new(training_plan_projection_repository.clone(), SystemClock);
+    let manual_calendar_refresh_service = Arc::new(
+        ManualCalendarRefreshService::new(
+            calendar_entry_view_repository.clone(),
+            calendar_planned_workout_source.clone(),
+            authoritative_completed_workout_repository.clone(),
+            authoritative_race_repository.clone(),
+            authoritative_special_day_repository.clone(),
+            SystemClock,
+            calendar_entry_view_refresh_service.clone(),
+        )
+        .with_orphan_race_projection_cleanup(race_projection_cleanup.clone()),
+    );
     let intervals_api_client = if dev_intervals_enabled {
         IntervalsApiAdapter::Dev(DevIntervalsClient)
     } else {
@@ -691,7 +696,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             UuidIdGenerator,
         )
         .with_provider_poll_states(provider_poll_state_repository.clone())
-        .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
+        .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone())
+        .with_projection_cleanup(race_projection_cleanup.clone()),
     );
     let race_calendar_source =
         MongoCalendarEntryViewCalendarSource::new(mongo_client.clone(), &mongo_database);

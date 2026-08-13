@@ -1,6 +1,7 @@
 mod authoritative;
 mod model;
 mod ports;
+mod projection_cleanup;
 mod service;
 #[cfg(test)]
 mod tests;
@@ -11,4 +12,5 @@ pub use model::{
     RaceResult, UpdateRace,
 };
 pub use ports::{BoxFuture, RaceRepository, RaceUseCases};
+pub use projection_cleanup::{NoopRaceProjectionCleanup, RaceProjectionCleanupPort};
 pub use service::RaceService;

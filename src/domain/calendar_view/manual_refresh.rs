@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use chrono::{TimeZone, Utc};
 
 use crate::domain::{
@@ -10,6 +12,7 @@ use crate::domain::{
 };
 
 use super::{
+    orphan_race_cleanup::{NoopOrphanRaceProjectionCleanup, OrphanRaceProjectionCleanupPort},
     BoxFuture, CalendarEntryViewError, CalendarEntryViewRefreshPort, CalendarEntryViewRepository,
 };
 
@@ -36,6 +39,7 @@ pub struct ManualCalendarRefreshService<
     SpecialDays,
     Time,
     Refresh,
+    Cleanup = NoopOrphanRaceProjectionCleanup,
 > where
     Views: CalendarEntryViewRepository + Clone,
     Planned: CalendarPlannedWorkoutSource + Clone,
@@ -44,6 +48,7 @@ pub struct ManualCalendarRefreshService<
     SpecialDays: SpecialDayRepository + Clone,
     Time: Clock + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
+    Cleanup: OrphanRaceProjectionCleanupPort + Clone,
 {
     views: Views,
     planned_workouts: Planned,
@@ -52,10 +57,20 @@ pub struct ManualCalendarRefreshService<
     special_days: SpecialDays,
     clock: Time,
     refresh: Refresh,
+    orphan_cleanup: Cleanup,
 }
 
 impl<Views, Planned, Completed, Races, SpecialDays, Time, Refresh>
-    ManualCalendarRefreshService<Views, Planned, Completed, Races, SpecialDays, Time, Refresh>
+    ManualCalendarRefreshService<
+        Views,
+        Planned,
+        Completed,
+        Races,
+        SpecialDays,
+        Time,
+        Refresh,
+        NoopOrphanRaceProjectionCleanup,
+    >
 where
     Views: CalendarEntryViewRepository + Clone,
     Planned: CalendarPlannedWorkoutSource + Clone,
@@ -82,12 +97,22 @@ where
             special_days,
             clock,
             refresh,
+            orphan_cleanup: NoopOrphanRaceProjectionCleanup,
         }
     }
 }
 
-impl<Views, Planned, Completed, Races, SpecialDays, Time, Refresh> ManualCalendarRefreshUseCases
-    for ManualCalendarRefreshService<Views, Planned, Completed, Races, SpecialDays, Time, Refresh>
+impl<Views, Planned, Completed, Races, SpecialDays, Time, Refresh, Cleanup>
+    ManualCalendarRefreshService<
+        Views,
+        Planned,
+        Completed,
+        Races,
+        SpecialDays,
+        Time,
+        Refresh,
+        Cleanup,
+    >
 where
     Views: CalendarEntryViewRepository + Clone,
     Planned: CalendarPlannedWorkoutSource + Clone,
@@ -96,6 +121,58 @@ where
     SpecialDays: SpecialDayRepository + Clone,
     Time: Clock + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
+    Cleanup: OrphanRaceProjectionCleanupPort + Clone,
+{
+    pub fn with_orphan_race_projection_cleanup<NewCleanup>(
+        self,
+        orphan_cleanup: NewCleanup,
+    ) -> ManualCalendarRefreshService<
+        Views,
+        Planned,
+        Completed,
+        Races,
+        SpecialDays,
+        Time,
+        Refresh,
+        NewCleanup,
+    >
+    where
+        NewCleanup: OrphanRaceProjectionCleanupPort + Clone,
+    {
+        ManualCalendarRefreshService {
+            views: self.views,
+            planned_workouts: self.planned_workouts,
+            completed_workouts: self.completed_workouts,
+            races: self.races,
+            special_days: self.special_days,
+            clock: self.clock,
+            refresh: self.refresh,
+            orphan_cleanup,
+        }
+    }
+}
+
+impl<Views, Planned, Completed, Races, SpecialDays, Time, Refresh, Cleanup>
+    ManualCalendarRefreshUseCases
+    for ManualCalendarRefreshService<
+        Views,
+        Planned,
+        Completed,
+        Races,
+        SpecialDays,
+        Time,
+        Refresh,
+        Cleanup,
+    >
+where
+    Views: CalendarEntryViewRepository + Clone + 'static,
+    Planned: CalendarPlannedWorkoutSource + Clone + 'static,
+    Completed: CompletedWorkoutRepository + Clone + 'static,
+    Races: RaceRepository + Clone + 'static,
+    SpecialDays: SpecialDayRepository + Clone + 'static,
+    Time: Clock + Clone + 'static,
+    Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
+    Cleanup: OrphanRaceProjectionCleanupPort + Clone + 'static,
 {
     fn refresh_calendar_view_for_user(
         &self,
@@ -107,8 +184,17 @@ where
     }
 }
 
-impl<Views, Planned, Completed, Races, SpecialDays, Time, Refresh>
-    ManualCalendarRefreshService<Views, Planned, Completed, Races, SpecialDays, Time, Refresh>
+impl<Views, Planned, Completed, Races, SpecialDays, Time, Refresh, Cleanup>
+    ManualCalendarRefreshService<
+        Views,
+        Planned,
+        Completed,
+        Races,
+        SpecialDays,
+        Time,
+        Refresh,
+        Cleanup,
+    >
 where
     Views: CalendarEntryViewRepository + Clone,
     Planned: CalendarPlannedWorkoutSource + Clone,
@@ -117,16 +203,30 @@ where
     SpecialDays: SpecialDayRepository + Clone,
     Time: Clock + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
+    Cleanup: OrphanRaceProjectionCleanupPort + Clone,
 {
     async fn refresh_for_user_impl(
         &self,
         user_id: &str,
     ) -> Result<ManualCalendarRefreshResult, CalendarEntryViewError> {
         let today = epoch_seconds_to_date(self.clock.now_epoch_seconds())?;
+        let race_dates_present = self
+            .races
+            .list_by_user_id(user_id)
+            .await
+            .map_err(map_race_error)?
+            .into_iter()
+            .map(|race| race.date)
+            .collect::<BTreeSet<_>>();
         let (oldest, newest) = self
-            .resolve_refresh_range_for_user(user_id, &today)
+            .resolve_refresh_range_for_user(user_id, &today, &race_dates_present)
             .await?
             .unwrap_or_else(|| (today.clone(), today));
+
+        self.orphan_cleanup
+            .supersede_orphan_race_projections(user_id, &oldest, &newest, &race_dates_present)
+            .await?;
+
         let rebuilt_entries = self
             .refresh
             .refresh_range_for_user(user_id, &oldest, &newest)
@@ -143,8 +243,9 @@ where
         &self,
         user_id: &str,
         today: &str,
+        race_dates: &BTreeSet<String>,
     ) -> Result<Option<(String, String)>, CalendarEntryViewError> {
-        let source_dates = self.list_source_dates_for_user(user_id).await?;
+        let source_dates = self.list_source_dates_for_user(user_id, race_dates).await?;
         let oldest_view = self.views.find_oldest_date_by_user_id(user_id).await?;
         let newest_view = self.views.find_newest_date_by_user_id(user_id).await?;
 
@@ -168,6 +269,7 @@ where
     async fn list_source_dates_for_user(
         &self,
         user_id: &str,
+        race_dates: &BTreeSet<String>,
     ) -> Result<Vec<String>, CalendarEntryViewError> {
         let planned_dates = self
             .planned_workouts
@@ -189,15 +291,6 @@ where
             .filter(|date| is_valid_calendar_date(date))
             .collect::<Vec<_>>();
 
-        let race_dates = self
-            .races
-            .list_by_user_id(user_id)
-            .await
-            .map_err(map_race_error)?
-            .into_iter()
-            .map(|race| race.date)
-            .collect::<Vec<_>>();
-
         let special_day_dates = self
             .special_days
             .list_by_user_id(user_id)
@@ -210,7 +303,7 @@ where
         let mut dates = Vec::new();
         dates.extend(planned_dates);
         dates.extend(completed_dates);
-        dates.extend(race_dates);
+        dates.extend(race_dates.iter().cloned());
         dates.extend(special_day_dates);
 
         Ok(dates)

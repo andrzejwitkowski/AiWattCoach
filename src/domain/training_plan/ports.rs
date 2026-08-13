@@ -44,6 +44,15 @@ pub trait TrainingPlanProjectionRepository: Send + Sync + 'static {
         today: &str,
         replaced_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>>;
+
+    fn supersede_active_dates(
+        &self,
+        _user_id: &str,
+        _dates: &[String],
+        _superseded_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<Option<(String, String)>, TrainingPlanError>> {
+        Box::pin(async move { Ok(None) })
+    }
 }
 
 pub trait TrainingPlanGenerationOperationRepository: Send + Sync + 'static {

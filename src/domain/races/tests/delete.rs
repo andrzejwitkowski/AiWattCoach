@@ -372,18 +372,11 @@ async fn delete_race_refreshes_distinct_imported_twin_date() {
     assert!(repository.stored().is_empty());
     assert_eq!(
         refresh.stored(),
-        vec![
-            (
-                "user-1".to_string(),
-                "2026-09-13".to_string(),
-                "2026-09-13".to_string()
-            ),
-            (
-                "user-1".to_string(),
-                "2026-09-12".to_string(),
-                "2026-09-12".to_string()
-            ),
-        ]
+        vec![(
+            "user-1".to_string(),
+            "2026-09-12".to_string(),
+            "2026-09-13".to_string()
+        )]
     );
 }
 
@@ -459,4 +452,71 @@ async fn delete_race_keeps_twin_sync_state_when_twin_delete_fails() {
     let stored_states = sync_states.stored();
     assert_eq!(stored_states.len(), 1);
     assert_eq!(stored_states[0].canonical_entity, twin_ref);
+}
+
+#[tokio::test]
+async fn delete_race_invalidates_training_plan_projections_for_race_date() {
+    let existing = Race {
+        race_id: "race-1".to_string(),
+        user_id: "user-1".to_string(),
+        date: "2026-08-23".to_string(),
+        name: "Warka".to_string(),
+        distance_meters: 90_000,
+        discipline: RaceDiscipline::Road,
+        priority: RacePriority::B,
+        result: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 2,
+    };
+    let cleanup = RecordingRaceProjectionCleanup::default();
+    let service = RaceService::new(
+        InMemoryRaceRepository::with_races(vec![existing]),
+        RecordingIntervalsService::default(),
+        InMemoryExternalSyncStateRepository::default(),
+        TestClock,
+        TestIdGenerator::default(),
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default())
+    .with_projection_cleanup(cleanup.clone());
+
+    service.delete_race("user-1", "race-1").await.unwrap();
+
+    assert_eq!(
+        cleanup.stored(),
+        vec![("user-1".to_string(), "2026-08-23".to_string())]
+    );
+}
+
+#[tokio::test]
+async fn delete_race_fails_when_projection_cleanup_fails() {
+    let existing = Race {
+        race_id: "race-1".to_string(),
+        user_id: "user-1".to_string(),
+        date: "2026-08-23".to_string(),
+        name: "Warka".to_string(),
+        distance_meters: 90_000,
+        discipline: RaceDiscipline::Road,
+        priority: RacePriority::B,
+        result: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 2,
+    };
+    let repository = InMemoryRaceRepository::with_races(vec![existing]);
+    let service = RaceService::new(
+        repository.clone(),
+        RecordingIntervalsService::default(),
+        InMemoryExternalSyncStateRepository::default(),
+        TestClock,
+        TestIdGenerator::default(),
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default())
+    .with_projection_cleanup(FailingRaceProjectionCleanup);
+
+    let error = service.delete_race("user-1", "race-1").await.unwrap_err();
+
+    assert!(repository.stored().is_empty());
+    assert!(matches!(
+        error,
+        RaceError::Internal(message) if message.contains("race projection cleanup failed")
+    ));
 }

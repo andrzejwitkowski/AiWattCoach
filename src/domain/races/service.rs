@@ -10,7 +10,10 @@ use crate::domain::{
 };
 use tracing::warn;
 
-use super::{BoxFuture, CreateRace, Race, RaceError, RaceRepository, RaceUseCases, UpdateRace};
+use super::{
+    BoxFuture, CreateRace, NoopRaceProjectionCleanup, Race, RaceError, RaceProjectionCleanupPort,
+    RaceRepository, RaceUseCases, UpdateRace,
+};
 
 #[derive(Clone)]
 pub struct RaceService<
@@ -21,6 +24,7 @@ pub struct RaceService<
     Ids,
     PollStates = NoopProviderPollStateRepository,
     Refresh = NoopCalendarEntryViewRefresh,
+    Cleanup = NoopRaceProjectionCleanup,
 > where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
@@ -29,6 +33,7 @@ pub struct RaceService<
     Ids: IdGenerator + Clone + 'static,
     PollStates: ProviderPollStateRepository + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
+    Cleanup: RaceProjectionCleanupPort + Clone + 'static,
 {
     repository: Repository,
     intervals: Intervals,
@@ -37,6 +42,7 @@ pub struct RaceService<
     ids: Ids,
     poll_states: PollStates,
     refresh: Refresh,
+    projection_cleanup: Cleanup,
 }
 
 impl<Repository, Intervals, SyncStates, Time, Ids>
@@ -63,12 +69,13 @@ where
             ids,
             poll_states: NoopProviderPollStateRepository,
             refresh: NoopCalendarEntryViewRefresh,
+            projection_cleanup: NoopRaceProjectionCleanup,
         }
     }
 }
 
-impl<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh>
-    RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh>
+impl<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh, Cleanup>
+    RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh, Cleanup>
 where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
@@ -77,11 +84,12 @@ where
     Ids: IdGenerator + Clone + 'static,
     PollStates: ProviderPollStateRepository + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
+    Cleanup: RaceProjectionCleanupPort + Clone + 'static,
 {
     pub fn with_provider_poll_states<NewPollStates>(
         self,
         poll_states: NewPollStates,
-    ) -> RaceService<Repository, Intervals, SyncStates, Time, Ids, NewPollStates, Refresh>
+    ) -> RaceService<Repository, Intervals, SyncStates, Time, Ids, NewPollStates, Refresh, Cleanup>
     where
         NewPollStates: ProviderPollStateRepository + Clone + 'static,
     {
@@ -93,13 +101,14 @@ where
             ids: self.ids,
             poll_states,
             refresh: self.refresh,
+            projection_cleanup: self.projection_cleanup,
         }
     }
 
     pub fn with_calendar_view_refresh<NewRefresh>(
         self,
         refresh: NewRefresh,
-    ) -> RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, NewRefresh>
+    ) -> RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, NewRefresh, Cleanup>
     where
         NewRefresh: CalendarEntryViewRefreshPort + Clone + 'static,
     {
@@ -111,6 +120,26 @@ where
             ids: self.ids,
             poll_states: self.poll_states,
             refresh,
+            projection_cleanup: self.projection_cleanup,
+        }
+    }
+
+    pub fn with_projection_cleanup<NewCleanup>(
+        self,
+        projection_cleanup: NewCleanup,
+    ) -> RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh, NewCleanup>
+    where
+        NewCleanup: RaceProjectionCleanupPort + Clone + 'static,
+    {
+        RaceService {
+            repository: self.repository,
+            intervals: self.intervals,
+            sync_states: self.sync_states,
+            clock: self.clock,
+            ids: self.ids,
+            poll_states: self.poll_states,
+            refresh: self.refresh,
+            projection_cleanup,
         }
     }
 
@@ -336,16 +365,31 @@ where
             }
         }
 
+        let mut refresh_oldest = existing.date.clone();
+        let mut refresh_newest = existing.date.clone();
+
         if let Some(event_id) = linked_intervals_event_id {
             if let Some(twin_date) = self.delete_imported_twin_race(user_id, event_id).await {
-                if twin_date != existing.date {
-                    self.refresh_race_date_result(user_id, &twin_date).await?;
-                }
+                widen_date_bounds(&mut refresh_oldest, &mut refresh_newest, &twin_date);
             }
         }
 
-        self.refresh_race_date_result(&existing.user_id, &existing.date)
-            .await?;
+        if let Some((start, end)) = self
+            .projection_cleanup
+            .supersede_for_deleted_race_date(&existing.user_id, &existing.date)
+            .await?
+        {
+            widen_date_bounds(&mut refresh_oldest, &mut refresh_newest, &start);
+            widen_date_bounds(&mut refresh_oldest, &mut refresh_newest, &end);
+        }
+
+        self.refresh
+            .refresh_range_for_user(&existing.user_id, &refresh_oldest, &refresh_newest)
+            .await
+            .map(|_| ())
+            .map_err(|error| {
+                RaceError::Internal(format!("calendar view refresh failed: {error}"))
+            })?;
 
         Ok(())
     }
@@ -513,8 +557,8 @@ where
     }
 }
 
-impl<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh> RaceUseCases
-    for RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh>
+impl<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh, Cleanup> RaceUseCases
+    for RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh, Cleanup>
 where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
@@ -523,6 +567,7 @@ where
     Ids: IdGenerator + Clone + 'static,
     PollStates: ProviderPollStateRepository + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
+    Cleanup: RaceProjectionCleanupPort + Clone + 'static,
 {
     fn list_races(
         &self,
@@ -703,6 +748,15 @@ fn map_sync_repository_error(error: ExternalSyncRepositoryError) -> RaceError {
 
 fn race_entity_ref(race_id: &str) -> CanonicalEntityRef {
     CanonicalEntityRef::new(CanonicalEntityKind::Race, race_id.to_string())
+}
+
+fn widen_date_bounds(oldest: &mut String, newest: &mut String, date: &str) {
+    if date < oldest.as_str() {
+        *oldest = date.to_string();
+    }
+    if date > newest.as_str() {
+        *newest = date.to_string();
+    }
 }
 
 fn parse_intervals_event_id(

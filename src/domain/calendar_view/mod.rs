@@ -1,6 +1,7 @@
 mod integrity;
 mod manual_refresh;
 mod model;
+mod orphan_race_cleanup;
 mod planned_candidates;
 mod ports;
 mod projection;
@@ -20,6 +21,7 @@ pub use model::{
     CalendarEntryKind, CalendarEntryRace, CalendarEntrySummary, CalendarEntrySync,
     CalendarEntryView, CalendarEntryViewError,
 };
+pub use orphan_race_cleanup::{NoopOrphanRaceProjectionCleanup, OrphanRaceProjectionCleanupPort};
 pub use planned_candidates::{
     select_visible_planned_workout_candidates,
     select_visible_planned_workout_candidates_with_sync_states, CalendarPlannedSyncKey,
