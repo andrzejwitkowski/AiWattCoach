@@ -160,8 +160,29 @@ where
             .map_err(|error| RaceError::Internal(format!("calendar view refresh failed: {error}")))
     }
 
-    async fn delete_imported_twin_race(&self, user_id: &str, intervals_event_id: i64) {
+    async fn delete_imported_twin_race(
+        &self,
+        user_id: &str,
+        intervals_event_id: i64,
+    ) -> Option<String> {
         let twin_race_id = super::imported_intervals_race_id(intervals_event_id);
+        let twin_date = match self
+            .repository
+            .find_by_user_id_and_race_id(user_id, &twin_race_id)
+            .await
+        {
+            Ok(twin) => twin.map(|race| race.date),
+            Err(error) => {
+                warn!(
+                    %user_id,
+                    %twin_race_id,
+                    %error,
+                    "race delete succeeded but failed to load imported twin race"
+                );
+                None
+            }
+        };
+
         if let Err(error) = self.repository.delete(user_id, &twin_race_id).await {
             warn!(
                 %user_id,
@@ -169,6 +190,7 @@ where
                 %error,
                 "race delete succeeded but failed to delete imported twin race"
             );
+            return None;
         }
 
         let twin_ref = race_entity_ref(&twin_race_id);
@@ -188,6 +210,8 @@ where
                 "race delete succeeded but failed to delete imported twin sync state"
             );
         }
+
+        twin_date
     }
 
     async fn list_races_impl(
@@ -313,7 +337,11 @@ where
         }
 
         if let Some(event_id) = linked_intervals_event_id {
-            self.delete_imported_twin_race(user_id, event_id).await;
+            if let Some(twin_date) = self.delete_imported_twin_race(user_id, event_id).await {
+                if twin_date != existing.date {
+                    self.refresh_race_date_result(user_id, &twin_date).await?;
+                }
+            }
         }
 
         self.refresh_race_date_result(&existing.user_id, &existing.date)

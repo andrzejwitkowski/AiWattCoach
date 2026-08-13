@@ -51,6 +51,7 @@ impl IdGenerator for TestIdGenerator {
 pub(super) struct InMemoryRaceRepository {
     races: Arc<Mutex<Vec<Race>>>,
     delete_error: Option<RaceError>,
+    delete_error_race_id: Option<String>,
 }
 
 impl InMemoryRaceRepository {
@@ -58,11 +59,23 @@ impl InMemoryRaceRepository {
         Self {
             races: Arc::new(Mutex::new(races)),
             delete_error: None,
+            delete_error_race_id: None,
         }
     }
 
     pub(super) fn with_delete_error(mut self, error: RaceError) -> Self {
         self.delete_error = Some(error);
+        self.delete_error_race_id = None;
+        self
+    }
+
+    pub(super) fn with_delete_error_for(
+        mut self,
+        race_id: impl Into<String>,
+        error: RaceError,
+    ) -> Self {
+        self.delete_error = Some(error);
+        self.delete_error_race_id = Some(race_id.into());
         self
     }
 
@@ -461,11 +474,17 @@ impl RaceRepository for InMemoryRaceRepository {
     fn delete(&self, user_id: &str, race_id: &str) -> BoxFuture<Result<(), RaceError>> {
         let races = self.races.clone();
         let delete_error = self.delete_error.clone();
+        let delete_error_race_id = self.delete_error_race_id.clone();
         let user_id = user_id.to_string();
         let race_id = race_id.to_string();
         Box::pin(async move {
             if let Some(error) = delete_error {
-                return Err(error);
+                if delete_error_race_id
+                    .as_ref()
+                    .is_none_or(|target| target == &race_id)
+                {
+                    return Err(error);
+                }
             }
             races
                 .lock()

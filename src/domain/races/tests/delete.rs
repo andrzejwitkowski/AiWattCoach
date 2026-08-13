@@ -306,3 +306,157 @@ async fn delete_race_removes_intervals_imported_twin_for_linked_event() {
     assert!(sync_states.stored().is_empty());
     assert!(refresh.race_entry_ids().is_empty());
 }
+
+#[tokio::test]
+async fn delete_race_refreshes_distinct_imported_twin_date() {
+    let local = Race {
+        race_id: "race-1".to_string(),
+        user_id: "user-1".to_string(),
+        date: "2026-09-12".to_string(),
+        name: "Local Race".to_string(),
+        distance_meters: 90_000,
+        discipline: RaceDiscipline::Road,
+        priority: RacePriority::B,
+        result: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 2,
+    };
+    let twin = Race {
+        race_id: imported_intervals_race_id(88),
+        user_id: "user-1".to_string(),
+        date: "2026-09-13".to_string(),
+        name: "Imported Twin".to_string(),
+        distance_meters: 90_000,
+        discipline: RaceDiscipline::Road,
+        priority: RacePriority::B,
+        result: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 2,
+    };
+    let repository = InMemoryRaceRepository::with_races(vec![local, twin]);
+    let sync_states = InMemoryExternalSyncStateRepository::default();
+    sync_states
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+            )
+            .mark_synced("88".to_string(), "hash-local".to_string(), 2),
+        )
+        .await
+        .expect("infallible sync state upsert");
+    sync_states
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                CanonicalEntityRef::new(CanonicalEntityKind::Race, imported_intervals_race_id(88)),
+            )
+            .mark_synced("88".to_string(), "hash-twin".to_string(), 2),
+        )
+        .await
+        .expect("infallible sync state upsert");
+    let refresh = RecordingCalendarRefresh::default();
+    let service = RaceService::new(
+        repository.clone(),
+        RecordingIntervalsService::default(),
+        sync_states,
+        TestClock,
+        TestIdGenerator::default(),
+    )
+    .with_calendar_view_refresh(refresh.clone());
+
+    service.delete_race("user-1", "race-1").await.unwrap();
+
+    assert!(repository.stored().is_empty());
+    assert_eq!(
+        refresh.stored(),
+        vec![
+            (
+                "user-1".to_string(),
+                "2026-09-13".to_string(),
+                "2026-09-13".to_string()
+            ),
+            (
+                "user-1".to_string(),
+                "2026-09-12".to_string(),
+                "2026-09-12".to_string()
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn delete_race_keeps_twin_sync_state_when_twin_delete_fails() {
+    let local = Race {
+        race_id: "race-1".to_string(),
+        user_id: "user-1".to_string(),
+        date: "2026-09-12".to_string(),
+        name: "Local Race".to_string(),
+        distance_meters: 90_000,
+        discipline: RaceDiscipline::Road,
+        priority: RacePriority::B,
+        result: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 2,
+    };
+    let twin = Race {
+        race_id: imported_intervals_race_id(88),
+        user_id: "user-1".to_string(),
+        date: "2026-09-12".to_string(),
+        name: "Imported Twin".to_string(),
+        distance_meters: 90_000,
+        discipline: RaceDiscipline::Road,
+        priority: RacePriority::B,
+        result: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 2,
+    };
+    let twin_id = imported_intervals_race_id(88);
+    let repository = InMemoryRaceRepository::with_races(vec![local, twin]).with_delete_error_for(
+        &twin_id,
+        RaceError::Internal("twin delete boom".to_string()),
+    );
+    let sync_states = InMemoryExternalSyncStateRepository::default();
+    let twin_ref = CanonicalEntityRef::new(CanonicalEntityKind::Race, twin_id.clone());
+    sync_states
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+            )
+            .mark_synced("88".to_string(), "hash-local".to_string(), 2),
+        )
+        .await
+        .expect("infallible sync state upsert");
+    sync_states
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                twin_ref.clone(),
+            )
+            .mark_synced("88".to_string(), "hash-twin".to_string(), 2),
+        )
+        .await
+        .expect("infallible sync state upsert");
+    let service = RaceService::new(
+        repository.clone(),
+        RecordingIntervalsService::default(),
+        sync_states.clone(),
+        TestClock,
+        TestIdGenerator::default(),
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default());
+
+    service.delete_race("user-1", "race-1").await.unwrap();
+
+    let stored = repository.stored();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].race_id, twin_id);
+    let stored_states = sync_states.stored();
+    assert_eq!(stored_states.len(), 1);
+    assert_eq!(stored_states[0].canonical_entity, twin_ref);
+}
