@@ -7,7 +7,8 @@ mod tests;
 
 pub use authoritative::AuthoritativeRaceRepository;
 pub use model::{
-    CreateRace, Race, RaceDiscipline, RaceError, RacePriority, RaceResult, UpdateRace,
+    imported_intervals_race_id, CreateRace, Race, RaceDiscipline, RaceError, RacePriority,
+    RaceResult, UpdateRace,
 };
 pub use ports::{BoxFuture, RaceRepository, RaceUseCases};
 pub use service::RaceService;

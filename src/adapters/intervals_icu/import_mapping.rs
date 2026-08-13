@@ -64,7 +64,7 @@ fn map_race_event_import(user_id: &str, event: &Event) -> ExternalImportCommand 
         external_id: event.id.to_string(),
         normalized_payload_hash: hash_event(event),
         race: Race {
-            race_id: format!("intervals-race:{}", event.id),
+            race_id: crate::domain::races::imported_intervals_race_id(event.id),
             user_id: user_id.to_string(),
             date: event_date(&event.start_date_local).to_string(),
             name: event
@@ -630,7 +630,10 @@ mod tests {
         };
 
         assert_eq!(command.external_id, "55");
-        assert_eq!(command.race.race_id, "intervals-race:55");
+        assert_eq!(
+            command.race.race_id,
+            crate::domain::races::imported_intervals_race_id(55)
+        );
         assert_eq!(command.race.name, "Gravel Attack");
         assert_eq!(command.race.distance_meters, 120_000);
         assert_eq!(command.race.priority, crate::domain::races::RacePriority::B);

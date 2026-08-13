@@ -15,8 +15,13 @@ vi.mock('../api/races', () => ({
   deleteRace: vi.fn(),
 }));
 
+vi.mock('../../calendar/hooks/useCalendarData', () => ({
+  invalidateCalendarCache: vi.fn(),
+}));
+
 import { useRaces } from '../hooks/useRaces';
 import { createRace, deleteRace, updateRace } from '../api/races';
+import { invalidateCalendarCache } from '../../calendar/hooks/useCalendarData';
 
 beforeEach(async () => {
   await i18n.changeLanguage('en');
@@ -132,6 +137,7 @@ describe('RacesPageLayout', () => {
       });
     });
     expect(refresh).toHaveBeenCalled();
+    expect(invalidateCalendarCache).toHaveBeenCalledTimes(1);
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
@@ -272,6 +278,7 @@ describe('RacesPageLayout', () => {
       expect(deleteRace).toHaveBeenCalledWith('', 'race-1');
     });
     expect(refresh).toHaveBeenCalled();
+    expect(invalidateCalendarCache).toHaveBeenCalledTimes(1);
   });
 
   it('disables edit while deleting is in progress for that race', async () => {
