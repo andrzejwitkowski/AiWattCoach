@@ -147,13 +147,71 @@ where
     }
 
     async fn refresh_race_date(&self, user_id: &str, date: &str) {
-        if let Err(error) = self
-            .refresh
-            .refresh_range_for_user(user_id, date, date)
-            .await
-        {
+        if let Err(error) = self.refresh_race_date_result(user_id, date).await {
             warn!(%user_id, %date, %error, "race write succeeded but calendar view refresh failed");
         }
+    }
+
+    async fn refresh_race_date_result(&self, user_id: &str, date: &str) -> Result<(), RaceError> {
+        self.refresh
+            .refresh_range_for_user(user_id, date, date)
+            .await
+            .map(|_| ())
+            .map_err(|error| RaceError::Internal(format!("calendar view refresh failed: {error}")))
+    }
+
+    async fn delete_imported_twin_race(
+        &self,
+        user_id: &str,
+        intervals_event_id: i64,
+    ) -> Option<String> {
+        let twin_race_id = super::imported_intervals_race_id(intervals_event_id);
+        let twin_date = match self
+            .repository
+            .find_by_user_id_and_race_id(user_id, &twin_race_id)
+            .await
+        {
+            Ok(twin) => twin.map(|race| race.date),
+            Err(error) => {
+                warn!(
+                    %user_id,
+                    %twin_race_id,
+                    %error,
+                    "race delete succeeded but failed to load imported twin race"
+                );
+                None
+            }
+        };
+
+        if let Err(error) = self.repository.delete(user_id, &twin_race_id).await {
+            warn!(
+                %user_id,
+                %twin_race_id,
+                %error,
+                "race delete succeeded but failed to delete imported twin race"
+            );
+            return None;
+        }
+
+        let twin_ref = race_entity_ref(&twin_race_id);
+        if let Err(error) = self
+            .sync_states
+            .delete_by_provider_and_canonical_entity(
+                user_id,
+                ExternalProvider::Intervals,
+                &twin_ref,
+            )
+            .await
+        {
+            warn!(
+                %user_id,
+                %twin_race_id,
+                %error,
+                "race delete succeeded but failed to delete imported twin sync state"
+            );
+        }
+
+        twin_date
     }
 
     async fn list_races_impl(
@@ -226,10 +284,12 @@ where
             .await
             .map_err(map_sync_repository_error)?;
 
+        let mut linked_intervals_event_id = None;
         if let Some(sync_state) = existing_sync_state.as_ref() {
-            if let Some(linked_intervals_event_id) =
+            if let Some(event_id) =
                 parse_intervals_event_id(sync_state.external_id.as_deref(), &existing.race_id)?
             {
+                linked_intervals_event_id = Some(event_id);
                 let pending_sync_state = self
                     .sync_states
                     .upsert(sync_state.clone().mark_pending_delete())
@@ -237,7 +297,7 @@ where
                     .map_err(map_sync_repository_error)?;
                 let delete_result = self
                     .intervals
-                    .delete_event(user_id, linked_intervals_event_id)
+                    .delete_event(user_id, event_id)
                     .await
                     .map_err(map_intervals_error);
                 if let Err(error) = delete_result {
@@ -251,7 +311,8 @@ where
         }
 
         if let Err(error) = self.repository.delete(user_id, race_id).await {
-            self.refresh_race_date(&existing.user_id, &existing.date)
+            let _ = self
+                .refresh_race_date_result(&existing.user_id, &existing.date)
                 .await;
             return Err(error);
         }
@@ -275,8 +336,16 @@ where
             }
         }
 
-        self.refresh_race_date(&existing.user_id, &existing.date)
-            .await;
+        if let Some(event_id) = linked_intervals_event_id {
+            if let Some(twin_date) = self.delete_imported_twin_race(user_id, event_id).await {
+                if twin_date != existing.date {
+                    self.refresh_race_date_result(user_id, &twin_date).await?;
+                }
+            }
+        }
+
+        self.refresh_race_date_result(&existing.user_id, &existing.date)
+            .await?;
 
         Ok(())
     }

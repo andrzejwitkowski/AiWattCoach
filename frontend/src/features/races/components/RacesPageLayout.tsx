@@ -7,6 +7,7 @@ import type { Race } from '../types';
 import { deleteRace } from '../api/races';
 import { useRaces } from '../hooks/useRaces';
 import { formatRaceDate } from '../utils';
+import { invalidateCalendarCache } from '../../calendar/hooks/useCalendarData';
 import { RaceCard } from './RaceCard';
 import { RaceForm } from './RaceForm';
 
@@ -32,6 +33,7 @@ export function RacesPageLayout({ apiBaseUrl }: RacesPageLayoutProps) {
     setDeleteError(null);
     try {
       await deleteRace(apiBaseUrl, race.raceId);
+      invalidateCalendarCache();
       await refresh();
     } catch {
       setDeleteError(t('races.deleteError'));
@@ -124,6 +126,7 @@ export function RacesPageLayout({ apiBaseUrl }: RacesPageLayoutProps) {
               setIsCreating(false);
             }}
             onSaved={() => {
+              invalidateCalendarCache();
               setEditingRace(null);
               setIsCreating(false);
               void refresh();

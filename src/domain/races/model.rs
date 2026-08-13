@@ -172,3 +172,8 @@ pub struct UpdateRace {
     pub discipline: RaceDiscipline,
     pub priority: RacePriority,
 }
+
+/// Canonical race id used when an Intervals calendar event is imported as a local race.
+pub fn imported_intervals_race_id(event_id: i64) -> String {
+    format!("intervals-race:{event_id}")
+}
