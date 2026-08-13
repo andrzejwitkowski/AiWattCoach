@@ -148,6 +148,70 @@ async fn manual_calendar_refresh_falls_back_to_today_when_user_has_no_calendar_s
 }
 
 #[tokio::test]
+async fn manual_calendar_refresh_runs_orphan_race_projection_cleanup_before_rebuild() {
+    use std::collections::BTreeSet;
+    use std::sync::{Arc, Mutex};
+
+    use super::OrphanRaceProjectionCleanupPort;
+
+    type OrphanCleanupCall = (String, String, String, BTreeSet<String>);
+
+    #[derive(Clone, Default)]
+    struct RecordingOrphanCleanup {
+        calls: Arc<Mutex<Vec<OrphanCleanupCall>>>,
+    }
+
+    impl OrphanRaceProjectionCleanupPort for RecordingOrphanCleanup {
+        fn supersede_orphan_race_projections(
+            &self,
+            user_id: &str,
+            oldest: &str,
+            newest: &str,
+            race_dates_present: &BTreeSet<String>,
+        ) -> super::BoxFuture<Result<(), super::CalendarEntryViewError>> {
+            let calls = self.calls.clone();
+            let user_id = user_id.to_string();
+            let oldest = oldest.to_string();
+            let newest = newest.to_string();
+            let race_dates_present = race_dates_present.clone();
+            Box::pin(async move {
+                calls
+                    .lock()
+                    .unwrap()
+                    .push((user_id, oldest, newest, race_dates_present));
+                Ok(())
+            })
+        }
+    }
+
+    let races = TestRaceRepository::default();
+    races.upsert(sample_race()).await.unwrap();
+    let cleanup = RecordingOrphanCleanup::default();
+    let refresh = RecordingCalendarRefresh::default();
+    let service = ManualCalendarRefreshService::new(
+        InMemoryCalendarEntryViewRepository::default(),
+        TestCalendarPlannedWorkoutSource::default(),
+        TestCompletedWorkoutRepository::default(),
+        races,
+        TestSpecialDayRepository::default(),
+        FixedClock(1_777_248_000),
+        refresh.clone(),
+    )
+    .with_orphan_race_projection_cleanup(cleanup.clone());
+
+    service
+        .refresh_calendar_view_for_user("user-1")
+        .await
+        .unwrap();
+
+    let calls = cleanup.calls.lock().unwrap().clone();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].0, "user-1");
+    assert!(calls[0].3.contains(&sample_race().date));
+    assert_eq!(refresh.calls().len(), 1);
+}
+
+#[tokio::test]
 async fn manual_calendar_refresh_skips_malformed_completed_workout_dates() {
     let completed = TestCompletedWorkoutRepository::default();
     let mut malformed = sample_completed_workout();

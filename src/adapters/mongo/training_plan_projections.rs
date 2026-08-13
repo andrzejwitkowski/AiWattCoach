@@ -356,6 +356,50 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
             })
         })
     }
+
+    fn supersede_active_dates(
+        &self,
+        user_id: &str,
+        dates: &[String],
+        superseded_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<Option<(String, String)>, TrainingPlanError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let dates = dates.to_vec();
+        Box::pin(async move {
+            if dates.is_empty() {
+                return Ok(None);
+            }
+
+            let update_result = collection
+                .update_many(
+                    doc! {
+                        "user_id": &user_id,
+                        "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+                        "date": { "$in": &dates },
+                    },
+                    doc! {
+                        "$set": {
+                            "superseded_at_epoch_seconds": superseded_at_epoch_seconds,
+                            "updated_at_epoch_seconds": superseded_at_epoch_seconds,
+                        }
+                    },
+                )
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+
+            if update_result.matched_count == 0 {
+                return Ok(None);
+            }
+
+            let mut sorted = dates;
+            sorted.sort();
+            Ok(Some((
+                sorted.first().cloned().unwrap_or_default(),
+                sorted.last().cloned().unwrap_or_default(),
+            )))
+        })
+    }
 }
 
 async fn load_active_operation_date_range(

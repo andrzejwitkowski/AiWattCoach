@@ -4,6 +4,7 @@ mod planning_context;
 mod ports;
 mod prompt;
 mod prompt_guidance;
+mod race_projection_cleanup;
 mod service;
 
 pub(crate) use llm_output::should_retry_training_plan_llm_envelope_repair;
@@ -35,6 +36,11 @@ pub use prompt::{
 };
 pub use prompt_guidance::{
     training_plan_output_grammar, training_plan_planning_guidelines, TRAINING_PLAN_WINDOW_DAY_COUNT,
+};
+pub use race_projection_cleanup::{
+    dates_to_supersede_for_race_date, is_race_placeholder_name, is_race_prep_name,
+    orphan_race_dates_to_supersede, previous_calendar_date, projected_day_name,
+    RaceProjectionCleanupService,
 };
 pub use service::{
     training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
