@@ -99,7 +99,8 @@ pub fn is_race_placeholder_name(name: &str) -> bool {
     }
     name.to_ascii_lowercase()
         .split(|c: char| !c.is_ascii_alphanumeric())
-        .any(|word| word == "race")
+        .rfind(|word| !word.is_empty())
+        .is_some_and(|word| word == "race")
 }
 
 pub fn previous_calendar_date(date: &str) -> Option<String> {
@@ -193,6 +194,7 @@ mod tests {
         assert!(!is_race_placeholder_name("Race Openers"));
         assert!(!is_race_placeholder_name("Pre-Race Spin"));
         assert!(!is_race_placeholder_name("Aerobic Endurance"));
+        assert!(!is_race_placeholder_name("Race Pace Intervals"));
     }
 
     #[test]
@@ -230,5 +232,17 @@ mod tests {
             orphan_race_dates_to_supersede(&active, "2026-08-01", "2026-08-31", &present),
             vec!["2026-08-22".to_string(), "2026-08-23".to_string()]
         );
+    }
+
+    #[test]
+    fn orphan_cleanup_skips_workouts_that_only_mention_race() {
+        let active = vec![day("2026-08-10", "Race Pace Intervals")];
+        assert!(orphan_race_dates_to_supersede(
+            &active,
+            "2026-08-01",
+            "2026-08-31",
+            &BTreeSet::new()
+        )
+        .is_empty());
     }
 }

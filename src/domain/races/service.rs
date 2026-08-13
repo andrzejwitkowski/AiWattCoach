@@ -243,6 +243,34 @@ where
         twin_date
     }
 
+    async fn supersede_projections_after_delete(
+        &self,
+        user_id: &str,
+        date: &str,
+        refresh_oldest: &mut String,
+        refresh_newest: &mut String,
+    ) {
+        match self
+            .projection_cleanup
+            .supersede_for_deleted_race_date(user_id, date)
+            .await
+        {
+            Ok(Some((start, end))) => {
+                widen_date_bounds(refresh_oldest, refresh_newest, &start);
+                widen_date_bounds(refresh_oldest, refresh_newest, &end);
+            }
+            Ok(None) => {}
+            Err(error) => {
+                warn!(
+                    %user_id,
+                    %date,
+                    %error,
+                    "race delete succeeded but projection cleanup failed"
+                );
+            }
+        }
+    }
+
     async fn list_races_impl(
         &self,
         user_id: &str,
@@ -367,20 +395,25 @@ where
 
         let mut refresh_oldest = existing.date.clone();
         let mut refresh_newest = existing.date.clone();
+        let mut cleanup_dates = vec![existing.date.clone()];
 
         if let Some(event_id) = linked_intervals_event_id {
             if let Some(twin_date) = self.delete_imported_twin_race(user_id, event_id).await {
                 widen_date_bounds(&mut refresh_oldest, &mut refresh_newest, &twin_date);
+                if twin_date != existing.date {
+                    cleanup_dates.push(twin_date);
+                }
             }
         }
 
-        if let Some((start, end)) = self
-            .projection_cleanup
-            .supersede_for_deleted_race_date(&existing.user_id, &existing.date)
-            .await?
-        {
-            widen_date_bounds(&mut refresh_oldest, &mut refresh_newest, &start);
-            widen_date_bounds(&mut refresh_oldest, &mut refresh_newest, &end);
+        for date in cleanup_dates {
+            self.supersede_projections_after_delete(
+                &existing.user_id,
+                &date,
+                &mut refresh_oldest,
+                &mut refresh_newest,
+            )
+            .await;
         }
 
         self.refresh

@@ -1,8 +1,14 @@
 use std::sync::{Arc, Mutex};
 
 use crate::domain::{
+    external_sync::{
+        CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState,
+        ExternalSyncStateRepository,
+    },
     intervals::{PlannedWorkout, PlannedWorkoutLine, PlannedWorkoutText},
-    races::{RaceService, RaceUseCases},
+    races::{
+        imported_intervals_race_id, Race, RaceDiscipline, RacePriority, RaceService, RaceUseCases,
+    },
     training_plan::{
         BoxFuture as TrainingPlanBoxFuture, RaceProjectionCleanupService, TrainingPlanError,
         TrainingPlanProjectedDay, TrainingPlanProjectionRepository, TrainingPlanReplacementResult,
@@ -246,5 +252,73 @@ async fn cleanup_service_supersedes_orphan_race_projections_without_live_race() 
     assert_eq!(
         projections.active_dates(),
         vec!["2026-08-15".to_string(), "2026-08-16".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn delete_race_supersedes_projections_on_distinct_imported_twin_date() {
+    let local = Race {
+        race_id: "race-1".to_string(),
+        user_id: "user-1".to_string(),
+        date: "2026-09-12".to_string(),
+        name: "Local Race".to_string(),
+        distance_meters: 90_000,
+        discipline: RaceDiscipline::Road,
+        priority: RacePriority::B,
+        result: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 2,
+    };
+    let twin = Race {
+        race_id: imported_intervals_race_id(88),
+        user_id: "user-1".to_string(),
+        date: "2026-09-13".to_string(),
+        name: "Imported Twin".to_string(),
+        distance_meters: 90_000,
+        discipline: RaceDiscipline::Road,
+        priority: RacePriority::B,
+        result: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 2,
+    };
+    let projections = InMemoryProjectionRepository::with_days(vec![
+        named_day("2026-09-12", "Local B Race"),
+        named_day("2026-09-13", "Twin C Race"),
+        named_day("2026-09-14", "Aerobic Endurance"),
+    ]);
+    let sync_states = InMemoryExternalSyncStateRepository::default();
+    sync_states
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+            )
+            .mark_synced("88".to_string(), "hash-local".to_string(), 2),
+        )
+        .await
+        .expect("infallible sync state upsert");
+    let cleanup = RaceProjectionCleanupService::new(projections.clone(), TestClock);
+    let calendar_refresh = RecordingCalendarRefresh::default();
+    let service = RaceService::new(
+        InMemoryRaceRepository::with_races(vec![local, twin]),
+        RecordingIntervalsService::default(),
+        sync_states,
+        TestClock,
+        TestIdGenerator::default(),
+    )
+    .with_calendar_view_refresh(calendar_refresh.clone())
+    .with_projection_cleanup(cleanup);
+
+    service.delete_race("user-1", "race-1").await.unwrap();
+
+    assert_eq!(projections.active_dates(), vec!["2026-09-14".to_string()]);
+    assert_eq!(
+        calendar_refresh.stored(),
+        vec![(
+            "user-1".to_string(),
+            "2026-09-12".to_string(),
+            "2026-09-13".to_string()
+        )]
     );
 }
