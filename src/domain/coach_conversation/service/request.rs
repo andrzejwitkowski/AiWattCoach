@@ -115,6 +115,7 @@ where
             messages,
             &conversation.provider_transcript,
             &user_message.id,
+            training_context.pack_mode.is_lean(),
         );
 
         let cache_scope_key = Some(format!(

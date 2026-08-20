@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
-use crate::domain::identity::MAX_BSON_EPOCH_SECONDS;
-
 use super::{
     error::SettingsError,
     types::{DevAuthSettings, GoogleOAuthSettings, Settings, WahooOAuthSettings},
 };
+use crate::domain::identity::MAX_BSON_EPOCH_SECONDS;
+use crate::domain::training_context::PackMode;
 
 pub(super) fn required(
     values: &BTreeMap<String, String>,
@@ -181,6 +181,19 @@ pub(super) fn optional_bool_setting(
     match raw_value {
         Some(value) => parse_bool_setting(value.trim(), key),
         None => Ok(default),
+    }
+}
+
+pub(super) fn parse_training_context_pack_mode(
+    raw_value: Option<&String>,
+) -> Result<PackMode, SettingsError> {
+    match raw_value.map(|value| value.trim().to_ascii_lowercase()) {
+        None => Ok(PackMode::Full),
+        Some(value) if value.is_empty() || value == "full" => Ok(PackMode::Full),
+        Some(value) if value == "lean" => Ok(PackMode::Lean),
+        Some(value) => Err(SettingsError::new(format!(
+            "TRAINING_CONTEXT_PACK_MODE must be full or lean, got {value}"
+        ))),
     }
 }
 

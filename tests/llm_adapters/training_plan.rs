@@ -65,6 +65,7 @@ impl TrainingContextBuilder for LargeContextTrainingContextBuilder {
                     volatile_context: "v".repeat(4_000_000),
                     approximate_tokens: 2_000_000,
                 },
+                pack_mode: aiwattcoach::domain::training_context::PackMode::Full,
             })
         })
     }
@@ -145,6 +146,7 @@ impl TrainingContextBuilder for UnconfiguredAvailabilityTrainingContextBuilder {
                     volatile_context: "{\"volatile\":true}".to_string(),
                     approximate_tokens: 100,
                 },
+                pack_mode: aiwattcoach::domain::training_context::PackMode::Full,
             })
         })
     }

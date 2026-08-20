@@ -9,6 +9,7 @@ use super::super::header_table::{
     cell_opt_str, cell_opt_u8, cell_opt_value, cell_str, interval_blocks_table, HeaderTable,
     TableBuilder,
 };
+use super::super::{last_n, PackMode, LEAN_RECENT_DAYS};
 use crate::domain::training_context::model::{
     PlannedWorkoutContext, PlannedWorkoutReference, ProjectedDayContext, ProjectedWorkoutContext,
     RaceContext, RecentDayContext, RecentWorkoutContext, RecentWorkoutRecapContext,
@@ -37,7 +38,11 @@ pub(crate) struct VolatilePayload<'a> {
 }
 
 impl<'a> VolatilePayload<'a> {
-    pub(crate) fn from_context(context: &'a TrainingContext) -> Self {
+    pub(crate) fn from_context(context: &'a TrainingContext, mode: PackMode) -> Self {
+        let recent_days = match mode {
+            PackMode::Full => context.recent_days.as_slice(),
+            PackMode::Lean => last_n(&context.recent_days, LEAN_RECENT_DAYS),
+        };
         Self {
             v: 3,
             g: context.generated_at_epoch_seconds,
@@ -45,22 +50,11 @@ impl<'a> VolatilePayload<'a> {
                 id: context.focus_workout_id.as_deref(),
                 k: &context.focus_kind,
             },
-            rd: context
-                .recent_days
+            rd: recent_days
                 .iter()
-                .map(CompactRecentDay::from_recent_day)
+                .map(|day| CompactRecentDay::from_recent_day(day, mode))
                 .collect(),
-            sa: context
-                .recent_days
-                .iter()
-                .flat_map(|day| day.workouts.iter())
-                .filter_map(|workout| {
-                    workout
-                        .aligned_intervals
-                        .as_deref()
-                        .map(|intervals| (workout.activity_id.as_str(), intervals))
-                })
-                .collect(),
+            sa: aligned_intervals_map(context, mode),
             wr: build_workout_recaps_table(&context.recent_workout_recaps),
             ud: context
                 .upcoming_days
@@ -73,6 +67,34 @@ impl<'a> VolatilePayload<'a> {
                 .map(CompactProjectedDay::from_projected_day)
                 .collect(),
             rs: build_race_strategy_table(context),
+        }
+    }
+}
+
+fn aligned_intervals_map(
+    context: &TrainingContext,
+    mode: PackMode,
+) -> BTreeMap<&str, &[crate::domain::workout_alignment::AlignedInterval]> {
+    let entries: Vec<_> = context
+        .recent_days
+        .iter()
+        .flat_map(|day| day.workouts.iter())
+        .filter_map(|workout| {
+            workout
+                .aligned_intervals
+                .as_deref()
+                .map(|intervals| (workout.activity_id.as_str(), intervals))
+        })
+        .collect();
+    match mode {
+        PackMode::Full => entries.into_iter().collect(),
+        PackMode::Lean => {
+            let chosen = context
+                .focus_workout_id
+                .as_deref()
+                .and_then(|focus_id| entries.iter().find(|(id, _)| *id == focus_id).copied())
+                .or_else(|| entries.last().copied());
+            chosen.into_iter().collect()
         }
     }
 }
@@ -205,7 +227,10 @@ fn planned_workout_ref_json(reference: &PlannedWorkoutReference) -> Value {
     value
 }
 
-fn build_recent_workouts_table(workouts: &[RecentWorkoutContext]) -> Option<HeaderTable> {
+fn build_recent_workouts_table(
+    workouts: &[RecentWorkoutContext],
+    mode: PackMode,
+) -> Option<HeaderTable> {
     if workouts.is_empty() {
         return None;
     }
@@ -223,6 +248,7 @@ fn build_recent_workouts_table(workouts: &[RecentWorkoutContext]) -> Option<Head
         ("pw", true),
     ]);
     for workout in workouts {
+        let include_streams = mode == PackMode::Full;
         builder = builder.push_row(vec![
             cell_str(&workout.activity_id),
             cell_str(&workout.start_date_local),
@@ -232,8 +258,16 @@ fn build_recent_workouts_table(workouts: &[RecentWorkoutContext]) -> Option<Head
             cell_opt_i32(workout.ftp_watts),
             cell_opt_u8(workout.rpe),
             cell_opt_str(workout.workout_recap.as_deref()),
-            cell_opt_segments(&workout.power_segments),
-            cell_opt_segments(&workout.cadence_segments),
+            if include_streams {
+                cell_opt_segments(&workout.power_segments)
+            } else {
+                cell_opt_segments(&[])
+            },
+            if include_streams {
+                cell_opt_segments(&workout.cadence_segments)
+            } else {
+                cell_opt_segments(&[])
+            },
             cell_opt_value(
                 workout
                     .planned_workout
@@ -351,13 +385,13 @@ struct CompactRecentDay<'a> {
 }
 
 impl<'a> CompactRecentDay<'a> {
-    fn from_recent_day(day: &'a RecentDayContext) -> Self {
+    fn from_recent_day(day: &'a RecentDayContext, mode: PackMode) -> Self {
         Self {
             d: &day.date,
             fr: day.free_day,
             sick: day.sick_day,
             sickn: day.sick_note.as_deref(),
-            w: build_recent_workouts_table(&day.workouts),
+            w: build_recent_workouts_table(&day.workouts, mode),
             pw: build_planned_workouts_table(&day.planned_workouts),
             sd: build_special_days_table(&day.special_days),
         }

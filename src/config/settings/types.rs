@@ -4,6 +4,7 @@ use super::{
     error::SettingsError,
     parse::{parse_cookie_name, parse_same_site_setting, parse_session_ttl_hours, required},
 };
+use crate::domain::training_context::PackMode;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
@@ -16,6 +17,7 @@ pub struct Settings {
     pub client_log_ingestion_enabled: bool,
     pub legacy_time_stream_cleanup_enabled: bool,
     pub trust_proxy_headers: bool,
+    pub training_context_pack_mode: PackMode,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

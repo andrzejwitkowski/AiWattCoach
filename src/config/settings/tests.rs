@@ -43,6 +43,34 @@ fn client_log_ingestion_defaults_to_disabled() {
 }
 
 #[test]
+fn training_context_pack_mode_defaults_to_full() {
+    let settings = Settings::from_map(&base_values()).expect("settings should parse");
+    assert_eq!(
+        settings.training_context_pack_mode,
+        crate::domain::training_context::PackMode::Full
+    );
+}
+
+#[test]
+fn training_context_pack_mode_can_be_lean() {
+    let mut values = base_values();
+    values.insert("TRAINING_CONTEXT_PACK_MODE".to_string(), "lean".to_string());
+    let settings = Settings::from_map(&values).expect("settings should parse");
+    assert_eq!(
+        settings.training_context_pack_mode,
+        crate::domain::training_context::PackMode::Lean
+    );
+}
+
+#[test]
+fn training_context_pack_mode_rejects_unknown_value() {
+    let mut values = base_values();
+    values.insert("TRAINING_CONTEXT_PACK_MODE".to_string(), "tiny".to_string());
+    let error = Settings::from_map(&values).expect_err("invalid pack mode");
+    assert!(error.to_string().contains("TRAINING_CONTEXT_PACK_MODE"));
+}
+
+#[test]
 fn client_log_ingestion_can_be_enabled_explicitly() {
     let mut values = base_values();
     values.insert(

@@ -157,6 +157,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         client_log_ingestion_enabled,
         legacy_time_stream_cleanup_enabled,
         trust_proxy_headers,
+        training_context_pack_mode,
     } = settings;
     let mut telemetry = setup_telemetry(&app_name)?;
     let address: SocketAddr = server.address().parse()?;
@@ -608,7 +609,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_planned_rest_day_repository(Arc::new(planned_rest_day_repository.clone()))
         .with_training_plan_projection_repository(Arc::new(
             training_plan_projection_repository.clone(),
-        )),
+        ))
+        .with_pack_mode(training_context_pack_mode),
     );
     let athlete_summary_direct_service = Arc::new(AthleteSummaryService::new(
         athlete_summary_repository,

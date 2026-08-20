@@ -60,6 +60,7 @@ pub fn assemble_calendar_coach_request(input: CalendarCoachPromptInput) -> LlmCh
         input.messages.as_slice(),
         &input.conversation.provider_transcript,
         &input.preview_message_id,
+        input.training_context.pack_mode.is_lean(),
     );
     let cache_scope_key = Some(format!(
         "calendar-coach:{}:{}",
