@@ -465,6 +465,7 @@ impl RecordingTrainingContextBuilder {
                 volatile_context: format!(r#"{{"focus":"{focus_kind}"}}"#),
                 approximate_tokens: 10,
             },
+            pack_mode: aiwattcoach::domain::training_context::PackMode::Full,
         }
     }
 }

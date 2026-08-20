@@ -38,6 +38,7 @@ pub struct TrainingContextBuildResult {
     pub focus_date: String,
     pub context: TrainingContext,
     pub rendered: RenderedTrainingContext,
+    pub pack_mode: super::packing::PackMode,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]

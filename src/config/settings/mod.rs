@@ -68,6 +68,9 @@ impl Settings {
                 "TRUST_PROXY_HEADERS",
                 false,
             )?,
+            training_context_pack_mode: parse::parse_training_context_pack_mode(
+                values.get("TRAINING_CONTEXT_PACK_MODE"),
+            )?,
         })
         .and_then(parse::validate_session_cookie_settings)
     }
@@ -83,12 +86,13 @@ impl Settings {
             client_log_ingestion_enabled: false,
             legacy_time_stream_cleanup_enabled: false,
             trust_proxy_headers: false,
+            training_context_pack_mode: crate::domain::training_context::PackMode::Full,
         }
     }
 }
 
 fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
-    const KEYS: [&str; 30] = [
+    const KEYS: [&str; 31] = [
         "APP_NAME",
         "SERVER_HOST",
         "SERVER_PORT",
@@ -119,6 +123,7 @@ fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
         "ENABLE_CLIENT_LOG_INGESTION",
         "ENABLE_LEGACY_TIME_STREAM_CLEANUP",
         "TRUST_PROXY_HEADERS",
+        "TRAINING_CONTEXT_PACK_MODE",
     ];
 
     let mut values = BTreeMap::new();
