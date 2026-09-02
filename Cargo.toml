@@ -50,6 +50,8 @@ tokio-tungstenite = "0.28"
 unused_lifetimes = "deny"
 
 [lints.clippy]
+# ponytail: axum Response Err is >128B; Box<Response> across handlers if we care about this lint.
+result_large_err = "allow"
 needless_lifetimes = "deny"
 redundant_clone = "warn"
 needless_borrow = "warn"

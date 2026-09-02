@@ -4,7 +4,7 @@ use plotters::prelude::*;
 
 use crate::domain::completed_workouts::{CompletedWorkout, CompletedWorkoutSeries};
 
-const ROLLING_WINDOW: usize = 3;
+const ROLLING_WINDOW: usize = 30; // ponytail: Wahoo/Strava-like display smoothing.
 const CHART_WIDTH: u32 = 1200;
 const CHART_HEIGHT: u32 = 500;
 
@@ -35,7 +35,7 @@ pub fn extract_power_chart_data(workout: &CompletedWorkout) -> Option<PowerChart
     let np_watts = workout.metrics.normalized_power_watts?;
     let avg_watts = workout.metrics.average_power_watts?;
     Some(PowerChartData {
-        smoothed: rolling_mean_3s(&watts),
+        smoothed: rolling_mean(&watts),
         max_watts,
         np_watts,
         avg_watts,
@@ -133,7 +133,7 @@ fn numeric_series(series: Option<&CompletedWorkoutSeries>) -> Option<Vec<i32>> {
     }
 }
 
-fn rolling_mean_3s(samples: &[i32]) -> Vec<i32> {
+fn rolling_mean(samples: &[i32]) -> Vec<i32> {
     let n = samples.len();
     let mut prefix = vec![0i64; n + 1];
     for (i, &v) in samples.iter().enumerate() {
@@ -157,12 +157,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rolling_mean_3s_smooths_correctly() {
-        let out = rolling_mean_3s(&[100, 200, 300, 400]);
-        assert_eq!(out[0], 100);
-        assert_eq!(out[1], 150);
-        assert_eq!(out[2], 200);
-        assert_eq!(out[3], 300);
+    fn rolling_mean_uses_trailing_window() {
+        let samples: Vec<i32> = (1..=35).collect();
+        let out = rolling_mean(&samples);
+        assert_eq!(out[0], 1);
+        assert_eq!(out[29], 16); // mean 1..=30 = 15.5 → 16
+        assert_eq!(out[34], 21); // mean 6..=35 = 20.5 → 21
     }
 
     #[test]

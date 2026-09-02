@@ -294,13 +294,11 @@ mod tests {
         assert!(prompt.contains("Never tell the athlete they have free time, vacation, or a rest block unless prd confirms it"));
         assert!(!prompt.contains("p3 as executed power"));
         assert!(!prompt.contains("p3=power watts"));
-        assert!(prompt.contains(
-            "Aggregate metrics like NP, average power, IF, VI, and TSS are secondary context only"
-        ));
-        assert!(prompt.contains(
-            "are not sufficient proof that interval blocks were or were not executed correctly"
-        ));
-        assert!(prompt.contains("call get_selected_workout before making a strong claim"));
+        assert!(prompt.contains("ONLY primary evidence"));
+        assert!(prompt.contains("physical success"));
+        assert!(prompt.contains("must not appear in interval execution verdicts"));
+        assert!(prompt.contains("Never claim the athlete quit"));
+        assert!(prompt.contains("call get_selected_workout before a strong claim"));
         assert!(prompt.contains("Seiler 2010"));
         assert!(prompt.contains("Do not use this block to justify extra follow-up questions"));
         assert!(
