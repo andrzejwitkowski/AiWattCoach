@@ -4,6 +4,12 @@ use serde::Serialize;
 /// canonical zone table in `intervals/workout/parser.rs:zone_for_percent`.
 pub const RECOVERY_PERCENT_FTP: f64 = 55.0;
 
+/// Power below this is treated as an unplanned drop during a work step
+/// (aligner cost masking + anomaly detection).
+pub fn work_power_drop_threshold(target_power_min: i32) -> i32 {
+    (f64::from(target_power_min) * 0.5) as i32
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StepType {

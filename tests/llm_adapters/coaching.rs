@@ -150,6 +150,11 @@ async fn llm_workout_coach_describes_aligned_intervals_in_system_prompt() {
     assert!(prompt.contains("coasting_stop"));
     assert!(prompt.contains("normalized_power"));
     assert!(prompt.contains("get_selected_workout"));
+    assert!(prompt.contains("ONLY primary evidence"));
+    assert!(prompt.contains("must not appear in interval execution verdicts"));
+    assert!(prompt.contains("Never claim the athlete quit"));
+    assert!(prompt.contains("display-smoothed"));
+    assert!(prompt.contains("get_selected_workout"));
     assert!(!prompt.contains("ps=power"));
     assert!(!prompt.contains("cs=cadence"));
     assert!(!prompt.contains("header-mapped"));
