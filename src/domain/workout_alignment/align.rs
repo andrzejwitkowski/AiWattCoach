@@ -42,10 +42,11 @@ pub fn align(planned: &[PlannedStep], power: &[i32]) -> StepSlices {
     let mut layers: Vec<(Vec<f64>, Vec<Option<usize>>)> = Vec::with_capacity(s);
 
     // Step 0: leading warmup absorbed, no prior boundary.
+    let work0 = work_included_prefixes(power, &planned[0]);
     let mut dp = vec![f64::INFINITY; n + 1];
     let mut back: Vec<Option<usize>> = vec![None; n + 1];
     for j in 1..=n {
-        dp[j] = step_cost(&planned[0], power, &power_prefix, 0, j);
+        dp[j] = step_cost(&planned[0], &power_prefix, 0, j, work0.as_ref());
         back[j] = Some(0);
     }
     layers.push((dp, back));
@@ -55,6 +56,7 @@ pub fn align(planned: &[PlannedStep], power: &[i32]) -> StepSlices {
         let mut cur_dp = vec![f64::INFINITY; n + 1];
         let mut cur_back: Vec<Option<usize>> = vec![None; n + 1];
         let band = band_seconds(planned[step].planned_duration_seconds);
+        let work = work_included_prefixes(power, &planned[step]);
 
         for j in step + 1..=n {
             // Prior boundary i in [step-1 .. j-1]; step duration band constrains i.
@@ -66,7 +68,7 @@ pub fn align(planned: &[PlannedStep], power: &[i32]) -> StepSlices {
                     let prior = prev_dp[i];
                     if prior.is_finite() && i < j {
                         Some((
-                            prior + step_cost(&planned[step], power, &power_prefix, i, j),
+                            prior + step_cost(&planned[step], &power_prefix, i, j, work.as_ref()),
                             i,
                         ))
                     } else {
@@ -119,6 +121,23 @@ fn prefix_sums(power: &[i32]) -> Vec<i64> {
     prefix
 }
 
+/// Sum/count of watts at/above `threshold` — O(1) masked means for one Work step.
+fn included_prefixes(power: &[i32], threshold: i32) -> (Vec<i64>, Vec<i64>) {
+    let mut sum = vec![0i64; power.len() + 1];
+    let mut count = vec![0i64; power.len() + 1];
+    for (i, &p) in power.iter().enumerate() {
+        let keep = p >= threshold;
+        sum[i + 1] = sum[i] + if keep { i64::from(p) } else { 0 };
+        count[i + 1] = count[i] + i64::from(keep);
+    }
+    (sum, count)
+}
+
+fn work_included_prefixes(power: &[i32], step: &PlannedStep) -> Option<(Vec<i64>, Vec<i64>)> {
+    (step.step_type == StepType::Work)
+        .then(|| included_prefixes(power, work_power_drop_threshold(step.target_power_min)))
+}
+
 fn slice_mean(prefix: &[i64], start: usize, end: usize) -> f64 {
     if start >= end {
         return 0.0;
@@ -127,52 +146,38 @@ fn slice_mean(prefix: &[i64], start: usize, end: usize) -> f64 {
     sum as f64 / (end - start) as f64
 }
 
-/// Mean excluding coasting seconds (`p < work_power_drop_threshold`). Falls back to
-/// full-slice mean when every second is coasting.
+/// Mean excluding coasting seconds. Falls back to full-slice mean when all coast.
 fn slice_mean_excluding_coasting(
-    power: &[i32],
-    prefix: &[i64],
+    power_prefix: &[i64],
+    included_sum: &[i64],
+    included_count: &[i64],
     start: usize,
     end: usize,
-    coast_threshold: i32,
 ) -> f64 {
     if start >= end {
         return 0.0;
     }
-    let (sum, count) = power[start..end].iter().fold((0i64, 0i64), |(s, n), &p| {
-        if p >= coast_threshold {
-            (s + i64::from(p), n + 1)
-        } else {
-            (s, n)
-        }
-    });
+    let count = included_count[end] - included_count[start];
     if count == 0 {
-        return slice_mean(prefix, start, end);
+        return slice_mean(power_prefix, start, end);
     }
-    sum as f64 / count as f64
+    (included_sum[end] - included_sum[start]) as f64 / count as f64
 }
 
 fn step_cost(
     step: &PlannedStep,
-    power: &[i32],
     power_prefix: &[i64],
     start: usize,
     end: usize,
+    work_included: Option<&(Vec<i64>, Vec<i64>)>,
 ) -> f64 {
     if start >= end {
         return 1.0;
     }
     let expected_watts = expected_power(step);
-    let block_mean = if step.step_type == StepType::Work {
-        slice_mean_excluding_coasting(
-            power,
-            power_prefix,
-            start,
-            end,
-            work_power_drop_threshold(step.target_power_min),
-        )
-    } else {
-        slice_mean(power_prefix, start, end)
+    let block_mean = match work_included {
+        Some((sum, count)) => slice_mean_excluding_coasting(power_prefix, sum, count, start, end),
+        None => slice_mean(power_prefix, start, end),
     };
     let power_sim = similarity(block_mean, expected_watts);
     let dur_sim = similarity((end - start) as f64, step.planned_duration_seconds as f64);
@@ -221,6 +226,16 @@ mod tests {
         PlannedStep {
             name: name.into(),
             step_type: StepType::Work,
+            target_power_min: watts,
+            target_power_max: watts,
+            planned_duration_seconds: dur,
+        }
+    }
+
+    fn recovery(name: &str, watts: i32, dur: i32) -> PlannedStep {
+        PlannedStep {
+            name: name.into(),
+            step_type: StepType::Recovery,
             target_power_min: watts,
             target_power_max: watts,
             planned_duration_seconds: dur,
@@ -302,7 +317,8 @@ mod tests {
         power.extend(vec![0; 20]);
         power.extend(vec![300; 30]);
         let prefix = prefix_sums(&power);
-        let mean = slice_mean_excluding_coasting(&power, &prefix, 0, 100, 150);
+        let (sum, count) = included_prefixes(&power, 150);
+        let mean = slice_mean_excluding_coasting(&prefix, &sum, &count, 0, 100);
         assert!((mean - 300.0).abs() < 1e-9);
     }
 
@@ -313,8 +329,9 @@ mod tests {
         power.extend(vec![0; 20]);
         power.extend(vec![300; 30]);
         let prefix = prefix_sums(&power);
-        let full = step_cost(&work, &power, &prefix, 0, 100);
-        let cut = step_cost(&work, &power, &prefix, 0, 50);
+        let included = work_included_prefixes(&power, &work);
+        let full = step_cost(&work, &prefix, 0, 100, included.as_ref());
+        let cut = step_cost(&work, &prefix, 0, 50, included.as_ref());
         assert!(
             full < cut,
             "full span with masked coast should beat short clean cut: full={full} cut={cut}"
@@ -348,9 +365,9 @@ mod tests {
         let planned = vec![
             step("wu", 200, 60),
             step("w1", 300, 480),
-            step("r1", 220, 180),
+            recovery("r1", 220, 180),
             step("w2", 300, 480),
-            step("r2", 220, 180),
+            recovery("r2", 220, 180),
             step("cd", 180, 60),
         ];
         let mut power = vec![200; 60];
