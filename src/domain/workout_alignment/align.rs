@@ -367,5 +367,12 @@ mod tests {
             w2 >= 450,
             "second SST must keep post-turn watts; got {w2}s (planned 480)"
         );
+        // coast starts at t=60+480+180+350=1070; post-turn work resumes at 1170.
+        assert!(
+            slices[3].1 >= 1170,
+            "w2 end must include post-turn 300W; end={} (need >=1170)",
+            slices[3].1
+        );
+        assert_eq!(power[slices[3].1 - 1], 300);
     }
 }
