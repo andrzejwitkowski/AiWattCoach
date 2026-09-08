@@ -76,15 +76,21 @@ where
         user_id: &str,
         request: SyncPlannedWorkout,
     ) -> Result<CalendarEvent, CalendarError> {
-        let projected_day = self
+        let planned_workout_id = projected_workout_id(&request.operation_key, &request.date);
+        let projected_day = match self
             .projections
             .find_active_by_user_id_and_operation_key(user_id, &request.operation_key)
             .await
             .map_err(map_training_plan_error)?
             .into_iter()
             .find(|day| day.date == request.date)
-            .ok_or(CalendarError::NotFound)?;
-        let planned_workout_id = projected_workout_id(&request.operation_key, &request.date);
+        {
+            Some(day) => day,
+            None => {
+                self.load_imported_as_projected_day(user_id, &request, &planned_workout_id)
+                    .await?
+            }
+        };
         let projected_day = self
             .apply_calendar_override(&planned_workout_id, projected_day)
             .await?;
@@ -126,6 +132,59 @@ where
         refresh_planned_workout_day(&self.refresh, user_id, &request).await;
 
         Ok(synced_event)
+    }
+
+    async fn load_imported_as_projected_day(
+        &self,
+        user_id: &str,
+        request: &SyncPlannedWorkout,
+        planned_workout_id: &str,
+    ) -> Result<TrainingPlanProjectedDay, CalendarError> {
+        let workouts = self
+            .planned_workouts
+            .list_by_user_id_and_date_range(user_id, &request.date, &request.date)
+            .await
+            .map_err(|error| CalendarError::Internal(error.to_string()))?;
+        let workout = workouts
+            .into_iter()
+            .find(|workout| workout.planned_workout_id == planned_workout_id)
+            .ok_or(CalendarError::NotFound)?;
+
+        let now = self.clock.now_epoch_seconds();
+        if workout.rest_day {
+            return Ok(TrainingPlanProjectedDay {
+                user_id: workout.user_id,
+                workout_id: workout.planned_workout_id,
+                operation_key: request.operation_key.clone(),
+                date: request.date.clone(),
+                rest_day: true,
+                rest_day_reason: workout.rest_day_reason,
+                workout: None,
+                superseded_at_epoch_seconds: None,
+                created_at_epoch_seconds: now,
+                updated_at_epoch_seconds: now,
+            });
+        }
+
+        let parsed = crate::domain::planned_workouts::to_intervals_planned_workout(&workout)
+            .map_err(|error| {
+                CalendarError::Validation(format!(
+                    "invalid local planned workout for sync: {error}"
+                ))
+            })?;
+
+        Ok(TrainingPlanProjectedDay {
+            user_id: workout.user_id,
+            workout_id: workout.planned_workout_id,
+            operation_key: request.operation_key.clone(),
+            date: request.date.clone(),
+            rest_day: false,
+            rest_day_reason: None,
+            workout: Some(parsed),
+            superseded_at_epoch_seconds: None,
+            created_at_epoch_seconds: now,
+            updated_at_epoch_seconds: now,
+        })
     }
 
     async fn sync_planned_workout_to_intervals(
