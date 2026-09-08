@@ -6,7 +6,8 @@ pub mod np;
 
 pub use align::StepSlices;
 pub use model::{
-    AlignedInterval, AnomalyType, CadenceRange, PlannedStep, StepType, WorkoutAnomaly,
+    work_power_drop_threshold, AlignedInterval, AnomalyType, CadenceRange, PlannedStep, StepType,
+    WorkoutAnomaly,
 };
 
 /// Inputs for plan-vs-actual alignment derived from a planned-workout block.

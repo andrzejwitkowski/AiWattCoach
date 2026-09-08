@@ -14,7 +14,7 @@ pub fn detect_anomalies(step: &PlannedStep, power: &[i32], cadence: &[i32]) -> V
     if step.step_type != StepType::Work || power.is_empty() {
         return Vec::new();
     }
-    let threshold = (f64::from(step.target_power_min) * 0.5) as i32;
+    let threshold = super::model::work_power_drop_threshold(step.target_power_min);
     let has_cadence = !cadence.is_empty();
     let trigger_indices: Vec<usize> = power
         .iter()
