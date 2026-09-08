@@ -245,6 +245,8 @@
     "connectionRequired": "Connect Intervals.icu in Settings to view your calendar.",
     "wahooConnectionRequired": "Connect Wahoo in Settings before syncing this planned workout.",
     "loadError": "Unable to retrieve calendar data right now.",
+    "moveFailed": "Could not move this planned workout.",
+    "moveConflict": "That day is not available for a move.",
     "trainingLoadActive": "Performance build",
     "trainingLoadRecovery": "Recovery emphasis",
     "optimalZone": "Optimal Zone",

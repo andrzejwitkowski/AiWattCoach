@@ -3,7 +3,9 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useApiBaseUrl } from '../../../lib/apiBaseUrl';
+import { HttpError } from '../../../lib/httpClient';
 import { useMediaQuery } from '../../../lib/useMediaQuery';
+import { movePlannedWorkout } from '../api/calendar';
 import {
   CALENDAR_BUFFER_WEEKS,
   CALENDAR_PAGINATION_LOCK_RELEASE_DISTANCE,
@@ -13,8 +15,9 @@ import {
   CALENDAR_WEEK_BLOCK_HEIGHT,
   CALENDAR_WEEK_ROW_GAP,
 } from '../constants';
-import { useCalendarData } from '../hooks/useCalendarData';
+import { invalidateCalendarCache, useCalendarData } from '../hooks/useCalendarData';
 import { selectDayItemDetail, type CalendarDayItemsSelection } from '../dayItems';
+import type { PlannedWorkoutMoveInput } from '../plannedMove';
 import type { CalendarRaceLabel } from '../types';
 import type { WorkoutDetailSelection } from '../workoutDetails';
 import { CalendarPerformanceCards } from './CalendarPerformanceCards';
@@ -71,6 +74,22 @@ export function CalendarGrid({ refreshVersion = 0 }: CalendarGridProps) {
     setDayItemsSelection(null);
     setRaceSelection(nextRace);
   }, []);
+
+  const handleMovePlannedWorkout = useCallback(async (input: PlannedWorkoutMoveInput) => {
+    try {
+      await movePlannedWorkout(apiBaseUrl, input.plannedWorkoutId, {
+        fromDate: input.fromDate,
+        toDate: input.toDate,
+      });
+      invalidateCalendarCache();
+    } catch (error) {
+      window.alert(
+        error instanceof HttpError && error.status === 409
+          ? t('calendar.moveConflict')
+          : t('calendar.moveFailed'),
+      );
+    }
+  }, [apiBaseUrl, t]);
 
   const visibleRangeLabel = useMemo(() => {
     const firstWeek = weeks[0];
@@ -265,6 +284,7 @@ export function CalendarGrid({ refreshVersion = 0 }: CalendarGridProps) {
                           onSelectWorkout={handleSelectWorkout}
                           onSelectDayItems={handleSelectDayItems}
                           onSelectRace={handleSelectRace}
+                          onMovePlannedWorkout={handleMovePlannedWorkout}
                         />
                       </div>
                     ))

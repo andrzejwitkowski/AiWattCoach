@@ -224,6 +224,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                     post(calendar::sync_planned_workout_to_wahoo),
                 )
                 .route(
+                    "/api/calendar/planned-workouts/{planned_workout_id}/move",
+                    post(calendar::move_planned_workout),
+                )
+                .route(
                     "/api/races",
                     get(races::list_races).post(races::create_race),
                 )

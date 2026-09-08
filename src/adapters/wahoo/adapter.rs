@@ -60,6 +60,10 @@ impl WahooApiPort for WahooOAuthAdapter {
         delegate!(self, update_plan(access_token, plan_id, request))
     }
 
+    fn delete_plan(&self, access_token: &str, plan_id: i64) -> BoxFuture<Result<(), WahooError>> {
+        delegate!(self, delete_plan(access_token, plan_id))
+    }
+
     fn list_workouts(
         &self,
         access_token: &str,
@@ -107,6 +111,14 @@ impl WahooApiPort for WahooOAuthAdapter {
         request: WahooUpdateWorkout,
     ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
         delegate!(self, update_workout(access_token, workout_id, request))
+    }
+
+    fn delete_workout(
+        &self,
+        access_token: &str,
+        workout_id: i64,
+    ) -> BoxFuture<Result<(), WahooError>> {
+        delegate!(self, delete_workout(access_token, workout_id))
     }
 
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {

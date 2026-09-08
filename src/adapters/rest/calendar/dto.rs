@@ -14,6 +14,26 @@ pub(in crate::adapters::rest) struct SyncPlannedWorkoutPath {
     pub date: String,
 }
 
+#[derive(Deserialize)]
+pub(in crate::adapters::rest) struct MovePlannedWorkoutPath {
+    pub planned_workout_id: String,
+}
+
+#[derive(Deserialize)]
+pub(in crate::adapters::rest) struct MovePlannedWorkoutRequest {
+    #[serde(rename = "fromDate")]
+    pub from_date: String,
+    #[serde(rename = "toDate")]
+    pub to_date: String,
+}
+
+#[derive(Serialize)]
+pub(super) struct MovePlannedWorkoutResponseDto {
+    #[serde(rename = "plannedWorkoutId")]
+    pub planned_workout_id: String,
+    pub date: String,
+}
+
 #[derive(Clone, Copy)]
 pub(in crate::adapters::rest) enum SyncPlannedWorkoutProviderPath {
     Intervals,

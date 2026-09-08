@@ -66,7 +66,7 @@ impl From<intervals::PlannedWorkoutLine> for PlannedWorkoutLine {
     }
 }
 
-pub(super) fn map_intervals_to_canonical_planned_workout_content(
+pub(crate) fn map_intervals_to_canonical_planned_workout_content(
     workout: &crate::domain::intervals::PlannedWorkout,
 ) -> PlannedWorkoutContent {
     PlannedWorkoutContent {

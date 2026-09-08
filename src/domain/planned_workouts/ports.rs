@@ -24,6 +24,15 @@ pub trait PlannedWorkoutRepository: Clone + Send + Sync + 'static {
         &self,
         workout: PlannedWorkout,
     ) -> BoxFuture<Result<PlannedWorkout, PlannedWorkoutError>>;
+
+    fn delete_by_user_id_and_planned_workout_id(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+    ) -> BoxFuture<Result<(), PlannedWorkoutError>> {
+        let _ = (user_id, planned_workout_id);
+        Box::pin(async { Ok(()) })
+    }
 }
 
 #[derive(Clone, Default)]
@@ -124,6 +133,26 @@ impl PlannedWorkoutRepository for InMemoryPlannedWorkoutRepository {
             });
             stored.push(workout.clone());
             Ok(workout)
+        })
+    }
+
+    fn delete_by_user_id_and_planned_workout_id(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+    ) -> BoxFuture<Result<(), PlannedWorkoutError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_id = planned_workout_id.to_string();
+        Box::pin(async move {
+            stored
+                .lock()
+                .expect("planned workout repo mutex poisoned")
+                .retain(|existing| {
+                    !(existing.user_id == user_id
+                        && existing.planned_workout_id == planned_workout_id)
+                });
+            Ok(())
         })
     }
 }

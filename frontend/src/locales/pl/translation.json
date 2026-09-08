@@ -247,6 +247,8 @@
     "connectionRequired": "Połącz Intervals.icu w Ustawieniach, aby zobaczyć kalendarz.",
     "wahooConnectionRequired": "Połącz Wahoo w Ustawieniach przed synchronizacją tego planowanego treningu.",
     "loadError": "Nie udało się pobrać danych kalendarza.",
+    "moveFailed": "Nie udało się przenieść planowanego treningu.",
+    "moveConflict": "Ten dzień nie jest dostępny do przeniesienia.",
     "trainingLoadActive": "Budowanie formy",
     "trainingLoadRecovery": "Akcent regeneracyjny",
     "optimalZone": "Strefa optymalna",

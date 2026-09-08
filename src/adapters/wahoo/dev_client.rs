@@ -102,6 +102,10 @@ impl WahooApiPort for DevWahooOAuthClient {
         })
     }
 
+    fn delete_plan(&self, _access_token: &str, _plan_id: i64) -> BoxFuture<Result<(), WahooError>> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn list_workouts(
         &self,
         _access_token: &str,
@@ -202,6 +206,14 @@ impl WahooApiPort for DevWahooOAuthClient {
             workout.plan_id = request.plan_id.or(workout.plan_id);
             Ok(workout)
         })
+    }
+
+    fn delete_workout(
+        &self,
+        _access_token: &str,
+        _workout_id: i64,
+    ) -> BoxFuture<Result<(), WahooError>> {
+        Box::pin(async { Ok(()) })
     }
 
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {
