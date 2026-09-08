@@ -33,6 +33,7 @@ describe('calendar api', () => {
     expect(result).toEqual({
       plannedWorkoutId: 'training-plan:user-1:w1:2026-05-12',
       date: '2026-05-12',
+      failedProviders: [],
     });
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/calendar/planned-workouts/training-plan%3Auser-1%3Aw1%3A2026-05-10/move',

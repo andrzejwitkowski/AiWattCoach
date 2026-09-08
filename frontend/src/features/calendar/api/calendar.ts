@@ -42,6 +42,14 @@ const movePlannedWorkoutRequestSchema = z.object({
 const movePlannedWorkoutResponseSchema = z.object({
   plannedWorkoutId: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  failedProviders: z
+    .array(
+      z.object({
+        provider: z.string().min(1),
+        error: z.string(),
+      }),
+    )
+    .default([]),
 });
 
 export async function movePlannedWorkout(

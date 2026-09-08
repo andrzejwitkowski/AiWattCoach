@@ -169,21 +169,11 @@ where
 
         let now = self.clock.now_epoch_seconds();
 
-        let _ = self
-            .projections
-            .supersede_active_dates(
-                &command.user_id,
-                std::slice::from_ref(&command.to_date),
-                now,
-            )
-            .await;
-
-        // ponytail: projected date mutate keeps sync button working; revisit if move must preserve old projected snapshot immutability.
-        let _ = self
-            .projections
-            .relocate_active_date(&command.user_id, &command.from_date, &command.to_date, now)
+        // Materialize projected-only sources so move owns one imported row.
+        self.planned_workouts
+            .upsert(existing.clone())
             .await
-            .map_err(|error| MovePlannedWorkoutError::Repository(error.to_string()))?;
+            .map_err(map_planned_workout_error)?;
 
         let destination_id = rekey_planned_workout_id(
             &command.planned_workout_id,
@@ -213,6 +203,16 @@ where
                 .await
                 .map_err(map_planned_workout_error)?;
         }
+
+        // After local persist: drop source projection + rest/target projections on Y.
+        self.projections
+            .supersede_active_dates(
+                &command.user_id,
+                &[command.from_date.clone(), command.to_date.clone()],
+                now,
+            )
+            .await
+            .map_err(|error| MovePlannedWorkoutError::Repository(error.to_string()))?;
 
         let canonical_entity = CanonicalEntityRef::new(
             CanonicalEntityKind::PlannedWorkout,

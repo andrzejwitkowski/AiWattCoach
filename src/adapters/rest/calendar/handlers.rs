@@ -262,6 +262,14 @@ pub(in crate::adapters::rest) async fn move_planned_workout(
             Json(super::dto::MovePlannedWorkoutResponseDto {
                 planned_workout_id: outcome.planned_workout.planned_workout_id,
                 date: outcome.planned_workout.date,
+                failed_providers: outcome
+                    .failed_providers
+                    .into_iter()
+                    .map(|failure| super::dto::MoveProviderFailureDto {
+                        provider: failure.provider.as_str().to_string(),
+                        error: failure.error,
+                    })
+                    .collect(),
             }),
         )
             .into_response(),

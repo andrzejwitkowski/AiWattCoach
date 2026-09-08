@@ -32,6 +32,14 @@ pub(super) struct MovePlannedWorkoutResponseDto {
     #[serde(rename = "plannedWorkoutId")]
     pub planned_workout_id: String,
     pub date: String,
+    #[serde(rename = "failedProviders")]
+    pub failed_providers: Vec<MoveProviderFailureDto>,
+}
+
+#[derive(Serialize)]
+pub(super) struct MoveProviderFailureDto {
+    pub provider: String,
+    pub error: String,
 }
 
 #[derive(Clone, Copy)]

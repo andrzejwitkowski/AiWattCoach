@@ -249,6 +249,7 @@
     "loadError": "Nie udało się pobrać danych kalendarza.",
     "moveFailed": "Nie udało się przenieść planowanego treningu.",
     "moveConflict": "Ten dzień nie jest dostępny do przeniesienia.",
+    "movePartial": "Trening przeniesiony, ale czyszczenie synchronizacji z urządzeniem nie powiodło się. Spróbuj ponownie później.",
     "trainingLoadActive": "Budowanie formy",
     "trainingLoadRecovery": "Akcent regeneracyjny",
     "optimalZone": "Strefa optymalna",

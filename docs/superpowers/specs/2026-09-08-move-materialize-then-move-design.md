@@ -1,7 +1,7 @@
 # Move planned workout: materialize-then-move
 
 Date: 2026-09-08  
-Status: draft (awaiting review)  
+Status: implemented in PR (core materialize-then-move); remaining risks below  
 Depends on: existing `POST .../planned-workouts/{id}/move` behavior
 
 ## Goal
@@ -90,3 +90,9 @@ Optional: thin REST auth / 409 test if cheap.
 - `move.rs` does not branch “imported vs projected” through the whole pipeline — only at ensure-imported
 - Happy-path move does not depend on `relocate_active_date`
 - Existing user-facing move behavior and domain tests above pass
+
+## Remaining risks (follow-ups)
+
+- **Atomic target occupancy:** no `(user_id, date)` uniqueness on imported planned workouts; concurrent moves can still race past `assert_target_allowed`. Add a conditional upsert / unique guard + race test before treating multi-tab moves as safe.
+- **Retryable remote cleanup after rekey:** failed deletes stay on pre-move sync identity; destination id has no sync row. Needs a durable cleanup record or sync rekey before retries are reliable.
+- **Supersede scope:** `supersede_active_dates` still clears every active projection on the date. Acceptable while one plan window owns a day; scope by `operation_key` if multi-op same-date becomes real.

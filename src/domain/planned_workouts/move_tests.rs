@@ -86,13 +86,10 @@ async fn move_rekeys_imported_and_refreshes_both_days() {
         "training-plan:user-1:w1:2026-05-12"
     );
     assert_eq!(
-        projections.relocated(),
-        vec![(
-            "user-1".to_string(),
-            "2026-05-10".to_string(),
-            "2026-05-12".to_string()
-        )]
+        projections.superseded(),
+        vec![vec!["2026-05-10".to_string(), "2026-05-12".to_string()]]
     );
+    assert!(projections.relocated().is_empty());
     assert_eq!(
         refresh.calls(),
         vec![
@@ -261,7 +258,7 @@ async fn move_loads_projected_only_source_and_upserts_imported() {
         InMemoryExternalSyncStateRepository::default(),
         RecordingIntervalsService::default(),
         NoopWahooUseCases,
-        projections,
+        projections.clone(),
         EmptyCompletedRepository,
         Arc::new(EmptyRaceRepository),
         EmptyLinkRepository,
@@ -278,6 +275,18 @@ async fn move_loads_projected_only_source_and_upserts_imported() {
         "training-plan:user-1:w1:2026-05-12"
     );
     assert_eq!(planned.stored().len(), 1);
+    assert!(projections.relocated().is_empty());
+    assert_eq!(
+        projections.superseded(),
+        vec![vec!["2026-05-10".to_string(), "2026-05-12".to_string()]]
+    );
+    assert!(
+        projections
+            .active_days()
+            .iter()
+            .all(|day| day.superseded_at_epoch_seconds.is_some()),
+        "source projection should be superseded after materialize-then-move"
+    );
 }
 
 #[tokio::test]
@@ -606,6 +615,14 @@ impl RecordingProjectionRepository {
     fn relocated(&self) -> Vec<(String, String, String)> {
         self.relocated.lock().expect("poisoned").clone()
     }
+
+    fn superseded(&self) -> Vec<Vec<String>> {
+        self.superseded.lock().expect("poisoned").clone()
+    }
+
+    fn active_days(&self) -> Vec<TrainingPlanProjectedDay> {
+        self.active.lock().expect("poisoned").clone()
+    }
 }
 
 impl TrainingPlanProjectionRepository for RecordingProjectionRepository {
@@ -656,14 +673,25 @@ impl TrainingPlanProjectionRepository for RecordingProjectionRepository {
 
     fn supersede_active_dates(
         &self,
-        _user_id: &str,
+        user_id: &str,
         dates: &[String],
-        _superseded_at_epoch_seconds: i64,
+        superseded_at_epoch_seconds: i64,
     ) -> ProjectionBoxFuture<Result<Option<(String, String)>, TrainingPlanError>> {
         self.superseded
             .lock()
             .expect("poisoned")
             .push(dates.to_vec());
+        {
+            let mut active = self.active.lock().expect("poisoned");
+            for day in active.iter_mut() {
+                if day.user_id == user_id
+                    && dates.iter().any(|date| date == &day.date)
+                    && day.superseded_at_epoch_seconds.is_none()
+                {
+                    day.superseded_at_epoch_seconds = Some(superseded_at_epoch_seconds);
+                }
+            }
+        }
         let dates = dates.to_vec();
         Box::pin(async move { Ok(dates.first().cloned().zip(dates.last().cloned())) })
     }

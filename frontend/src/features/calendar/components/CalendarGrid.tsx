@@ -77,11 +77,14 @@ export function CalendarGrid({ refreshVersion = 0 }: CalendarGridProps) {
 
   const handleMovePlannedWorkout = useCallback(async (input: PlannedWorkoutMoveInput) => {
     try {
-      await movePlannedWorkout(apiBaseUrl, input.plannedWorkoutId, {
+      const result = await movePlannedWorkout(apiBaseUrl, input.plannedWorkoutId, {
         fromDate: input.fromDate,
         toDate: input.toDate,
       });
       invalidateCalendarCache();
+      if (result.failedProviders.length > 0) {
+        window.alert(t('calendar.movePartial'));
+      }
     } catch (error) {
       window.alert(
         error instanceof HttpError && error.status === 409
