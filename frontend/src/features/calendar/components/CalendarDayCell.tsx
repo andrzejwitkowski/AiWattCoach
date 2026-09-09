@@ -1,7 +1,14 @@
 import { BedDouble, Bike, Dumbbell, Flag, Footprints, Link2, Link2Off, Trophy, Waves } from 'lucide-react';
+import type { DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { buildDayItems, isInteractiveDayItem } from '../dayItems';
+import {
+  parsePlannedMovePayload,
+  plannedMoveWorkoutId,
+  PLANNED_MOVE_MIME,
+  type PlannedWorkoutMoveInput,
+} from '../plannedMove';
 import { formatPlannedRestLabelSubtitle } from '../plannedRestPresentation';
 import { formatRaceSubtitle, mapRaceDisciplineLabel } from '../racePresentation';
 import type { CalendarDay, CalendarPlannedRestDayLabel, CalendarRaceLabel } from '../types';
@@ -14,6 +21,7 @@ type CalendarDayCellProps = {
   day: CalendarDay;
   isToday: boolean;
   onSelect?: (day: CalendarDay) => void;
+  onMovePlannedWorkout?: (input: PlannedWorkoutMoveInput) => void | Promise<void>;
 };
 
 type CalendarDayEvent = CalendarDay['events'][number];
@@ -33,7 +41,7 @@ type RacePriorityVisual = {
   label: string;
 };
 
-export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps) {
+export function CalendarDayCell({ day, isToday, onSelect, onMovePlannedWorkout }: CalendarDayCellProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
   const isPastDay = !isToday && day.date.getTime() < startOfDay(new Date()).getTime();
@@ -163,6 +171,41 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const racePriorityVisual = raceLabel ? getRacePriorityVisual(raceLabel.payload.priority) : null;
   const matchedPlanBadgeLabel = hasMatchedPlannedWorkout ? t('calendar.planMatched') : null;
 
+  const movablePlannedWorkoutId = primaryPlannedWorkoutEvent && !isPlannedRestDay && !hasCompletedLinkedPlan
+    ? plannedMoveWorkoutId(primaryPlannedWorkoutEvent)
+    : null;
+  const canDragPlannedMove = Boolean(onMovePlannedWorkout && movablePlannedWorkoutId);
+  const canAcceptPlannedMove = Boolean(
+    onMovePlannedWorkout
+      && !raceLabel
+      && !visibleActivity
+      && !hasCompletedLinkedPlan
+      && (!primaryPlannedWorkoutEvent || isPlannedRestDay || Boolean(plannedRestLabel)),
+  );
+
+  const handleDragStart = (event: DragEvent<HTMLElement>) => {
+    if (!movablePlannedWorkoutId) return;
+    event.dataTransfer.setData(
+      PLANNED_MOVE_MIME,
+      JSON.stringify({ plannedWorkoutId: movablePlannedWorkoutId, fromDate: day.dateKey }),
+    );
+    event.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!canAcceptPlannedMove) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    if (!canAcceptPlannedMove || !onMovePlannedWorkout) return;
+    event.preventDefault();
+    const payload = parsePlannedMovePayload(event.dataTransfer.getData(PLANNED_MOVE_MIME));
+    if (!payload || payload.fromDate === day.dateKey) return;
+    void onMovePlannedWorkout({ ...payload, toDate: day.dateKey });
+  };
+
   const baseClassName = [
     'flex min-h-[160px] w-full flex-col gap-3 rounded-xl border p-3 text-left transition-colors md:min-h-[168px] md:p-3.5',
     hasTraining
@@ -288,7 +331,15 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   );
 
   if (!isSelectable) {
-    return <div className={baseClassName}>{content}</div>;
+    return (
+      <div
+        className={baseClassName}
+        onDragOver={canAcceptPlannedMove ? handleDragOver : undefined}
+        onDrop={canAcceptPlannedMove ? handleDrop : undefined}
+      >
+        {content}
+      </div>
+    );
   }
 
   return (
@@ -296,6 +347,10 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
       type="button"
       onClick={() => onSelect?.(day)}
       className={baseClassName}
+      draggable={canDragPlannedMove}
+      onDragStart={canDragPlannedMove ? handleDragStart : undefined}
+      onDragOver={canAcceptPlannedMove ? handleDragOver : undefined}
+      onDrop={canAcceptPlannedMove ? handleDrop : undefined}
     >
       {content}
     </button>

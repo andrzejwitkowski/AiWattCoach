@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import { CALENDAR_WEEK_ROW_HEIGHT } from '../constants';
 import { buildDayItems, isInteractiveDayItem, type CalendarDayItemsSelection, selectDayItemDetail } from '../dayItems';
+import type { PlannedWorkoutMoveInput } from '../plannedMove';
 import type { CalendarRaceLabel, CalendarWeek } from '../types';
 import { isToday } from '../utils/dateUtils';
 import { isPlannedWorkoutEvent, selectWorkoutDetail, type WorkoutDetailSelection } from '../workoutDetails';
@@ -16,6 +17,7 @@ type CalendarWeekSectionProps = {
   onSelectWorkout?: (selection: WorkoutDetailSelection) => void;
   onSelectDayItems?: (selection: CalendarDayItemsSelection) => void;
   onSelectRace?: (race: CalendarRaceLabel) => void;
+  onMovePlannedWorkout?: (input: PlannedWorkoutMoveInput) => void | Promise<void>;
 };
 
 export function CalendarWeekSection({
@@ -24,6 +26,7 @@ export function CalendarWeekSection({
   onSelectWorkout,
   onSelectDayItems,
   onSelectRace,
+  onMovePlannedWorkout,
 }: CalendarWeekSectionProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
@@ -95,6 +98,7 @@ export function CalendarWeekSection({
             day={day}
             isToday={isToday(day.date)}
             onSelect={selectionHandler}
+            onMovePlannedWorkout={onMovePlannedWorkout}
           />
           );
         })}

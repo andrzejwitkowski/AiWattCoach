@@ -122,12 +122,32 @@ impl WahooOAuthClient {
         Self::with_trace_context(self.client.put(url).bearer_auth(access_token))
     }
 
+    fn bearer_delete(&self, url: String, access_token: &str) -> reqwest::RequestBuilder {
+        Self::with_trace_context(self.client.delete(url).bearer_auth(access_token))
+    }
+
     fn decode_json<T>(response: logging::LoggedResponse) -> Result<T, WahooError>
     where
         T: serde::de::DeserializeOwned,
     {
         serde_json::from_slice(&response.body)
             .map_err(|error| WahooError::External(error.to_string()))
+    }
+
+    async fn execute_api_delete(&self, request: reqwest::RequestBuilder) -> Result<(), WahooError> {
+        let response =
+            logging::execute_and_log(&self.client, request, logging::BodyLoggingMode::Full)
+                .await
+                .map_err(|error| WahooError::External(error.to_string()))?;
+        match response.status {
+            // ponytail: already-deleted remotes are fine during move cleanup
+            status if status.is_success() || status == reqwest::StatusCode::NOT_FOUND => Ok(()),
+            status => Err(WahooError::External(format!(
+                "Wahoo API delete failed with status {} ({})",
+                status,
+                summarize_error_body(&response.body)
+            ))),
+        }
     }
 
     async fn execute_api_get<T>(&self, request: reqwest::RequestBuilder) -> Result<T, WahooError>
@@ -480,6 +500,19 @@ impl WahooApiPort for WahooOAuthClient {
         })
     }
 
+    fn delete_plan(&self, access_token: &str, plan_id: i64) -> BoxFuture<Result<(), WahooError>> {
+        let client = self.clone();
+        let access_token = access_token.to_string();
+        Box::pin(async move {
+            client
+                .execute_api_delete(client.bearer_delete(
+                    client.api_url(&format!("/v1/plans/{plan_id}")),
+                    &access_token,
+                ))
+                .await
+        })
+    }
+
     fn list_workouts(
         &self,
         access_token: &str,
@@ -622,6 +655,23 @@ impl WahooApiPort for WahooOAuthClient {
                 )
                 .await?;
             Ok(map_workout(payload))
+        })
+    }
+
+    fn delete_workout(
+        &self,
+        access_token: &str,
+        workout_id: i64,
+    ) -> BoxFuture<Result<(), WahooError>> {
+        let client = self.clone();
+        let access_token = access_token.to_string();
+        Box::pin(async move {
+            client
+                .execute_api_delete(client.bearer_delete(
+                    client.api_url(&format!("/v1/workouts/{workout_id}")),
+                    &access_token,
+                ))
+                .await
         })
     }
 

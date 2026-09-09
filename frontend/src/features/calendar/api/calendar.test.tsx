@@ -2,7 +2,7 @@ import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { ApiBaseUrlProvider } from '../../../lib/apiBaseUrl';
-import { useCalendarCoachApi, listCalendarLabels } from './calendar';
+import { useCalendarCoachApi, listCalendarLabels, movePlannedWorkout } from './calendar';
 import { createFetchMock, useFetchMock } from '../../intervals/api/testHelpers';
 
 function wrapper(apiBaseUrl: string) {
@@ -12,6 +12,41 @@ function wrapper(apiBaseUrl: string) {
 }
 
 describe('calendar api', () => {
+  it('moves a planned workout between dates', async () => {
+    const fetchMock = useFetchMock(
+      createFetchMock().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            plannedWorkoutId: 'training-plan:user-1:w1:2026-05-12',
+            date: '2026-05-12',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const result = await movePlannedWorkout('', 'training-plan:user-1:w1:2026-05-10', {
+      fromDate: '2026-05-10',
+      toDate: '2026-05-12',
+    });
+
+    expect(result).toEqual({
+      plannedWorkoutId: 'training-plan:user-1:w1:2026-05-12',
+      date: '2026-05-12',
+      failedProviders: [],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/calendar/planned-workouts/training-plan%3Auser-1%3Aw1%3A2026-05-10/move',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          fromDate: '2026-05-10',
+          toDate: '2026-05-12',
+        }),
+      }),
+    );
+  });
+
   it('loads race labels grouped by date', async () => {
     const fetchMock = useFetchMock(
       createFetchMock().mockResolvedValueOnce(
