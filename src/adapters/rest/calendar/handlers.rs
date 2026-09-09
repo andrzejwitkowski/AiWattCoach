@@ -231,3 +231,48 @@ pub(in crate::adapters::rest) async fn refresh_calendar_view(
         }
     }
 }
+
+pub(in crate::adapters::rest) async fn move_planned_workout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<super::dto::MovePlannedWorkoutPath>,
+    Json(body): Json<super::dto::MovePlannedWorkoutRequest>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+
+    let service = match state.planned_workout_move_service.as_deref() {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    match service
+        .move_planned_workout(crate::domain::planned_workouts::MovePlannedWorkoutCommand {
+            user_id,
+            planned_workout_id: path.planned_workout_id,
+            from_date: body.from_date,
+            to_date: body.to_date,
+        })
+        .await
+    {
+        Ok(outcome) => (
+            StatusCode::OK,
+            Json(super::dto::MovePlannedWorkoutResponseDto {
+                planned_workout_id: outcome.planned_workout.planned_workout_id,
+                date: outcome.planned_workout.date,
+                failed_providers: outcome
+                    .failed_providers
+                    .into_iter()
+                    .map(|failure| super::dto::MoveProviderFailureDto {
+                        provider: failure.provider.as_str().to_string(),
+                        error: failure.error,
+                    })
+                    .collect(),
+            }),
+        )
+            .into_response(),
+        Err(error) => super::error::map_move_planned_workout_error(error),
+    }
+}

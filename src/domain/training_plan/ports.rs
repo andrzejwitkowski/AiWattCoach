@@ -53,6 +53,18 @@ pub trait TrainingPlanProjectionRepository: Send + Sync + 'static {
     ) -> BoxFuture<Result<Option<(String, String)>, TrainingPlanError>> {
         Box::pin(async move { Ok(None) })
     }
+
+    /// Moves an active projected day from `from_date` to `to_date`.
+    /// ponytail: keeps sync by operation_key+date working after calendar move.
+    fn relocate_active_date(
+        &self,
+        _user_id: &str,
+        _from_date: &str,
+        _to_date: &str,
+        _updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<Option<TrainingPlanProjectedDay>, TrainingPlanError>> {
+        Box::pin(async move { Ok(None) })
+    }
 }
 
 pub trait TrainingPlanGenerationOperationRepository: Send + Sync + 'static {

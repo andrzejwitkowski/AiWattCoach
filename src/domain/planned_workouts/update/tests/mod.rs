@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
-mod fixtures;
-mod support;
+pub(crate) mod fixtures;
+pub(crate) mod support;
 
 use crate::domain::{
     calendar::NoopWahooUseCases,

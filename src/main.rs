@@ -581,6 +581,22 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             SystemClock,
         ),
     );
+    let planned_workout_move_service = Arc::new(
+        aiwattcoach::domain::planned_workouts::PlannedWorkoutMoveService::new(
+            planned_workout_repository.clone(),
+            external_sync_state_repository.clone(),
+            (*intervals_service).clone(),
+            wahoo_service
+                .clone()
+                .unwrap_or_else(|| Arc::new(aiwattcoach::domain::calendar::NoopWahooUseCases)),
+            Arc::new(training_plan_projection_repository.clone()),
+            completed_workout_repository.clone(),
+            Arc::new(authoritative_race_repository.clone()),
+            planned_completed_link_repository.clone(),
+            calendar_entry_view_refresh_service.clone(),
+            SystemClock,
+        ),
+    );
     let planned_workout_update_port = Arc::new(UpdatePlannedWorkoutDataAdapter::new(
         (*planned_workout_update_service).clone(),
     ));
@@ -870,6 +886,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_workout_summary_save_notifier((*save_notifier).clone())
         .with_intervals_service(intervals_service)
         .with_race_service(race_service)
+        .with_planned_workout_move_service(planned_workout_move_service)
         .with_planned_rest_day_service(planned_rest_day_service)
         .with_intervals_connection_tester(Arc::new(intervals_connection_tester));
     let app_state = if let Some(wahoo_service) = wahoo_service {

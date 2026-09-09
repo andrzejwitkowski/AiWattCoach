@@ -400,6 +400,40 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
             )))
         })
     }
+
+    fn relocate_active_date(
+        &self,
+        user_id: &str,
+        from_date: &str,
+        to_date: &str,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<Option<TrainingPlanProjectedDay>, TrainingPlanError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let from_date = from_date.to_string();
+        let to_date = to_date.to_string();
+        Box::pin(async move {
+            let updated = collection
+                .find_one_and_update(
+                    doc! {
+                        "user_id": &user_id,
+                        "date": &from_date,
+                        "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+                    },
+                    doc! {
+                        "$set": {
+                            "date": &to_date,
+                            "updated_at_epoch_seconds": updated_at_epoch_seconds,
+                        }
+                    },
+                )
+                .return_document(mongodb::options::ReturnDocument::After)
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+
+            updated.map(map_document_to_projected_day).transpose()
+        })
+    }
 }
 
 async fn load_active_operation_date_range(

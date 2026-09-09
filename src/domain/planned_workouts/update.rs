@@ -1,11 +1,9 @@
 mod syncable;
 
+pub(crate) use syncable::map_intervals_to_canonical_planned_workout_content;
 #[cfg(test)]
 use syncable::preserve_event_description;
-use syncable::{
-    map_intervals_to_canonical_planned_workout_content, map_planned_workout_to_syncable,
-    planned_workout_name, SyncablePlannedWorkout,
-};
+use syncable::{map_planned_workout_to_syncable, planned_workout_name, SyncablePlannedWorkout};
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 
@@ -512,4 +510,4 @@ fn plan_filename(planned_workout_id: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

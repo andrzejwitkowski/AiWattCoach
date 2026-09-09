@@ -201,6 +201,40 @@ impl WahooUseCases for RecordingWahooService {
         })
     }
 
+    fn delete_plan(&self, _user_id: &str, plan_id: i64) -> WahooBoxFuture<Result<(), WahooError>> {
+        let shared_log = self.shared_log.clone();
+        let fail_message = self.fail_message.clone();
+        Box::pin(async move {
+            shared_log
+                .lock()
+                .expect("shared log mutex poisoned")
+                .push(format!("wahoo.delete_plan:{plan_id}"));
+            if let Some(message) = fail_message {
+                return Err(WahooError::External(message));
+            }
+            Ok(())
+        })
+    }
+
+    fn delete_workout(
+        &self,
+        _user_id: &str,
+        workout_id: i64,
+    ) -> WahooBoxFuture<Result<(), WahooError>> {
+        let shared_log = self.shared_log.clone();
+        let fail_message = self.fail_message.clone();
+        Box::pin(async move {
+            shared_log
+                .lock()
+                .expect("shared log mutex poisoned")
+                .push(format!("wahoo.delete_workout:{workout_id}"));
+            if let Some(message) = fail_message {
+                return Err(WahooError::External(message));
+            }
+            Ok(())
+        })
+    }
+
     fn download_workout_file(
         &self,
         _file_url: &str,

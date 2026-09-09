@@ -160,6 +160,31 @@ fn log_calendar_label_error(level: Level, status: StatusCode, error: &CalendarLa
     }
 }
 
+pub(super) fn map_move_planned_workout_error(
+    error: crate::domain::planned_workouts::MovePlannedWorkoutError,
+) -> Response {
+    use crate::domain::planned_workouts::MovePlannedWorkoutError;
+
+    match error {
+        MovePlannedWorkoutError::NotFound => StatusCode::NOT_FOUND.into_response(),
+        MovePlannedWorkoutError::Conflict(ref message) => (
+            StatusCode::CONFLICT,
+            Json(validation_code_message_response("move_conflict", message)),
+        )
+            .into_response(),
+        MovePlannedWorkoutError::Validation(ref message) => (
+            StatusCode::BAD_REQUEST,
+            Json(validation_code_message_response(
+                "validation_error",
+                message,
+            )),
+        )
+            .into_response(),
+        MovePlannedWorkoutError::Unavailable(_) => StatusCode::BAD_GATEWAY.into_response(),
+        MovePlannedWorkoutError::Repository(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use axum::{body::to_bytes, http::StatusCode};

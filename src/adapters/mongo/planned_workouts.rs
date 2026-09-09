@@ -183,6 +183,26 @@ impl PlannedWorkoutRepository for MongoPlannedWorkoutRepository {
             .await
         })
     }
+
+    fn delete_by_user_id_and_planned_workout_id(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+    ) -> PlannedWorkoutBoxFuture<Result<(), PlannedWorkoutError>> {
+        let imported_collection = self.imported_collection.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_id = planned_workout_id.to_string();
+        Box::pin(async move {
+            imported_collection
+                .delete_one(doc! {
+                    "user_id": &user_id,
+                    "planned_workout_id": &planned_workout_id,
+                })
+                .await
+                .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?;
+            Ok(())
+        })
+    }
 }
 
 async fn load_projected_workouts(

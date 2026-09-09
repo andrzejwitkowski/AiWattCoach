@@ -34,6 +34,38 @@ export async function refreshCalendarView(apiBaseUrl: string) {
   return manualCalendarRefreshResponseSchema.parse(data);
 }
 
+const movePlannedWorkoutRequestSchema = z.object({
+  fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+const movePlannedWorkoutResponseSchema = z.object({
+  plannedWorkoutId: z.string().min(1),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  failedProviders: z
+    .array(
+      z.object({
+        provider: z.string().min(1),
+        error: z.string(),
+      }),
+    )
+    .default([]),
+});
+
+export async function movePlannedWorkout(
+  apiBaseUrl: string,
+  plannedWorkoutId: string,
+  body: unknown,
+) {
+  const validated = movePlannedWorkoutRequestSchema.parse(body);
+  const data = await post<typeof validated, unknown>(
+    apiBaseUrl,
+    `/api/calendar/planned-workouts/${encodeURIComponent(plannedWorkoutId)}/move`,
+    validated,
+  );
+  return movePlannedWorkoutResponseSchema.parse(data);
+}
+
 export function useCalendarCoachApi() {
   const apiBaseUrl = useApiBaseUrl();
 

@@ -161,4 +161,36 @@ impl PlannedWorkoutRepository for RecordingPlannedWorkoutRepository {
             ))
         })
     }
+
+    fn delete_by_user_id_and_planned_workout_id(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+    ) -> BoxFuture<Result<(), PlannedWorkoutError>> {
+        let stored = self.stored.clone();
+        let operation_log = self.operation_log.clone();
+        let shared_log = self.shared_log.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_id = planned_workout_id.to_string();
+        Box::pin(async move {
+            operation_log
+                .lock()
+                .expect("planned workouts mutex poisoned")
+                .push("planned_workouts.delete".to_string());
+            if let Some(shared_log) = shared_log {
+                shared_log
+                    .lock()
+                    .expect("shared log mutex poisoned")
+                    .push("planned_workouts.delete".to_string());
+            }
+            stored
+                .lock()
+                .expect("planned workouts mutex poisoned")
+                .retain(|existing| {
+                    !(existing.user_id == user_id
+                        && existing.planned_workout_id == planned_workout_id)
+                });
+            Ok(())
+        })
+    }
 }

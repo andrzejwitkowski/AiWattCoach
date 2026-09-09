@@ -70,6 +70,11 @@ pub trait WahooUseCases: Send + Sync {
         request: WahooUpdatePlan,
     ) -> BoxFuture<Result<WahooPlan, WahooError>>;
 
+    fn delete_plan(&self, user_id: &str, plan_id: i64) -> BoxFuture<Result<(), WahooError>> {
+        let _ = (user_id, plan_id);
+        Box::pin(async { Err(WahooError::External("delete_plan not implemented".into())) })
+    }
+
     fn create_workout(
         &self,
         user_id: &str,
@@ -82,6 +87,15 @@ pub trait WahooUseCases: Send + Sync {
         workout_id: i64,
         request: WahooUpdateWorkout,
     ) -> BoxFuture<Result<WahooWorkout, WahooError>>;
+
+    fn delete_workout(&self, user_id: &str, workout_id: i64) -> BoxFuture<Result<(), WahooError>> {
+        let _ = (user_id, workout_id);
+        Box::pin(async {
+            Err(WahooError::External(
+                "delete_workout not implemented".into(),
+            ))
+        })
+    }
 
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>>;
 }
@@ -165,6 +179,10 @@ where
         self.as_ref().update_plan(user_id, plan_id, request)
     }
 
+    fn delete_plan(&self, user_id: &str, plan_id: i64) -> BoxFuture<Result<(), WahooError>> {
+        self.as_ref().delete_plan(user_id, plan_id)
+    }
+
     fn create_workout(
         &self,
         user_id: &str,
@@ -180,6 +198,10 @@ where
         request: WahooUpdateWorkout,
     ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
         self.as_ref().update_workout(user_id, workout_id, request)
+    }
+
+    fn delete_workout(&self, user_id: &str, workout_id: i64) -> BoxFuture<Result<(), WahooError>> {
+        self.as_ref().delete_workout(user_id, workout_id)
     }
 
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {
@@ -449,6 +471,11 @@ where
             .await
     }
 
+    async fn delete_plan(&self, user_id: &str, plan_id: i64) -> Result<(), WahooError> {
+        let token = self.ensure_token(user_id).await?;
+        self.client.delete_plan(&token.access_token, plan_id).await
+    }
+
     async fn create_workout(
         &self,
         user_id: &str,
@@ -469,6 +496,13 @@ where
         let token = self.ensure_token(user_id).await?;
         self.client
             .update_workout(&token.access_token, workout_id, request)
+            .await
+    }
+
+    async fn delete_workout(&self, user_id: &str, workout_id: i64) -> Result<(), WahooError> {
+        let token = self.ensure_token(user_id).await?;
+        self.client
+            .delete_workout(&token.access_token, workout_id)
             .await
     }
 
@@ -588,6 +622,12 @@ where
         Box::pin(async move { service.update_plan(&user_id, plan_id, request).await })
     }
 
+    fn delete_plan(&self, user_id: &str, plan_id: i64) -> BoxFuture<Result<(), WahooError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { service.delete_plan(&user_id, plan_id).await })
+    }
+
     fn create_workout(
         &self,
         user_id: &str,
@@ -607,6 +647,12 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move { service.update_workout(&user_id, workout_id, request).await })
+    }
+
+    fn delete_workout(&self, user_id: &str, workout_id: i64) -> BoxFuture<Result<(), WahooError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { service.delete_workout(&user_id, workout_id).await })
     }
 
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {

@@ -34,6 +34,15 @@ pub trait PlannedWorkoutRepository: Clone + Send + Sync + 'static {
         date: &str,
         keep_planned_workout_ids: Vec<String>,
     ) -> BoxFuture<Result<u64, PlannedWorkoutError>>;
+
+    fn delete_by_user_id_and_planned_workout_id(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+    ) -> BoxFuture<Result<(), PlannedWorkoutError>> {
+        let _ = (user_id, planned_workout_id);
+        Box::pin(async { Ok(()) })
+    }
 }
 
 #[derive(Clone, Default)]
@@ -163,6 +172,26 @@ impl PlannedWorkoutRepository for InMemoryPlannedWorkoutRepository {
                 &date,
                 &keep_planned_workout_ids,
             ))
+        })
+    }
+
+    fn delete_by_user_id_and_planned_workout_id(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+    ) -> BoxFuture<Result<(), PlannedWorkoutError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_id = planned_workout_id.to_string();
+        Box::pin(async move {
+            stored
+                .lock()
+                .expect("planned workout repo mutex poisoned")
+                .retain(|existing| {
+                    !(existing.user_id == user_id
+                        && existing.planned_workout_id == planned_workout_id)
+                });
+            Ok(())
         })
     }
 }

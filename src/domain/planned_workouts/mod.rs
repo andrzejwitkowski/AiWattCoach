@@ -1,5 +1,6 @@
 mod authoritative;
 mod model;
+mod r#move;
 mod ports;
 #[cfg(test)]
 mod tests;
@@ -15,6 +16,10 @@ pub use model::{
     PlannedWorkoutText,
 };
 pub use ports::{BoxFuture, NoopPlannedWorkoutRepository, PlannedWorkoutRepository};
+pub use r#move::{
+    MovePlannedWorkoutCommand, MovePlannedWorkoutError, MovePlannedWorkoutOutcome,
+    PlannedWorkoutMoveService, PlannedWorkoutMoveUseCases,
+};
 pub use update::{
     PlannedWorkoutUpdateService, ProviderSyncFailure, UpdatePlannedWorkoutCommand,
     UpdatePlannedWorkoutError, UpdatePlannedWorkoutOutcome,

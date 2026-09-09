@@ -15,6 +15,16 @@ pub struct RecordingIntervalsService {
 }
 
 impl RecordingIntervalsService {
+    pub fn with_shared_log(shared_log: Arc<Mutex<Vec<String>>>) -> Self {
+        Self {
+            existing_event: None,
+            updated_events: Arc::new(Mutex::new(Vec::new())),
+            operation_log: Arc::new(Mutex::new(Vec::new())),
+            fail_update: false,
+            shared_log: Some(shared_log),
+        }
+    }
+
     pub fn with_existing_event_and_shared_log(
         existing_event: Event,
         shared_log: Arc<Mutex<Vec<String>>>,
@@ -146,9 +156,24 @@ impl IntervalsUseCases for RecordingIntervalsService {
     fn delete_event(
         &self,
         _user_id: &str,
-        _event_id: i64,
+        event_id: i64,
     ) -> IntervalsBoxFuture<Result<(), IntervalsError>> {
-        Box::pin(async { Ok(()) })
+        let operation_log = self.operation_log.clone();
+        let shared_log = self.shared_log.clone();
+        Box::pin(async move {
+            let entry = format!("intervals.delete_event:{event_id}");
+            operation_log
+                .lock()
+                .expect("intervals mutex poisoned")
+                .push(entry.clone());
+            if let Some(shared_log) = shared_log {
+                shared_log
+                    .lock()
+                    .expect("shared log mutex poisoned")
+                    .push(entry);
+            }
+            Ok(())
+        })
     }
 
     fn download_fit(

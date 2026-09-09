@@ -46,6 +46,11 @@ pub trait WahooApiPort: Clone + Send + Sync + 'static {
         request: WahooUpdatePlan,
     ) -> BoxFuture<Result<WahooPlan, WahooError>>;
 
+    fn delete_plan(&self, access_token: &str, plan_id: i64) -> BoxFuture<Result<(), WahooError>> {
+        let _ = (access_token, plan_id);
+        Box::pin(async { Err(WahooError::External("delete_plan not implemented".into())) })
+    }
+
     fn list_workouts(
         &self,
         access_token: &str,
@@ -82,6 +87,19 @@ pub trait WahooApiPort: Clone + Send + Sync + 'static {
         workout_id: i64,
         request: WahooUpdateWorkout,
     ) -> BoxFuture<Result<WahooWorkout, WahooError>>;
+
+    fn delete_workout(
+        &self,
+        access_token: &str,
+        workout_id: i64,
+    ) -> BoxFuture<Result<(), WahooError>> {
+        let _ = (access_token, workout_id);
+        Box::pin(async {
+            Err(WahooError::External(
+                "delete_workout not implemented".into(),
+            ))
+        })
+    }
 
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>>;
 }

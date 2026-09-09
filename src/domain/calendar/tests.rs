@@ -264,6 +264,70 @@ async fn sync_planned_workout_to_intervals_uses_default_name_when_workout_has_no
 }
 
 #[tokio::test]
+async fn sync_planned_workout_to_intervals_uses_imported_when_projection_missing() {
+    let intervals = FakeIntervalsService::with_created_event(Event {
+        id: 88,
+        start_date_local: "2026-05-12T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Moved Imported".to_string()),
+        category: EventCategory::Workout,
+        description: Some("- 45m 65%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    });
+    let planned_workouts = TestPlannedWorkoutRepository::default();
+    planned_workouts
+        .upsert(PlannedWorkout::new(
+            "training-plan:user-1:w1:1:2026-05-12".to_string(),
+            "user-1".to_string(),
+            "2026-05-12".to_string(),
+            PlannedWorkoutContent {
+                lines: vec![
+                    PlannedWorkoutLine::Text(PlannedWorkoutText {
+                        text: "Moved Imported".to_string(),
+                    }),
+                    PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                        duration_seconds: 2_700,
+                        kind: PlannedWorkoutStepKind::Steady,
+                        target: PlannedWorkoutTarget::PercentFtp {
+                            min: 65.0,
+                            max: 65.0,
+                        },
+                    }),
+                ],
+            },
+        ))
+        .await
+        .unwrap();
+    let service = CalendarService::new(
+        intervals.clone(),
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![]),
+        InMemoryExternalSyncStateRepository::default(),
+        FixedClock,
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default())
+    .with_planned_workouts(planned_workouts);
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2026-05-12".to_string(),
+                provider: PlannedWorkoutSyncProvider::Intervals,
+            },
+        )
+        .await
+        .expect("imported-only day should sync after projection was superseded");
+
+    let created = intervals.created_events.lock().unwrap().clone();
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0].name.as_deref(), Some("Moved Imported"));
+}
+
+#[tokio::test]
 async fn sync_planned_workout_to_intervals_uses_local_calendar_override_when_retrying_after_update_failure(
 ) {
     let intervals = FakeIntervalsService::with_created_event(Event {
