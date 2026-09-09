@@ -5,6 +5,7 @@ use crate::domain::{
         PlannedWorkout, PlannedWorkoutLine, PlannedWorkoutRepeat, PlannedWorkoutStep,
         PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
     },
+    planned_workouts as canonical,
     training_plan::TrainingPlanError,
 };
 
@@ -150,5 +151,46 @@ fn map_document_to_line(
                 }
             },
         })),
+    }
+}
+
+pub(crate) fn map_intervals_lines_to_canonical(
+    lines: Vec<PlannedWorkoutLine>,
+) -> Vec<canonical::PlannedWorkoutLine> {
+    lines
+        .into_iter()
+        .map(map_intervals_line_to_canonical)
+        .collect()
+}
+
+fn map_intervals_line_to_canonical(line: PlannedWorkoutLine) -> canonical::PlannedWorkoutLine {
+    match line {
+        PlannedWorkoutLine::BlankLine => canonical::PlannedWorkoutLine::BlankLine,
+        PlannedWorkoutLine::Text(text) => {
+            canonical::PlannedWorkoutLine::Text(canonical::PlannedWorkoutText { text: text.text })
+        }
+        PlannedWorkoutLine::Repeat(repeat) => {
+            canonical::PlannedWorkoutLine::Repeat(canonical::PlannedWorkoutRepeat {
+                title: repeat.title,
+                count: repeat.count,
+            })
+        }
+        PlannedWorkoutLine::Step(step) => {
+            canonical::PlannedWorkoutLine::Step(canonical::PlannedWorkoutStep {
+                duration_seconds: step.duration_seconds,
+                kind: match step.kind {
+                    PlannedWorkoutStepKind::Steady => canonical::PlannedWorkoutStepKind::Steady,
+                    PlannedWorkoutStepKind::Ramp => canonical::PlannedWorkoutStepKind::Ramp,
+                },
+                target: match step.target {
+                    PlannedWorkoutTarget::PercentFtp { min, max } => {
+                        canonical::PlannedWorkoutTarget::PercentFtp { min, max }
+                    }
+                    PlannedWorkoutTarget::WattsRange { min, max } => {
+                        canonical::PlannedWorkoutTarget::WattsRange { min, max }
+                    }
+                },
+            })
+        }
     }
 }

@@ -16,7 +16,7 @@ use crate::domain::{
         ExternalSyncStateRepository,
     },
     identity::Clock,
-    intervals::{parse_planned_workout, IntervalsError, IntervalsUseCases},
+    intervals::{parse_planned_workout_day, IntervalsError, IntervalsUseCases, PlannedWorkoutDay},
     planned_workout_tokens::{ensure_planned_workout_marker, PlannedWorkoutTokenRepository},
     settings::UserSettingsRepository,
     wahoo::{
@@ -24,7 +24,7 @@ use crate::domain::{
     },
 };
 
-use super::{PlannedWorkout, PlannedWorkoutError, PlannedWorkoutRepository};
+use super::{PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError, PlannedWorkoutRepository};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UpdatePlannedWorkoutError {
@@ -151,16 +151,11 @@ where
         let existing = self
             .load_existing_workout(&command.user_id, &command.planned_workout_id, &command.date)
             .await?;
-        let parsed = parse_planned_workout(command.workout_doc.trim()).map_err(|error| {
-            UpdatePlannedWorkoutError::Validation(format!("invalid workoutDoc: {error}"))
-        })?;
-        let updated_workout = PlannedWorkout {
-            rest_day: false,
-            rest_day_reason: None,
-            workout: map_intervals_to_canonical_planned_workout_content(&parsed),
-            name: planned_workout_name(&parsed),
-            ..existing
-        };
+        let day = parse_planned_workout_day(&command.date, command.workout_doc.trim()).map_err(
+            |error| UpdatePlannedWorkoutError::Validation(format!("invalid workoutDoc: {error}")),
+        )?;
+        let updated_workout =
+            planned_workout_from_parsed_day(existing, day, self.clock.now_epoch_seconds())?;
         let syncable = map_planned_workout_to_syncable(&updated_workout)?;
         let canonical_entity = CanonicalEntityRef::new(
             CanonicalEntityKind::PlannedWorkout,
@@ -170,6 +165,15 @@ where
         let persisted = self
             .planned_workouts
             .upsert(updated_workout)
+            .await
+            .map_err(map_planned_workout_error)?;
+
+        self.planned_workouts
+            .delete_imported_for_user_date_keeping(
+                &command.user_id,
+                &command.date,
+                vec![persisted.planned_workout_id.clone()],
+            )
             .await
             .map_err(map_planned_workout_error)?;
 
@@ -396,6 +400,37 @@ fn validate_update_command(
         ));
     }
     Ok(())
+}
+
+fn planned_workout_from_parsed_day(
+    existing: PlannedWorkout,
+    day: PlannedWorkoutDay,
+    now_epoch_seconds: i64,
+) -> Result<PlannedWorkout, UpdatePlannedWorkoutError> {
+    if day.is_rest_day() {
+        return Ok(PlannedWorkout {
+            rest_day: true,
+            rest_day_reason: day.rest_day_reason().map(str::to_string),
+            workout: PlannedWorkoutContent { lines: Vec::new() },
+            name: Some("Rest Day".to_string()),
+            updated_at_epoch_seconds: Some(now_epoch_seconds),
+            ..existing
+        });
+    }
+
+    let parsed = day.into_workout().ok_or_else(|| {
+        UpdatePlannedWorkoutError::Validation(
+            "invalid workoutDoc: expected workout content".to_string(),
+        )
+    })?;
+    Ok(PlannedWorkout {
+        rest_day: false,
+        rest_day_reason: None,
+        workout: map_intervals_to_canonical_planned_workout_content(&parsed),
+        name: planned_workout_name(&parsed),
+        updated_at_epoch_seconds: Some(now_epoch_seconds),
+        ..existing
+    })
 }
 
 fn map_planned_workout_error(error: PlannedWorkoutError) -> UpdatePlannedWorkoutError {

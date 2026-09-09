@@ -51,6 +51,10 @@
 - Persist local state before external side effects. For LLM tool-loop checkpoints: write checkpoint before returning, prove failure blocks success, prove recovery avoids a second provider call.
 - When extracting a retry helper for a read-merge-write flow, keep the entire attempt inside the retry closure including the fresh read.
 - For in-memory waiter registries backed by `watch`, verify cleanup on both live-update and immediate-terminal replay paths.
+- **Coach same-day planned rewrite**: hiding orphans in calendar selection is not enough. After coach update and during calendar refresh, delete other imported planned workouts for that date; keep only the newest (`updated_at`; missing timestamp = older). Applies to planned only, not completed.
+- **Rest day vs workout text**: Multi-day plan parsing and `update_planned_workout` must share `parse_planned_workout_day`. A single-line `Rest Day` / `Rest Day: reason` is a rest day — do not force `rest_day: false` on the update path.
+- **Imported Mongo document**: One shared `imported_planned_workouts` module for document shape, mapping, and delete. Do not duplicate `ImportedPlannedWorkoutDocument` across adapters.
+- **Delete port defaults**: `delete_imported_for_user_date_keeping` must be implemented explicitly on every repository/source. No silent `Ok(0)` default on the trait.
 
 ## LLM / Prompt Engineering
 

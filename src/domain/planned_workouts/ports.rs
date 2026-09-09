@@ -5,6 +5,9 @@ use std::sync::{Arc, Mutex};
 
 use super::{PlannedWorkout, PlannedWorkoutError};
 
+#[cfg(test)]
+use super::delete_imported_planned_workouts_in_memory;
+
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 pub trait PlannedWorkoutRepository: Clone + Send + Sync + 'static {
@@ -24,6 +27,13 @@ pub trait PlannedWorkoutRepository: Clone + Send + Sync + 'static {
         &self,
         workout: PlannedWorkout,
     ) -> BoxFuture<Result<PlannedWorkout, PlannedWorkoutError>>;
+
+    fn delete_imported_for_user_date_keeping(
+        &self,
+        user_id: &str,
+        date: &str,
+        keep_planned_workout_ids: Vec<String>,
+    ) -> BoxFuture<Result<u64, PlannedWorkoutError>>;
 }
 
 #[derive(Clone, Default)]
@@ -51,6 +61,15 @@ impl PlannedWorkoutRepository for NoopPlannedWorkoutRepository {
         workout: PlannedWorkout,
     ) -> BoxFuture<Result<PlannedWorkout, PlannedWorkoutError>> {
         Box::pin(async move { Ok(workout) })
+    }
+
+    fn delete_imported_for_user_date_keeping(
+        &self,
+        _user_id: &str,
+        _date: &str,
+        _keep_planned_workout_ids: Vec<String>,
+    ) -> BoxFuture<Result<u64, PlannedWorkoutError>> {
+        Box::pin(async { Ok(0) })
     }
 }
 
@@ -124,6 +143,26 @@ impl PlannedWorkoutRepository for InMemoryPlannedWorkoutRepository {
             });
             stored.push(workout.clone());
             Ok(workout)
+        })
+    }
+
+    fn delete_imported_for_user_date_keeping(
+        &self,
+        user_id: &str,
+        date: &str,
+        keep_planned_workout_ids: Vec<String>,
+    ) -> BoxFuture<Result<u64, PlannedWorkoutError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let date = date.to_string();
+        Box::pin(async move {
+            let mut stored = stored.lock().expect("planned workout repo mutex poisoned");
+            Ok(delete_imported_planned_workouts_in_memory(
+                &mut stored,
+                &user_id,
+                &date,
+                &keep_planned_workout_ids,
+            ))
         })
     }
 }

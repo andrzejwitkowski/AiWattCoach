@@ -5,18 +5,18 @@ use mongodb::{
 };
 use serde::Deserialize;
 
+use crate::adapters::mongo::imported_planned_workouts::{
+    delete_imported_planned_workouts_for_user_date_keeping, map_imported_document_to_domain,
+    ImportedPlannedWorkoutDocument,
+};
 use crate::adapters::mongo::training_plan_shared::{
-    map_document_to_planned_workout, PlannedWorkoutDocument,
+    map_document_to_planned_workout, map_intervals_lines_to_canonical, PlannedWorkoutDocument,
 };
 use crate::domain::calendar_view::{
     BoxFuture, CalendarPlannedSyncKey, CalendarPlannedWorkoutCandidate,
     CalendarPlannedWorkoutOrigin, CalendarPlannedWorkoutSource,
 };
-use crate::domain::planned_workouts::{
-    PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError, PlannedWorkoutLine,
-    PlannedWorkoutRepeat, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
-    PlannedWorkoutText,
-};
+use crate::domain::planned_workouts::{PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError};
 
 #[derive(Clone)]
 pub struct MongoCalendarPlannedWorkoutSource {
@@ -51,54 +51,9 @@ struct CleanupProjectedPlannedWorkoutDocument {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-struct ImportedPlannedWorkoutDocument {
-    user_id: String,
-    planned_workout_id: String,
-    date: String,
-    #[serde(default)]
-    rest_day: bool,
-    #[serde(default)]
-    rest_day_reason: Option<String>,
-    name: Option<String>,
-    description: Option<String>,
-    event_type: Option<String>,
-    workout: StoredPlannedWorkoutContentDocument,
-}
-
-#[derive(Clone, Debug, Deserialize)]
 struct CleanupImportedPlannedWorkoutDocument {
     planned_workout_id: String,
     date: String,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct StoredPlannedWorkoutContentDocument {
-    lines: Vec<StoredPlannedWorkoutLineDocument>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum StoredPlannedWorkoutLineDocument {
-    BlankLine,
-    Text {
-        text: String,
-    },
-    Repeat {
-        title: Option<String>,
-        count: i64,
-    },
-    Step {
-        duration_seconds: i32,
-        step_kind: String,
-        target: StoredPlannedWorkoutTargetDocument,
-    },
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum StoredPlannedWorkoutTargetDocument {
-    PercentFtp { min: f64, max: f64 },
-    WattsRange { min: i32, max: i32 },
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -186,6 +141,26 @@ impl CalendarPlannedWorkoutSource for MongoCalendarPlannedWorkoutSource {
             Ok(select_visible_cleanup_planned_workout_ids(
                 load_cleanup_candidates(&source, &user_id).await?,
             ))
+        })
+    }
+
+    fn delete_imported_for_user_date_keeping(
+        &self,
+        user_id: &str,
+        date: &str,
+        keep_planned_workout_ids: Vec<String>,
+    ) -> BoxFuture<Result<u64, PlannedWorkoutError>> {
+        let imported_collection = self.imported_collection.clone();
+        let user_id = user_id.to_string();
+        let date = date.to_string();
+        Box::pin(async move {
+            delete_imported_planned_workouts_for_user_date_keeping(
+                &imported_collection,
+                &user_id,
+                &date,
+                keep_planned_workout_ids,
+            )
+            .await
         })
     }
 }
@@ -493,7 +468,7 @@ fn map_projected_document_to_domain(
         document.user_id,
         document.date,
         PlannedWorkoutContent {
-            lines: map_workout_lines(
+            lines: map_intervals_lines_to_canonical(
                 map_document_to_planned_workout(workout)
                     .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?
                     .lines,
@@ -501,119 +476,6 @@ fn map_projected_document_to_domain(
         },
     )
     .with_event_metadata(None, None, Some("Ride".to_string())))
-}
-
-fn map_imported_document_to_domain(
-    document: ImportedPlannedWorkoutDocument,
-) -> Result<PlannedWorkout, PlannedWorkoutError> {
-    let planned_workout = PlannedWorkout::new(
-        document.planned_workout_id,
-        document.user_id,
-        document.date,
-        PlannedWorkoutContent {
-            lines: document
-                .workout
-                .lines
-                .into_iter()
-                .map(map_stored_line_to_domain)
-                .collect::<Result<Vec<_>, _>>()?,
-        },
-    )
-    .with_event_metadata(document.name, document.description, document.event_type);
-
-    if document.rest_day {
-        Ok(planned_workout.as_rest_day(document.rest_day_reason))
-    } else {
-        Ok(planned_workout)
-    }
-}
-
-fn map_workout_lines(
-    lines: Vec<crate::domain::intervals::PlannedWorkoutLine>,
-) -> Vec<PlannedWorkoutLine> {
-    lines.into_iter().map(map_workout_line).collect()
-}
-
-fn map_workout_line(line: crate::domain::intervals::PlannedWorkoutLine) -> PlannedWorkoutLine {
-    match line {
-        crate::domain::intervals::PlannedWorkoutLine::BlankLine => PlannedWorkoutLine::BlankLine,
-        crate::domain::intervals::PlannedWorkoutLine::Text(text) => {
-            PlannedWorkoutLine::Text(PlannedWorkoutText { text: text.text })
-        }
-        crate::domain::intervals::PlannedWorkoutLine::Repeat(repeat) => {
-            PlannedWorkoutLine::Repeat(PlannedWorkoutRepeat {
-                title: repeat.title,
-                count: repeat.count,
-            })
-        }
-        crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
-            PlannedWorkoutLine::Step(PlannedWorkoutStep {
-                duration_seconds: step.duration_seconds,
-                kind: match step.kind {
-                    crate::domain::intervals::PlannedWorkoutStepKind::Steady => {
-                        PlannedWorkoutStepKind::Steady
-                    }
-                    crate::domain::intervals::PlannedWorkoutStepKind::Ramp => {
-                        PlannedWorkoutStepKind::Ramp
-                    }
-                },
-                target: match step.target {
-                    crate::domain::intervals::PlannedWorkoutTarget::PercentFtp { min, max } => {
-                        PlannedWorkoutTarget::PercentFtp { min, max }
-                    }
-                    crate::domain::intervals::PlannedWorkoutTarget::WattsRange { min, max } => {
-                        PlannedWorkoutTarget::WattsRange { min, max }
-                    }
-                },
-            })
-        }
-    }
-}
-
-fn map_stored_line_to_domain(
-    line: StoredPlannedWorkoutLineDocument,
-) -> Result<PlannedWorkoutLine, PlannedWorkoutError> {
-    match line {
-        StoredPlannedWorkoutLineDocument::BlankLine => Ok(PlannedWorkoutLine::BlankLine),
-        StoredPlannedWorkoutLineDocument::Text { text } => {
-            Ok(PlannedWorkoutLine::Text(PlannedWorkoutText { text }))
-        }
-        StoredPlannedWorkoutLineDocument::Repeat { title, count } => {
-            let count = usize::try_from(count).map_err(|_| {
-                PlannedWorkoutError::Repository(
-                    "stored planned workout repeat count cannot be negative".to_string(),
-                )
-            })?;
-            Ok(PlannedWorkoutLine::Repeat(PlannedWorkoutRepeat {
-                title,
-                count,
-            }))
-        }
-        StoredPlannedWorkoutLineDocument::Step {
-            duration_seconds,
-            step_kind,
-            target,
-        } => Ok(PlannedWorkoutLine::Step(PlannedWorkoutStep {
-            duration_seconds,
-            kind: match step_kind.as_str() {
-                "steady" => PlannedWorkoutStepKind::Steady,
-                "ramp" => PlannedWorkoutStepKind::Ramp,
-                other => {
-                    return Err(PlannedWorkoutError::Repository(format!(
-                        "unknown stored planned workout step kind: {other}"
-                    )))
-                }
-            },
-            target: match target {
-                StoredPlannedWorkoutTargetDocument::PercentFtp { min, max } => {
-                    PlannedWorkoutTarget::PercentFtp { min, max }
-                }
-                StoredPlannedWorkoutTargetDocument::WattsRange { min, max } => {
-                    PlannedWorkoutTarget::WattsRange { min, max }
-                }
-            },
-        })),
-    }
 }
 
 fn storage_error(error: mongodb::error::Error) -> PlannedWorkoutError {

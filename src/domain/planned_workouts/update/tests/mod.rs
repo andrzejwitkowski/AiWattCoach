@@ -11,7 +11,7 @@ use crate::domain::{
     planned_workouts::{
         comparable_workout_text_for_payload_hash, PlannedWorkout, PlannedWorkoutContent,
         PlannedWorkoutLine, PlannedWorkoutRepeat, PlannedWorkoutStep, PlannedWorkoutStepKind,
-        PlannedWorkoutTarget, PlannedWorkoutText,
+        PlannedWorkoutTarget, PlannedWorkoutText, UpdatePlannedWorkoutCommand,
     },
     settings::{NoopUserSettingsRepository, UserSettingsRepository},
     wahoo::WahooUseCases,
@@ -231,7 +231,15 @@ async fn update_planned_workout_persists_local_change_and_refreshes_when_no_sync
         outcome.planned_workout.planned_workout_id,
         existing_workout().planned_workout_id
     );
+    assert_eq!(
+        outcome.planned_workout.updated_at_epoch_seconds,
+        Some(1_700_000_123)
+    );
     assert_eq!(planned_workouts.upserted().len(), 1);
+    assert_eq!(
+        planned_workouts.upserted()[0].updated_at_epoch_seconds,
+        Some(1_700_000_123)
+    );
     assert_eq!(planned_workouts.stored().len(), 1);
     assert_eq!(sync_states.stored(), Vec::<ExternalSyncState>::new());
     assert_eq!(
@@ -244,8 +252,75 @@ async fn update_planned_workout_persists_local_change_and_refreshes_when_no_sync
     );
     assert_eq!(
         planned_workouts.operation_log(),
-        vec!["planned_workouts.upsert".to_string()]
+        vec![
+            "planned_workouts.upsert".to_string(),
+            "planned_workouts.delete_imported_for_user_date_keeping".to_string(),
+        ]
     );
+}
+
+#[tokio::test]
+async fn update_planned_workout_deletes_other_same_day_planned_imports() {
+    let mut orphan = existing_workout();
+    orphan.planned_workout_id = "orphan-older".to_string();
+    orphan.name = Some("Race-Specific Sharpening".to_string());
+
+    let planned_workouts =
+        RecordingPlannedWorkoutRepository::with_workouts(vec![existing_workout(), orphan]);
+    let service = build_service(
+        planned_workouts.clone(),
+        InMemoryExternalSyncStateRepository::default(),
+        RecordingIntervalsService::default(),
+        NoopWahooUseCases,
+        NoopUserSettingsRepository,
+        NoopPlannedWorkoutTokenRepository::default(),
+        RecordingCalendarRefresh::default(),
+    );
+
+    service
+        .update_planned_workout(update_command())
+        .await
+        .expect("update should succeed");
+
+    let stored = planned_workouts.stored();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(
+        stored[0].planned_workout_id,
+        existing_workout().planned_workout_id
+    );
+}
+
+#[tokio::test]
+async fn update_planned_workout_parses_rest_day_doc_like_training_plan() {
+    let planned_workouts =
+        RecordingPlannedWorkoutRepository::with_workouts(vec![existing_workout()]);
+    let service = build_service(
+        planned_workouts.clone(),
+        InMemoryExternalSyncStateRepository::default(),
+        RecordingIntervalsService::default(),
+        NoopWahooUseCases,
+        NoopUserSettingsRepository,
+        NoopPlannedWorkoutTokenRepository::default(),
+        RecordingCalendarRefresh::default(),
+    );
+
+    let outcome = service
+        .update_planned_workout(UpdatePlannedWorkoutCommand {
+            workout_doc: "Rest Day: easy recovery".to_string(),
+            ..update_command()
+        })
+        .await
+        .expect("rest day update should succeed");
+
+    assert!(outcome.planned_workout.rest_day);
+    assert_eq!(
+        outcome.planned_workout.rest_day_reason.as_deref(),
+        Some("easy recovery")
+    );
+    assert_eq!(outcome.planned_workout.name.as_deref(), Some("Rest Day"));
+    let stored = planned_workouts.stored();
+    assert_eq!(stored.len(), 1);
+    assert!(stored[0].rest_day);
 }
 
 #[tokio::test]
@@ -307,6 +382,7 @@ async fn update_planned_workout_marks_intervals_state_modified_then_synced_after
             .clone(),
         vec![
             "planned_workouts.upsert".to_string(),
+            "planned_workouts.delete_imported_for_user_date_keeping".to_string(),
             "sync_states.upsert:modified".to_string(),
             "intervals.get_event".to_string(),
             "intervals.update_event".to_string(),
@@ -376,6 +452,7 @@ async fn update_planned_workout_keeps_local_change_when_intervals_update_fails()
             .clone(),
         vec![
             "planned_workouts.upsert".to_string(),
+            "planned_workouts.delete_imported_for_user_date_keeping".to_string(),
             "sync_states.upsert:modified".to_string(),
             "intervals.get_event".to_string(),
             "intervals.update_event".to_string(),
@@ -456,6 +533,7 @@ async fn update_planned_workout_updates_existing_wahoo_plan_and_workout() {
             .clone(),
         vec![
             "planned_workouts.upsert".to_string(),
+            "planned_workouts.delete_imported_for_user_date_keeping".to_string(),
             "sync_states.upsert:modified".to_string(),
             "wahoo.update_plan".to_string(),
             "wahoo.update_workout".to_string(),
@@ -520,6 +598,7 @@ async fn update_planned_workout_keeps_local_change_when_wahoo_update_fails() {
             .clone(),
         vec![
             "planned_workouts.upsert".to_string(),
+            "planned_workouts.delete_imported_for_user_date_keeping".to_string(),
             "sync_states.upsert:modified".to_string(),
             "wahoo.update_plan".to_string(),
             "sync_states.upsert:failed".to_string(),

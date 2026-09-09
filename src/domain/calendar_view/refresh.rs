@@ -2,7 +2,9 @@ use chrono::NaiveDate;
 
 use crate::domain::{
     calendar_view::{
-        select_visible_planned_workout_candidates_with_sync_states, CalendarPlannedWorkoutSource,
+        imported_keep_ids_by_date_for_rewrite,
+        select_visible_planned_workout_candidates_with_sync_states, CalendarPlannedWorkoutOrigin,
+        CalendarPlannedWorkoutSource,
     },
     completed_workouts::{CompletedWorkout, CompletedWorkoutRepository},
     external_sync::{
@@ -323,10 +325,25 @@ where
                 .map_err(map_planned_error)?
                 .into_iter()
                 .collect::<std::collections::HashSet<_>>();
-            let planned_candidates = planned_workouts
+            let mut planned_candidates = planned_workouts
                 .list_candidates_by_user_id_and_date_range(&user_id, &oldest, &newest)
                 .await
                 .map_err(map_planned_error)?;
+            let imported_keep_by_date = imported_keep_ids_by_date_for_rewrite(&planned_candidates);
+            for (date, keep_ids) in &imported_keep_by_date {
+                cleanup_planned_workouts
+                    .delete_imported_for_user_date_keeping(&user_id, date, keep_ids.clone())
+                    .await
+                    .map_err(map_planned_error)?;
+            }
+            if !imported_keep_by_date.is_empty() {
+                planned_candidates.retain(|candidate| {
+                    candidate.origin != CalendarPlannedWorkoutOrigin::Imported
+                        || imported_keep_by_date
+                            .get(&candidate.workout.date)
+                            .is_none_or(|keep| keep.contains(&candidate.workout.planned_workout_id))
+                });
+            }
             let candidate_entities = planned_candidates
                 .iter()
                 .map(|candidate| {

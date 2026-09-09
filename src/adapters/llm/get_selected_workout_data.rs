@@ -331,6 +331,15 @@ mod tests {
         {
             unreachable!()
         }
+
+        fn delete_imported_for_user_date_keeping(
+            &self,
+            _user_id: &str,
+            _date: &str,
+            _keep_planned_workout_ids: Vec<String>,
+        ) -> crate::domain::planned_workouts::BoxFuture<Result<u64, PlannedWorkoutError>> {
+            unreachable!()
+        }
     }
 
     fn completed_with_plan(planned_workout_id: &str, start_date_local: &str) -> CompletedWorkout {

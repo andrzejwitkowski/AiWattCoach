@@ -9,11 +9,16 @@ use std::collections::HashMap;
 
 use crate::domain::planned_workouts::{
     BoxFuture as PlannedWorkoutBoxFuture, PlannedWorkout, PlannedWorkoutContent,
-    PlannedWorkoutError, PlannedWorkoutLine, PlannedWorkoutRepeat, PlannedWorkoutRepository,
-    PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
+    PlannedWorkoutError, PlannedWorkoutRepository,
 };
 
-use super::training_plan_shared::{map_document_to_planned_workout, PlannedWorkoutDocument};
+use super::imported_planned_workouts::{
+    delete_imported_planned_workouts_for_user_date_keeping, map_imported_document_to_domain,
+    map_imported_workout_to_document, ImportedPlannedWorkoutDocument,
+};
+use super::training_plan_shared::{
+    map_document_to_planned_workout, map_intervals_lines_to_canonical, PlannedWorkoutDocument,
+};
 
 #[derive(Clone)]
 pub struct MongoPlannedWorkoutRepository {
@@ -38,51 +43,6 @@ struct TrainingPlanProjectedDayDocument {
 struct TrainingPlanSnapshotLookupDocument {
     operation_key: String,
     start_date: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct ImportedPlannedWorkoutDocument {
-    user_id: String,
-    planned_workout_id: String,
-    date: String,
-    #[serde(default)]
-    rest_day: bool,
-    #[serde(default)]
-    rest_day_reason: Option<String>,
-    name: Option<String>,
-    description: Option<String>,
-    event_type: Option<String>,
-    workout: StoredPlannedWorkoutContentDocument,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct StoredPlannedWorkoutContentDocument {
-    lines: Vec<StoredPlannedWorkoutLineDocument>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum StoredPlannedWorkoutLineDocument {
-    BlankLine,
-    Text {
-        text: String,
-    },
-    Repeat {
-        title: Option<String>,
-        count: i64,
-    },
-    Step {
-        duration_seconds: i32,
-        step_kind: String,
-        target: StoredPlannedWorkoutTargetDocument,
-    },
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum StoredPlannedWorkoutTargetDocument {
-    PercentFtp { min: f64, max: f64 },
-    WattsRange { min: i32, max: i32 },
 }
 
 impl MongoPlannedWorkoutRepository {
@@ -201,6 +161,26 @@ impl PlannedWorkoutRepository for MongoPlannedWorkoutRepository {
                 .await
                 .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?;
             Ok(workout)
+        })
+    }
+
+    fn delete_imported_for_user_date_keeping(
+        &self,
+        user_id: &str,
+        date: &str,
+        keep_planned_workout_ids: Vec<String>,
+    ) -> PlannedWorkoutBoxFuture<Result<u64, PlannedWorkoutError>> {
+        let imported_collection = self.imported_collection.clone();
+        let user_id = user_id.to_string();
+        let date = date.to_string();
+        Box::pin(async move {
+            delete_imported_planned_workouts_for_user_date_keeping(
+                &imported_collection,
+                &user_id,
+                &date,
+                keep_planned_workout_ids,
+            )
+            .await
         })
     }
 }
@@ -338,7 +318,7 @@ fn map_projected_document_to_domain(
         document.user_id,
         document.date,
         PlannedWorkoutContent {
-            lines: map_workout_lines(
+            lines: map_intervals_lines_to_canonical(
                 map_document_to_planned_workout(workout)
                     .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?
                     .lines,
@@ -348,190 +328,6 @@ fn map_projected_document_to_domain(
     .with_event_metadata(None, None, Some("Ride".to_string()));
 
     Ok(planned_workout)
-}
-
-fn map_imported_workout_to_document(workout: &PlannedWorkout) -> ImportedPlannedWorkoutDocument {
-    ImportedPlannedWorkoutDocument {
-        user_id: workout.user_id.clone(),
-        planned_workout_id: workout.planned_workout_id.clone(),
-        date: workout.date.clone(),
-        rest_day: workout.rest_day,
-        rest_day_reason: workout.rest_day_reason.clone(),
-        name: workout.name.clone(),
-        description: workout.description.clone(),
-        event_type: workout.event_type.clone(),
-        workout: StoredPlannedWorkoutContentDocument {
-            lines: workout
-                .workout
-                .lines
-                .iter()
-                .map(map_domain_line_to_stored_line)
-                .collect(),
-        },
-    }
-}
-
-fn map_imported_document_to_domain(
-    document: ImportedPlannedWorkoutDocument,
-) -> Result<PlannedWorkout, PlannedWorkoutError> {
-    let planned_workout = PlannedWorkout::new(
-        document.planned_workout_id,
-        document.user_id,
-        document.date,
-        PlannedWorkoutContent {
-            lines: document
-                .workout
-                .lines
-                .into_iter()
-                .map(map_stored_line_to_domain)
-                .collect::<Result<Vec<_>, _>>()?,
-        },
-    )
-    .with_event_metadata(document.name, document.description, document.event_type);
-
-    if document.rest_day {
-        Ok(planned_workout.as_rest_day(document.rest_day_reason))
-    } else {
-        Ok(planned_workout)
-    }
-}
-
-fn map_workout_lines(
-    lines: Vec<crate::domain::intervals::PlannedWorkoutLine>,
-) -> Vec<PlannedWorkoutLine> {
-    lines.into_iter().map(map_workout_line).collect()
-}
-
-fn map_workout_line(line: crate::domain::intervals::PlannedWorkoutLine) -> PlannedWorkoutLine {
-    match line {
-        crate::domain::intervals::PlannedWorkoutLine::BlankLine => PlannedWorkoutLine::BlankLine,
-        crate::domain::intervals::PlannedWorkoutLine::Text(text) => {
-            PlannedWorkoutLine::Text(PlannedWorkoutText { text: text.text })
-        }
-        crate::domain::intervals::PlannedWorkoutLine::Repeat(repeat) => {
-            PlannedWorkoutLine::Repeat(PlannedWorkoutRepeat {
-                title: repeat.title,
-                count: repeat.count,
-            })
-        }
-        crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
-            PlannedWorkoutLine::Step(PlannedWorkoutStep {
-                duration_seconds: step.duration_seconds,
-                kind: match step.kind {
-                    crate::domain::intervals::PlannedWorkoutStepKind::Steady => {
-                        PlannedWorkoutStepKind::Steady
-                    }
-                    crate::domain::intervals::PlannedWorkoutStepKind::Ramp => {
-                        PlannedWorkoutStepKind::Ramp
-                    }
-                },
-                target: match step.target {
-                    crate::domain::intervals::PlannedWorkoutTarget::PercentFtp { min, max } => {
-                        PlannedWorkoutTarget::PercentFtp { min, max }
-                    }
-                    crate::domain::intervals::PlannedWorkoutTarget::WattsRange { min, max } => {
-                        PlannedWorkoutTarget::WattsRange { min, max }
-                    }
-                },
-            })
-        }
-    }
-}
-
-fn map_domain_line_to_stored_line(line: &PlannedWorkoutLine) -> StoredPlannedWorkoutLineDocument {
-    match line {
-        PlannedWorkoutLine::BlankLine => StoredPlannedWorkoutLineDocument::BlankLine,
-        PlannedWorkoutLine::Text(text) => StoredPlannedWorkoutLineDocument::Text {
-            text: text.text.clone(),
-        },
-        PlannedWorkoutLine::Repeat(repeat) => StoredPlannedWorkoutLineDocument::Repeat {
-            title: repeat.title.clone(),
-            count: repeat.count as i64,
-        },
-        PlannedWorkoutLine::Step(step) => StoredPlannedWorkoutLineDocument::Step {
-            duration_seconds: step.duration_seconds,
-            step_kind: map_step_kind_to_str(&step.kind).to_string(),
-            target: map_domain_target_to_stored_target(&step.target),
-        },
-    }
-}
-
-fn map_stored_line_to_domain(
-    line: StoredPlannedWorkoutLineDocument,
-) -> Result<PlannedWorkoutLine, PlannedWorkoutError> {
-    match line {
-        StoredPlannedWorkoutLineDocument::BlankLine => Ok(PlannedWorkoutLine::BlankLine),
-        StoredPlannedWorkoutLineDocument::Text { text } => {
-            Ok(PlannedWorkoutLine::Text(PlannedWorkoutText { text }))
-        }
-        StoredPlannedWorkoutLineDocument::Repeat { title, count } => {
-            let count = usize::try_from(count).map_err(|_| {
-                PlannedWorkoutError::Repository(
-                    "stored planned workout repeat count cannot be negative".to_string(),
-                )
-            })?;
-            Ok(PlannedWorkoutLine::Repeat(PlannedWorkoutRepeat {
-                title,
-                count,
-            }))
-        }
-        StoredPlannedWorkoutLineDocument::Step {
-            duration_seconds,
-            step_kind,
-            target,
-        } => Ok(PlannedWorkoutLine::Step(PlannedWorkoutStep {
-            duration_seconds,
-            kind: map_stored_step_kind(&step_kind)?,
-            target: map_stored_target_to_domain(target),
-        })),
-    }
-}
-
-fn map_domain_target_to_stored_target(
-    target: &PlannedWorkoutTarget,
-) -> StoredPlannedWorkoutTargetDocument {
-    match target {
-        PlannedWorkoutTarget::PercentFtp { min, max } => {
-            StoredPlannedWorkoutTargetDocument::PercentFtp {
-                min: *min,
-                max: *max,
-            }
-        }
-        PlannedWorkoutTarget::WattsRange { min, max } => {
-            StoredPlannedWorkoutTargetDocument::WattsRange {
-                min: *min,
-                max: *max,
-            }
-        }
-    }
-}
-
-fn map_stored_target_to_domain(target: StoredPlannedWorkoutTargetDocument) -> PlannedWorkoutTarget {
-    match target {
-        StoredPlannedWorkoutTargetDocument::PercentFtp { min, max } => {
-            PlannedWorkoutTarget::PercentFtp { min, max }
-        }
-        StoredPlannedWorkoutTargetDocument::WattsRange { min, max } => {
-            PlannedWorkoutTarget::WattsRange { min, max }
-        }
-    }
-}
-
-fn map_step_kind_to_str(kind: &PlannedWorkoutStepKind) -> &'static str {
-    match kind {
-        PlannedWorkoutStepKind::Steady => "steady",
-        PlannedWorkoutStepKind::Ramp => "ramp",
-    }
-}
-
-fn map_stored_step_kind(value: &str) -> Result<PlannedWorkoutStepKind, PlannedWorkoutError> {
-    match value {
-        "steady" => Ok(PlannedWorkoutStepKind::Steady),
-        "ramp" => Ok(PlannedWorkoutStepKind::Ramp),
-        other => Err(PlannedWorkoutError::Repository(format!(
-            "unknown stored planned workout step kind: {other}"
-        ))),
-    }
 }
 
 fn sort_planned_workouts(workouts: &mut [PlannedWorkout]) {
@@ -558,74 +354,10 @@ fn dedupe_prefer_imported_workouts(workouts: &mut Vec<PlannedWorkout>) {
 #[cfg(test)]
 mod tests {
     use crate::domain::planned_workouts::{
-        PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError, PlannedWorkoutLine,
-        PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
+        PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine, PlannedWorkoutText,
     };
 
-    use super::{
-        dedupe_prefer_imported_workouts, map_imported_document_to_domain,
-        map_imported_workout_to_document, sort_planned_workouts, ImportedPlannedWorkoutDocument,
-        StoredPlannedWorkoutContentDocument, StoredPlannedWorkoutLineDocument,
-        StoredPlannedWorkoutTargetDocument,
-    };
-
-    #[test]
-    fn imported_planned_workout_document_round_trip_preserves_fields() {
-        let workout = PlannedWorkout::new(
-            "planned-imported-1".to_string(),
-            "user-1".to_string(),
-            "2026-05-10".to_string(),
-            PlannedWorkoutContent {
-                lines: vec![
-                    PlannedWorkoutLine::Text(PlannedWorkoutText {
-                        text: "Warmup".to_string(),
-                    }),
-                    PlannedWorkoutLine::Step(PlannedWorkoutStep {
-                        duration_seconds: 600,
-                        kind: PlannedWorkoutStepKind::Steady,
-                        target: PlannedWorkoutTarget::PercentFtp {
-                            min: 55.0,
-                            max: 65.0,
-                        },
-                    }),
-                ],
-            },
-        )
-        .with_event_metadata(
-            Some("Imported Threshold".to_string()),
-            Some("Strong over-unders".to_string()),
-            Some("Ride".to_string()),
-        );
-
-        let mapped =
-            map_imported_document_to_domain(map_imported_workout_to_document(&workout)).unwrap();
-
-        assert_eq!(mapped, workout);
-    }
-
-    #[test]
-    fn imported_planned_workout_document_rejects_unknown_step_kind() {
-        let error = map_imported_document_to_domain(ImportedPlannedWorkoutDocument {
-            user_id: "user-1".to_string(),
-            planned_workout_id: "planned-1".to_string(),
-            date: "2026-05-10".to_string(),
-            rest_day: false,
-            rest_day_reason: None,
-            name: None,
-            description: None,
-            event_type: None,
-            workout: StoredPlannedWorkoutContentDocument {
-                lines: vec![StoredPlannedWorkoutLineDocument::Step {
-                    duration_seconds: 600,
-                    step_kind: "mystery".to_string(),
-                    target: StoredPlannedWorkoutTargetDocument::WattsRange { min: 180, max: 220 },
-                }],
-            },
-        })
-        .unwrap_err();
-
-        assert!(matches!(error, PlannedWorkoutError::Repository(_)));
-    }
+    use super::{dedupe_prefer_imported_workouts, sort_planned_workouts};
 
     #[test]
     fn sort_planned_workouts_orders_mixed_sources_by_date_then_id() {

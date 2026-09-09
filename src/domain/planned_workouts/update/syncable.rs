@@ -134,6 +134,9 @@ impl SyncablePlannedWorkout {
     }
 
     pub(super) fn minutes(&self) -> Result<i32, UpdatePlannedWorkoutError> {
+        if self.rest_day {
+            return Ok(0);
+        }
         let workout_text =
             crate::domain::intervals::serialize_planned_workout_for_intervals(&self.workout);
         let total_seconds = crate::domain::intervals::parse_workout_doc(Some(&workout_text), None)

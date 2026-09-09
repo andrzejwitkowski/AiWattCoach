@@ -203,4 +203,15 @@ impl PlannedWorkoutRepository for TestPlannedWorkoutRepository {
     > {
         unreachable!()
     }
+
+    fn delete_imported_for_user_date_keeping(
+        &self,
+        _user_id: &str,
+        _date: &str,
+        _keep_planned_workout_ids: Vec<String>,
+    ) -> crate::domain::planned_workouts::BoxFuture<
+        Result<u64, crate::domain::planned_workouts::PlannedWorkoutError>,
+    > {
+        unreachable!()
+    }
 }

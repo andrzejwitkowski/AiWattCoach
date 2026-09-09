@@ -945,6 +945,28 @@ impl PlannedWorkoutRepository for TestPlannedWorkoutRepository {
             Ok(workout)
         })
     }
+
+    fn delete_imported_for_user_date_keeping(
+        &self,
+        user_id: &str,
+        date: &str,
+        keep_planned_workout_ids: Vec<String>,
+    ) -> crate::domain::planned_workouts::BoxFuture<Result<u64, PlannedWorkoutError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let date = date.to_string();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            Ok(
+                crate::domain::planned_workouts::delete_imported_planned_workouts_in_memory(
+                    &mut stored,
+                    &user_id,
+                    &date,
+                    &keep_planned_workout_ids,
+                ),
+            )
+        })
+    }
 }
 
 #[derive(Clone)]
