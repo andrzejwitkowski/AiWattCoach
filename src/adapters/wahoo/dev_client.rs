@@ -10,10 +10,8 @@ const DEV_AUTH_CODE: &str = "dev-wahoo-auth";
 pub struct DevWahooOAuthClient;
 
 impl WahooOAuthPort for DevWahooOAuthClient {
-    fn build_authorize_url(&self, state: &str) -> Result<String, WahooError> {
-        Ok(format!(
-            "/api/wahoo/callback?state={state}&code={DEV_AUTH_CODE}"
-        ))
+    fn build_authorize_url(&self, _state: &str) -> Result<String, WahooError> {
+        Ok(format!("/api/wahoo/callback?code={DEV_AUTH_CODE}"))
     }
 
     fn exchange_code(&self, code: &str) -> BoxFuture<Result<WahooToken, WahooError>> {

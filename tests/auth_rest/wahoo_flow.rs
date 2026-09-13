@@ -63,9 +63,37 @@ async fn wahoo_callback_redirects_back_to_settings() {
         captured.lock().unwrap().clone(),
         Some((
             "user-1".to_string(),
-            "wahoo-state-1".to_string(),
+            Some("wahoo-state-1".to_string()),
             "oauth-code".to_string(),
         ))
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wahoo_callback_succeeds_when_state_query_absent() {
+    let wahoo_service = TestWahooService::default();
+    let captured = wahoo_service.last_finish_input.clone();
+    let app = auth_test_app_with_wahoo(TestIdentityService::default(), wahoo_service).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/wahoo/callback?code=oauth-code")
+                .header(header::COOKIE, "aiwattcoach_session=session-1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        response.headers().get(header::LOCATION).unwrap(),
+        "/settings?connected=wahoo"
+    );
+    assert_eq!(
+        captured.lock().unwrap().clone(),
+        Some(("user-1".to_string(), None, "oauth-code".to_string(),))
     );
 }
 

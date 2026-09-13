@@ -24,7 +24,7 @@ pub trait WahooUseCases: Send + Sync {
     fn finish_connect(
         &self,
         user_id: &str,
-        state: &str,
+        state: Option<&str>,
         code: &str,
     ) -> BoxFuture<Result<WahooAuthExchange, WahooError>>;
 
@@ -115,7 +115,7 @@ where
     fn finish_connect(
         &self,
         user_id: &str,
-        state: &str,
+        state: Option<&str>,
         code: &str,
     ) -> BoxFuture<Result<WahooAuthExchange, WahooError>> {
         self.as_ref().finish_connect(user_id, state, code)
@@ -338,14 +338,15 @@ where
     async fn finish_connect(
         &self,
         user_id: &str,
-        state: &str,
+        state: Option<&str>,
         code: &str,
     ) -> Result<WahooAuthExchange, WahooError> {
         let now = self.clock.now_epoch_seconds();
-        let state = self
-            .connect_states
-            .consume(state, user_id)
-            .await?
+        let pending = match state {
+            Some(state_id) => self.connect_states.consume(state_id, user_id).await?,
+            None => self.connect_states.consume_latest_for_user(user_id).await?,
+        };
+        let connect_state = pending
             .filter(|saved| !saved.is_expired(now))
             .ok_or(WahooError::InvalidConnectState)?;
         let token = self.client.exchange_code(code).await?;
@@ -354,11 +355,11 @@ where
             .get_authenticated_user(&token.access_token)
             .await?;
         let token = self
-            .persist_token(&state.user_id, token, Some(wahoo_user.id), true)
+            .persist_token(&connect_state.user_id, token, Some(wahoo_user.id), true)
             .await?;
 
         Ok(WahooAuthExchange {
-            redirect_to: sanitize_return_to(state.return_to)
+            redirect_to: sanitize_return_to(connect_state.return_to)
                 .unwrap_or_else(|| "/settings".to_string()),
             token,
         })
@@ -533,14 +534,18 @@ where
     fn finish_connect(
         &self,
         user_id: &str,
-        state: &str,
+        state: Option<&str>,
         code: &str,
     ) -> BoxFuture<Result<WahooAuthExchange, WahooError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
-        let state = state.to_string();
+        let state = state.map(str::to_string);
         let code = code.to_string();
-        Box::pin(async move { service.finish_connect(&user_id, &state, &code).await })
+        Box::pin(async move {
+            service
+                .finish_connect(&user_id, state.as_deref(), &code)
+                .await
+        })
     }
 
     fn ensure_token(&self, user_id: &str) -> BoxFuture<Result<WahooToken, WahooError>> {

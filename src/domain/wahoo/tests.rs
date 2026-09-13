@@ -186,6 +186,24 @@ impl WahooConnectStateRepository for InMemoryConnectStates {
             Ok(index.map(|position| items.remove(position)))
         })
     }
+
+    fn consume_latest_for_user(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Option<WahooConnectState>, WahooError>> {
+        let items = self.items.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let mut items = items.lock().unwrap();
+            let index = items
+                .iter()
+                .enumerate()
+                .filter(|(_, state)| state.user_id == user_id)
+                .max_by_key(|(_, state)| state.created_at_epoch_seconds)
+                .map(|(index, _)| index);
+            Ok(index.map(|position| items.remove(position)))
+        })
+    }
 }
 
 #[derive(Clone, Default)]
@@ -446,7 +464,7 @@ async fn finish_connect_rejects_state_owned_by_another_user() {
         .unwrap();
 
     let error = service
-        .finish_connect("user-2", "state-1", "oauth-code")
+        .finish_connect("user-2", Some("state-1"), "oauth-code")
         .await
         .unwrap_err();
 
@@ -526,7 +544,7 @@ async fn finish_connect_persists_wahoo_user_id() {
         .unwrap();
 
     service
-        .finish_connect("user-1", "state-1", "oauth-code")
+        .finish_connect("user-1", Some("state-1"), "oauth-code")
         .await
         .unwrap();
 
@@ -537,4 +555,93 @@ async fn finish_connect_persists_wahoo_user_id() {
         .expect("settings should be stored");
 
     assert_eq!(stored.wahoo.user_id, Some(60_462));
+}
+
+#[tokio::test]
+async fn finish_connect_without_state_uses_latest_pending_for_user() {
+    let settings = InMemorySettingsRepository::default();
+    let connect_states = InMemoryConnectStates::default();
+    let oauth = TestOAuth::default();
+    let service = WahooService::new(
+        settings.clone(),
+        connect_states.clone(),
+        oauth.clone(),
+        TestClock,
+        TestIds,
+    );
+
+    connect_states
+        .create(WahooConnectState::new(
+            "state-old".to_string(),
+            "user-1".to_string(),
+            Some("/settings?old=1".to_string()),
+            200,
+            90,
+        ))
+        .await
+        .unwrap();
+    connect_states
+        .create(WahooConnectState::new(
+            "state-new".to_string(),
+            "user-1".to_string(),
+            Some("/settings?latest=1".to_string()),
+            200,
+            100,
+        ))
+        .await
+        .unwrap();
+
+    let result = service
+        .finish_connect("user-1", None, "oauth-code")
+        .await
+        .unwrap();
+
+    assert_eq!(result.redirect_to, "/settings?latest=1");
+    assert_eq!(
+        *oauth.last_code.lock().unwrap(),
+        Some("oauth-code".to_string())
+    );
+    assert_eq!(connect_states.items.lock().unwrap().len(), 1);
+    assert_eq!(connect_states.items.lock().unwrap()[0].id, "state-old");
+
+    let stored = settings
+        .find_by_user_id("user-1")
+        .await
+        .unwrap()
+        .expect("settings should be stored");
+    assert_eq!(stored.wahoo.user_id, Some(60_462));
+}
+
+#[tokio::test]
+async fn finish_connect_without_state_rejects_expired_pending() {
+    let settings = InMemorySettingsRepository::default();
+    let connect_states = InMemoryConnectStates::default();
+    let oauth = TestOAuth::default();
+    let service = WahooService::new(
+        settings,
+        connect_states.clone(),
+        oauth.clone(),
+        TestClock,
+        TestIds,
+    );
+
+    connect_states
+        .create(WahooConnectState::new(
+            "state-expired".to_string(),
+            "user-1".to_string(),
+            Some("/settings".to_string()),
+            100,
+            50,
+        ))
+        .await
+        .unwrap();
+
+    let error = service
+        .finish_connect("user-1", None, "oauth-code")
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, WahooError::InvalidConnectState);
+    assert_eq!(*oauth.last_code.lock().unwrap(), None);
+    assert!(connect_states.items.lock().unwrap().is_empty());
 }

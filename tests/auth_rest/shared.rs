@@ -32,7 +32,7 @@ use mongodb::Client;
 pub(crate) type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 type BeginConnectInput = (String, Option<String>);
-type FinishConnectInput = (String, String, String);
+type FinishConnectInput = (String, Option<String>, String);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct WahooWebhookImportCall {
@@ -471,11 +471,14 @@ impl WahooUseCases for TestWahooService {
     fn finish_connect(
         &self,
         user_id: &str,
-        state: &str,
+        state: Option<&str>,
         code: &str,
     ) -> BoxFuture<Result<WahooAuthExchange, WahooError>> {
-        *self.last_finish_input.lock().unwrap() =
-            Some((user_id.to_string(), state.to_string(), code.to_string()));
+        *self.last_finish_input.lock().unwrap() = Some((
+            user_id.to_string(),
+            state.map(str::to_string),
+            code.to_string(),
+        ));
         let result = self.finish_result.clone();
         Box::pin(async move { result })
     }

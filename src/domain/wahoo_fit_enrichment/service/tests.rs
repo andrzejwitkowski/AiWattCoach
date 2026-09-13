@@ -342,7 +342,7 @@ impl WahooUseCases for FakeWahooService {
     fn finish_connect(
         &self,
         _user_id: &str,
-        _state: &str,
+        _state: Option<&str>,
         _code: &str,
     ) -> WahooBoxFuture<Result<WahooAuthExchange, WahooError>> {
         Box::pin(async { Err(WahooError::NotConnected) })
