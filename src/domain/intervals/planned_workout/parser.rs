@@ -86,15 +86,31 @@ pub fn serialize_planned_workout(workout: &PlannedWorkout) -> String {
         .join("\n")
 }
 
+pub fn parse_planned_workout_day(
+    date: &str,
+    body: &str,
+) -> Result<PlannedWorkoutDay, PlannedWorkoutParseError> {
+    let lines = body
+        .lines()
+        .map(|line| line.trim().to_string())
+        .collect::<Vec<_>>();
+    parse_day(date, &lines)
+}
+
 fn parse_day(date: &str, lines: &[String]) -> Result<PlannedWorkoutDay, PlannedWorkoutParseError> {
-    if lines.is_empty() {
+    let meaningful = lines
+        .iter()
+        .filter(|line| !line.is_empty())
+        .cloned()
+        .collect::<Vec<_>>();
+    if meaningful.is_empty() {
         return Err(PlannedWorkoutParseError::new(format!(
             "failed to parse day {date}: day body is empty"
         )));
     }
 
-    if lines.len() == 1 {
-        if let Some(rest_day_reason) = parse_rest_day_reason(&lines[0]) {
+    if meaningful.len() == 1 {
+        if let Some(rest_day_reason) = parse_rest_day_reason(&meaningful[0]) {
             return Ok(PlannedWorkoutDay::rest(date.to_string(), rest_day_reason));
         }
     }
@@ -412,6 +428,14 @@ mod tests {
                 },
             })]
         );
+    }
+
+    #[test]
+    fn parse_planned_workout_day_recognizes_rest_day_line() {
+        let day = parse_planned_workout_day("2026-09-10", "Rest Day: easy recovery")
+            .expect("rest day should parse");
+        assert!(day.is_rest_day());
+        assert_eq!(day.rest_day_reason(), Some("easy recovery"));
     }
 
     #[test]

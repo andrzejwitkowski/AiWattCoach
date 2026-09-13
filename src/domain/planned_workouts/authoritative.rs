@@ -89,6 +89,19 @@ where
     ) -> BoxFuture<Result<PlannedWorkout, PlannedWorkoutError>> {
         self.planned_workouts.upsert(workout)
     }
+
+    fn delete_imported_for_user_date_keeping(
+        &self,
+        user_id: &str,
+        date: &str,
+        keep_planned_workout_ids: Vec<String>,
+    ) -> BoxFuture<Result<u64, PlannedWorkoutError>> {
+        self.planned_workouts.delete_imported_for_user_date_keeping(
+            user_id,
+            date,
+            keep_planned_workout_ids,
+        )
+    }
 }
 
 impl<Planned, Completed, Links> AuthoritativePlannedWorkoutRepository<Planned, Completed, Links>

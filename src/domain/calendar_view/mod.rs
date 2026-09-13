@@ -23,7 +23,7 @@ pub use model::{
 };
 pub use orphan_race_cleanup::{NoopOrphanRaceProjectionCleanup, OrphanRaceProjectionCleanupPort};
 pub use planned_candidates::{
-    select_visible_planned_workout_candidates,
+    imported_keep_ids_by_date_for_rewrite, select_visible_planned_workout_candidates,
     select_visible_planned_workout_candidates_with_sync_states, CalendarPlannedSyncKey,
     CalendarPlannedWorkoutCandidate, CalendarPlannedWorkoutOrigin, CalendarPlannedWorkoutSource,
 };

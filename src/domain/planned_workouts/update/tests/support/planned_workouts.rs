@@ -1,7 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use crate::domain::planned_workouts::{
-    BoxFuture, PlannedWorkout, PlannedWorkoutError, PlannedWorkoutRepository,
+    delete_imported_planned_workouts_in_memory, BoxFuture, PlannedWorkout, PlannedWorkoutError,
+    PlannedWorkoutRepository,
 };
 
 #[derive(Clone, Default)]
@@ -126,6 +127,38 @@ impl PlannedWorkoutRepository for RecordingPlannedWorkoutRepository {
             });
             stored.push(workout.clone());
             Ok(workout)
+        })
+    }
+
+    fn delete_imported_for_user_date_keeping(
+        &self,
+        user_id: &str,
+        date: &str,
+        keep_planned_workout_ids: Vec<String>,
+    ) -> BoxFuture<Result<u64, PlannedWorkoutError>> {
+        let stored = self.stored.clone();
+        let operation_log = self.operation_log.clone();
+        let shared_log = self.shared_log.clone();
+        let user_id = user_id.to_string();
+        let date = date.to_string();
+        Box::pin(async move {
+            operation_log
+                .lock()
+                .expect("planned workouts mutex poisoned")
+                .push("planned_workouts.delete_imported_for_user_date_keeping".to_string());
+            if let Some(shared_log) = shared_log {
+                shared_log
+                    .lock()
+                    .expect("shared log mutex poisoned")
+                    .push("planned_workouts.delete_imported_for_user_date_keeping".to_string());
+            }
+            let mut stored = stored.lock().expect("planned workouts mutex poisoned");
+            Ok(delete_imported_planned_workouts_in_memory(
+                &mut stored,
+                &user_id,
+                &date,
+                &keep_planned_workout_ids,
+            ))
         })
     }
 

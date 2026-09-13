@@ -10,6 +10,7 @@ use sha2::Digest;
 
 pub use authoritative::AuthoritativePlannedWorkoutRepository;
 pub use model::{
+    delete_imported_planned_workouts_in_memory, is_imported_row_removed_for_user_date,
     PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError, PlannedWorkoutLine,
     PlannedWorkoutRepeat, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
     PlannedWorkoutText,

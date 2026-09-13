@@ -256,6 +256,17 @@ impl PlannedWorkoutRepository for InMemoryPlannedWorkoutRepository {
     > {
         Box::pin(async move { Ok(workout) })
     }
+
+    fn delete_imported_for_user_date_keeping(
+        &self,
+        _user_id: &str,
+        _date: &str,
+        _keep_planned_workout_ids: Vec<String>,
+    ) -> aiwattcoach::domain::planned_workouts::BoxFuture<
+        Result<u64, aiwattcoach::domain::planned_workouts::PlannedWorkoutError>,
+    > {
+        Box::pin(async { Ok(0) })
+    }
 }
 
 #[derive(Clone, Default)]

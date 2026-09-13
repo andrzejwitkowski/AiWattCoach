@@ -14,6 +14,7 @@ mod error;
 pub mod external_observations;
 pub mod external_sync_states;
 pub mod ftp_history;
+mod imported_planned_workouts;
 pub mod llm_context_cache;
 pub mod llm_reply_operations;
 pub mod login_state;

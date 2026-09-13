@@ -3,8 +3,8 @@ mod parser;
 use std::{error::Error, fmt};
 
 pub use parser::{
-    parse_planned_workout, parse_planned_workout_days, serialize_planned_workout,
-    serialize_planned_workout_for_intervals,
+    parse_planned_workout, parse_planned_workout_day, parse_planned_workout_days,
+    serialize_planned_workout, serialize_planned_workout_for_intervals,
 };
 
 pub const DEFAULT_PLANNED_WORKOUT_NAME: &str = "Planned workout";
