@@ -93,7 +93,7 @@ fn compact_forward_load(content: &str) -> String {
         .unwrap_or(&[]);
 
     let mut min_tsb: Option<(f64, &str)> = None;
-    let mut race_day: Option<(f64, &str)> = None;
+    let mut race_day: Option<(f64, &str, bool)> = None;
     for day in days {
         let Some(date) = day.get("date").and_then(|d| d.as_str()) else {
             continue;
@@ -106,16 +106,19 @@ fn compact_forward_load(content: &str) -> String {
         }
         let source = day.get("source").and_then(|s| s.as_str()).unwrap_or("");
         if source.contains("future_event") {
-            race_day = Some((tsb, date));
+            let unavailable = day.get("tss_source").and_then(|s| s.as_str()) == Some("none");
+            race_day = Some((tsb, date, unavailable));
         }
     }
 
     let min_bit = min_tsb
         .map(|(tsb, date)| format!("tsb_min={tsb}@{date}"))
         .unwrap_or_else(|| "tsb_min=?".to_string());
-    let race_bit = race_day
-        .map(|(tsb, date)| format!("race_day_tsb={tsb}@{date}"))
-        .unwrap_or_else(|| "race_day_tsb=n/a".to_string());
+    let race_bit = match race_day {
+        Some((_, date, true)) => format!("race_day_tsb=unavailable@{date} (tss_source=none)"),
+        Some((tsb, date, false)) => format!("race_day_tsb={tsb}@{date}"),
+        None => "race_day_tsb=n/a".to_string(),
+    };
     let trend_bit = match (days.first(), days.last()) {
         (Some(first), Some(last)) => format!(
             "ctl {}→{} atl {}→{}",
@@ -127,8 +130,38 @@ fn compact_forward_load(content: &str) -> String {
         _ => "ctl/atl trend=n/a".to_string(),
     };
 
+    let notes_bit = value
+        .get("notes")
+        .and_then(|n| n.as_array())
+        .filter(|notes| !notes.is_empty())
+        .map(|notes| {
+            let joined = notes
+                .iter()
+                .filter_map(|n| n.as_str())
+                .take(2)
+                .collect::<Vec<_>>()
+                .join("; ");
+            format!("; notes=[{joined}]")
+        })
+        .unwrap_or_default();
+
     truncate_evidence_section(&format!(
-        "{baseline_bits}; {min_bit}; {race_bit}; {trend_bit}"
+        "{baseline_bits}; {min_bit}; {race_bit}; {trend_bit}{notes_bit}"
+    ))
+}
+
+fn compact_insufficient_data(value: &serde_json::Value) -> Option<String> {
+    let status = value.get("status").and_then(|s| s.as_str())?;
+    if status != "insufficient_data" {
+        return None;
+    }
+    let reason = value
+        .get("reason")
+        .and_then(|r| r.as_str())
+        .unwrap_or("unknown");
+    let date = value.get("date").and_then(|d| d.as_str()).unwrap_or("?");
+    Some(format!(
+        "status=insufficient_data; date={date}; reason={reason}"
     ))
 }
 
@@ -136,6 +169,10 @@ fn compact_power_curve(content: &str) -> String {
     let Some(value) = parse_evidence_json(content) else {
         return truncate_evidence_section(content);
     };
+
+    if let Some(insufficient) = compact_insufficient_data(&value) {
+        return truncate_evidence_section(&insufficient);
+    }
 
     let date = value.get("date").and_then(|d| d.as_str()).unwrap_or("?");
     let points = value
@@ -180,6 +217,10 @@ fn compact_w_prime(content: &str) -> String {
     let Some(value) = parse_evidence_json(content) else {
         return truncate_evidence_section(content);
     };
+
+    if let Some(insufficient) = compact_insufficient_data(&value) {
+        return truncate_evidence_section(&insufficient);
+    }
 
     let date = value.get("date").and_then(|d| d.as_str()).unwrap_or("?");
     let summary = value.get("summary");
@@ -337,5 +378,49 @@ mod tests {
         let (assistant, tool) = tool_pair("x", "simulate_forward_load", "not-json-but-useful");
         let evidence = evidence_from_transcript(&[assistant, tool]);
         assert_eq!(evidence.load.as_deref(), Some("not-json-but-useful"));
+    }
+
+    #[test]
+    fn compact_marks_unknown_race_tss_as_unavailable() {
+        let (assistant, tool) = tool_pair(
+            "1",
+            "simulate_forward_load",
+            r#"{"baseline":{"ctl":50,"atl":40,"tsb":10},"days":[{"date":"2026-05-12","ctl":52,"atl":48,"tsb":-2,"source":"future_event","tss_source":"none"}],"notes":["2026-05-12: race TSS unknown; TSB shown assumes zero race load"]}"#,
+        );
+        let evidence = evidence_from_transcript(&[assistant, tool]);
+        let load = evidence.load.as_deref().unwrap();
+        assert!(load.contains("race_day_tsb=unavailable@2026-05-12 (tss_source=none)"));
+        assert!(load.contains("race TSS unknown"));
+    }
+
+    #[test]
+    fn compact_insufficient_data_power_and_w_prime_are_citable() {
+        let (a1, t1) = tool_pair(
+            "1",
+            "selected_workout_power_curve",
+            r#"{"status":"insufficient_data","reason":"no watts power stream in workout details","date":"2026-05-05","workout_id":"cw-1"}"#,
+        );
+        let (a2, t2) = tool_pair(
+            "2",
+            "get_w_prime_balance",
+            r#"{"status":"insufficient_data","reason":"no valid power samples available","date":"2026-05-05","workout_id":"cw-1"}"#,
+        );
+        let evidence = evidence_from_transcript(&[a1, t1, a2, t2]);
+        assert!(evidence
+            .power_curve
+            .as_ref()
+            .unwrap()
+            .contains("status=insufficient_data"));
+        assert!(evidence
+            .power_curve
+            .as_ref()
+            .unwrap()
+            .contains("no watts power stream"));
+        assert!(evidence
+            .w_prime
+            .as_ref()
+            .unwrap()
+            .contains("status=insufficient_data"));
+        assert!(evidence.load.is_none());
     }
 }

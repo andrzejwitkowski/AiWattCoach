@@ -690,6 +690,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 SystemClock,
             )
             .with_data_port(get_selected_workout_data_port.clone())
+            .with_settings_service(settings_service.clone())
             .with_plan_quality_evaluator_config(workout_llm_config_provider.clone()),
             TrainingPlanWorkoutSummaryAdapter::new(workout_summary_direct_service.clone()),
             SystemClock,

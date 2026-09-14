@@ -44,7 +44,7 @@ impl LlmTool for WPrimeBalance {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Compute W' (W-prime) balance for a completed workout. Tracks anaerobic work capacity depletion and recovery for each second using the Skiba differential model. When power exceeds Critical Power, W' depletes linearly; when power drops below CP, W' recovers exponentially. Returns time-series balance data and summary statistics including time spent at various depletion levels. Only available for completed workouts with power data.".to_string(),
+            description: "Compute W' (W-prime) balance for a completed workout. Tracks anaerobic work capacity depletion and recovery for each second using the Skiba differential model. When power exceeds Critical Power, W' depletes linearly; when power drops below CP, W' recovers exponentially. Returns time-series balance data and summary statistics including time spent at various depletion levels. Only available for completed workouts with power data. When power data is missing, returns status=insufficient_data with a reason instead of inventing a balance series.".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,
@@ -109,6 +109,16 @@ impl LlmTool for WPrimeBalance {
     }
 }
 
+fn insufficient_data_response(date: &str, workout_id: &str, reason: impl Into<String>) -> String {
+    json!({
+        "status": "insufficient_data",
+        "reason": reason.into(),
+        "date": date,
+        "workout_id": workout_id,
+    })
+    .to_string()
+}
+
 async fn execute_w_prime_balance(arguments_json: &str, context: &ToolExecutionContext) -> String {
     let args = match parse_args(arguments_json) {
         Ok(args) => args,
@@ -136,37 +146,27 @@ async fn execute_w_prime_balance(arguments_json: &str, context: &ToolExecutionCo
     };
 
     if workout.details_unavailable_reason.is_some() {
-        return json!({
-            "error": "W' balance computation skipped",
-            "reason": "completed workout details are unavailable",
-            "date": args.date,
-            "workout_id": workout.completed_workout_id,
-        })
-        .to_string();
+        return insufficient_data_response(
+            &args.date,
+            &workout.completed_workout_id,
+            "completed workout details are unavailable",
+        );
     }
 
     let power_samples = match extract_power_samples(&workout) {
         Ok(samples) => samples,
         Err(reason) => {
-            return json!({
-                "error": "W' balance computation skipped",
-                "reason": reason,
-                "date": args.date,
-                "workout_id": workout.completed_workout_id,
-            })
-            .to_string();
+            return insufficient_data_response(&args.date, &workout.completed_workout_id, reason);
         }
     };
 
     let valid_power_samples = power_samples.iter().filter(|v| v.is_some()).count();
     if valid_power_samples == 0 {
-        return json!({
-            "error": "W' balance computation skipped",
-            "reason": "no valid power samples available",
-            "date": args.date,
-            "workout_id": workout.completed_workout_id,
-        })
-        .to_string();
+        return insufficient_data_response(
+            &args.date,
+            &workout.completed_workout_id,
+            "no valid power samples available",
+        );
     }
 
     let (cp_watts, cp_source) = estimate_cp(&args, context);

@@ -140,6 +140,21 @@ where
         max_loops: u32,
         pass_score: u8,
     ) -> Result<bool, TrainingPlanError> {
+        let availability_summary = match self
+            .generator
+            .plan_quality_availability_summary(identity.user_id)
+            .await
+        {
+            Ok(summary) => summary,
+            Err(error) => {
+                tracing::warn!(
+                    operation_key = %operation.operation_key,
+                    error = %error,
+                    "plan quality availability summary failed; shipping best available draft"
+                );
+                return Ok(false);
+            }
+        };
         let mut accepted = false;
         for attempt in start_attempt..=max_loops {
             let evidence = extract_plan_quality_evidence(operation);
@@ -153,6 +168,7 @@ where
                     planning_context: planning.planning_context.as_ref(),
                     draft_plan_text,
                     evidence: evidence.as_ref(),
+                    availability_summary: Some(availability_summary.as_str()),
                 })
                 .await
             {

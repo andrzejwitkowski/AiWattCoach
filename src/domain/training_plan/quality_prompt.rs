@@ -1,3 +1,5 @@
+use chrono::{Datelike, Duration, NaiveDate};
+
 use crate::domain::{
     llm::{build_chat_request, LlmChatMessage, LlmChatRequest, LlmChatRequestInput, LlmToolChoice},
     workout_summary::WorkoutRecap,
@@ -16,6 +18,10 @@ Scoring rubric (use the full range; 7 is not a default):\n\
 - 9-10: reserved for plans where the evidence block shows both a defensible load trajectory and session-level specificity that matches the athlete's discipline and race priority, with no unaddressed gap.\n\
 \n\
 Anti-collapse: use the full 1-10 range. Reserve 8+ for drafts whose claims the evidence block confirms. If a draft satisfies every must-have and its load claims are verified, score it 8 or higher.\n\
+\n\
+Unavailable evidence is not a plan fault: If the evidence block or the draft states that a datum is unavailable and gives the reason (no race TSS, no power samples / insufficient data, no executed intervals), do NOT deduct for the missing datum. Score how the plan handles that uncertainty: conservative targets with a stated rationale are acceptable, and such a draft can score 8 or higher.\n\
+\n\
+Treat availability lines in the evidence block as authoritative constraints. A rest day on an unavailable weekday is not a conflict with the recap.\n\
 \n\
 In raise_to_next, state the single highest-leverage gap as one imperative sentence naming the concrete change that would move the draft up one band (actionable; do not restate the critique).";
 
@@ -38,16 +44,27 @@ pub struct PlanQualityEvaluationInput<'a> {
     pub planning_context: Option<&'a TrainingPlanPlanningContext>,
     pub draft_plan_text: &'a str,
     pub evidence: Option<&'a PlanQualityEvidence>,
+    /// Date-anchored availability constraints for the evaluation window.
+    pub availability_summary: Option<&'a str>,
 }
 
 pub fn plan_quality_evaluator_rubric() -> &'static str {
     PLAN_QUALITY_EVALUATOR_RUBRIC
 }
 
-pub fn format_plan_quality_evidence(evidence: Option<&PlanQualityEvidence>) -> String {
+pub fn format_plan_quality_evidence(
+    evidence: Option<&PlanQualityEvidence>,
+    availability_summary: Option<&str>,
+) -> String {
+    let availability_line = match availability_summary.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(summary) => format!("\n{summary}"),
+        None => String::new(),
+    };
+
     let Some(evidence) = evidence else {
-        return "Evidence: none (no tool output captured for this draft; do not award 8+ for load claims)."
-            .to_string();
+        return format!(
+            "Evidence: none (no tool output captured for this draft; do not award 8+ for unverified load claims that tools never ran).{availability_line}"
+        );
     };
 
     let mut missing = Vec::new();
@@ -67,7 +84,8 @@ pub fn format_plan_quality_evidence(evidence: Option<&PlanQualityEvidence>) -> S
     };
 
     // Budget fields so labels + missing + three sections always fit the block cap.
-    let overhead = EVIDENCE_BLOCK_LABEL_OVERHEAD + missing_line.chars().count();
+    let overhead =
+        EVIDENCE_BLOCK_LABEL_OVERHEAD + missing_line.chars().count() + availability_line.chars().count();
     let field_budget = EVIDENCE_BLOCK_MAX_CHARS.saturating_sub(overhead).max(3) / 3;
     let load = truncate_snippet(field_or_missing(evidence.load.as_deref()), field_budget);
     let power_curve = truncate_snippet(
@@ -81,7 +99,7 @@ pub fn format_plan_quality_evidence(evidence: Option<&PlanQualityEvidence>) -> S
 forward_load: {load}\n\
 power_curve: {power_curve}\n\
 w_prime: {w_prime}\n\
-missing: {missing_line}"
+missing: {missing_line}{availability_line}"
     )
 }
 
@@ -96,10 +114,11 @@ pub fn assemble_plan_quality_evaluation_request(
     planning_context: Option<&TrainingPlanPlanningContext>,
     draft_plan_text: &str,
     evidence: Option<&PlanQualityEvidence>,
+    availability_summary: Option<&str>,
 ) -> LlmChatRequest {
     let planning_summary = planning_context_summary(planning_context);
     let recap_snippet = truncate_snippet(&workout_recap.text, 800);
-    let evidence_block = format_plan_quality_evidence(evidence);
+    let evidence_block = format_plan_quality_evidence(evidence, availability_summary);
     let user_content = format!(
         "saved_at_epoch_seconds={saved_at_epoch_seconds}\n\nWorkout recap snippet:\n{recap_snippet}\n\nPlanning context summary:\n{planning_summary}\n\n{evidence_block}\n\nDraft plan:\n{draft_plan_text}\n\nReturn JSON only."
     );
@@ -119,6 +138,71 @@ pub fn assemble_plan_quality_evaluation_request(
     });
     request.tool_choice = LlmToolChoice::None;
     request
+}
+
+pub fn format_plan_quality_availability(
+    today: &str,
+    availability_configured: bool,
+    weekly_availability: &[crate::domain::training_context::WeeklyAvailabilityContext],
+    day_count: i64,
+) -> String {
+    if !availability_configured {
+        return "availability: not configured".to_string();
+    }
+
+    let Some(today_date) = NaiveDate::parse_from_str(today, "%Y-%m-%d").ok() else {
+        return "availability: not configured".to_string();
+    };
+
+    let by_weekday: std::collections::HashMap<_, _> = weekly_availability
+        .iter()
+        .map(|day| (day.weekday, day))
+        .collect();
+
+    let mut parts = Vec::new();
+    for offset in 1..=day_count {
+        let date = today_date + Duration::days(offset);
+        let settings_weekday = chrono_weekday_to_settings(date.weekday());
+        let label = settings_weekday_label(settings_weekday);
+        let date_key = date.format("%Y-%m-%d").to_string();
+        let part = match by_weekday.get(&settings_weekday) {
+            Some(day) if day.available => match day.max_duration_minutes {
+                Some(max) => format!("{date_key} available max={max}m ({label})"),
+                None => format!("{date_key} available ({label})"),
+            },
+            _ => format!("{date_key} unavailable ({label})"),
+        };
+        parts.push(part);
+    }
+
+    format!("availability: {}", parts.join("; "))
+}
+
+fn chrono_weekday_to_settings(weekday: chrono::Weekday) -> crate::domain::settings::Weekday {
+    use crate::domain::settings::Weekday as S;
+    use chrono::Weekday as C;
+    match weekday {
+        C::Mon => S::Mon,
+        C::Tue => S::Tue,
+        C::Wed => S::Wed,
+        C::Thu => S::Thu,
+        C::Fri => S::Fri,
+        C::Sat => S::Sat,
+        C::Sun => S::Sun,
+    }
+}
+
+fn settings_weekday_label(weekday: crate::domain::settings::Weekday) -> &'static str {
+    use crate::domain::settings::Weekday as S;
+    match weekday {
+        S::Mon => "Monday",
+        S::Tue => "Tuesday",
+        S::Wed => "Wednesday",
+        S::Thu => "Thursday",
+        S::Fri => "Friday",
+        S::Sat => "Saturday",
+        S::Sun => "Sunday",
+    }
 }
 
 fn planning_context_summary(planning_context: Option<&TrainingPlanPlanningContext>) -> String {
@@ -216,8 +300,8 @@ mod tests {
     use crate::domain::workout_summary::WorkoutRecap;
 
     use super::{
-        assemble_plan_quality_evaluation_request, format_plan_quality_evidence,
-        format_quality_feedback, plan_quality_attempt_message,
+        assemble_plan_quality_evaluation_request, format_plan_quality_availability,
+        format_plan_quality_evidence, format_quality_feedback, plan_quality_attempt_message,
         plan_quality_finished_accepted_message, plan_quality_finished_best_message,
         PlanQualityEvidence, EVIDENCE_BLOCK_MAX_CHARS, EVIDENCE_SECTION_MAX_CHARS,
     };
@@ -282,12 +366,14 @@ mod tests {
             None,
             "draft",
             None,
+            None,
         );
         let system = &request.system_prompt;
         assert!(system.contains("1-3:"));
         assert!(system.contains("4-5:"));
         assert!(system.contains("6-7:"));
         assert!(system.contains("use the full"));
+        assert!(system.contains("Unavailable evidence is not a plan fault"));
         assert!(system.contains("raise_to_next"));
         assert!(!system.contains(RACING_STRATEGIST_APP_EVIDENCE_CONTRACT));
         assert!(!system.contains(RACING_STRATEGIST_OPERATIONAL_GUIDELINES));
@@ -296,15 +382,15 @@ mod tests {
     #[test]
     fn evidence_none_and_partial_blocks_are_deterministic() {
         assert_eq!(
-            format_plan_quality_evidence(None),
-            "Evidence: none (no tool output captured for this draft; do not award 8+ for load claims)."
+            format_plan_quality_evidence(None, None),
+            "Evidence: none (no tool output captured for this draft; do not award 8+ for unverified load claims that tools never ran)."
         );
         let partial = PlanQualityEvidence {
             load: Some("tsb_min=-12@2026-05-10".to_string()),
             power_curve: None,
             w_prime: None,
         };
-        let rendered = format_plan_quality_evidence(Some(&partial));
+        let rendered = format_plan_quality_evidence(Some(&partial), None);
         assert!(rendered.contains("forward_load: tsb_min=-12@2026-05-10"));
         assert!(rendered.contains("missing: selected_workout_power_curve, get_w_prime_balance"));
         assert!(rendered.starts_with("Evidence (tool-verified facts"));
@@ -318,7 +404,7 @@ mod tests {
             power_curve: Some(long.clone()),
             w_prime: Some(long),
         };
-        let rendered = format_plan_quality_evidence(Some(&evidence));
+        let rendered = format_plan_quality_evidence(Some(&evidence), None);
         assert!(rendered.chars().count() <= EVIDENCE_BLOCK_MAX_CHARS);
         assert!(rendered.contains("forward_load:"));
         assert!(rendered.contains("power_curve:"));
@@ -343,11 +429,42 @@ mod tests {
             None,
             "MY_DRAFT",
             Some(&evidence),
+            Some("availability: 2026-09-14 unavailable (Monday)"),
         );
         let user = &request.conversation[0].content;
         let evidence_at = user.find("Evidence (tool-verified facts").unwrap();
         let draft_at = user.find("Draft plan:\nMY_DRAFT").unwrap();
         assert!(evidence_at < draft_at);
         assert!(user.contains("missing: get_w_prime_balance"));
+        assert!(user.contains("availability: 2026-09-14 unavailable (Monday)"));
+    }
+
+    #[test]
+    fn format_plan_quality_availability_anchors_weekdays_to_dates() {
+        use crate::domain::settings::Weekday;
+        use crate::domain::training_context::WeeklyAvailabilityContext;
+
+        let days = vec![
+            WeeklyAvailabilityContext {
+                weekday: Weekday::Mon,
+                available: false,
+                max_duration_minutes: None,
+            },
+            WeeklyAvailabilityContext {
+                weekday: Weekday::Tue,
+                available: true,
+                max_duration_minutes: Some(90),
+            },
+        ];
+        // 2026-09-13 is Sunday; next day is Monday 2026-09-14.
+        let summary = format_plan_quality_availability("2026-09-13", true, &days, 2);
+        assert_eq!(
+            summary,
+            "availability: 2026-09-14 unavailable (Monday); 2026-09-15 available max=90m (Tuesday)"
+        );
+        assert_eq!(
+            format_plan_quality_availability("2026-09-13", false, &days, 2),
+            "availability: not configured"
+        );
     }
 }

@@ -14,17 +14,19 @@ use crate::domain::{
         run_tool_loop_with_checkpoint, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
         LlmToolLoopOutput, LlmToolLoopState, ToolExecutionContext, ToolLoopCheckpoint, ToolScope,
     },
-    training_context::TrainingContextBuilder,
+    settings::UserSettingsUseCases,
+    training_context::{TrainingContextBuilder, WeeklyAvailabilityContext},
     training_plan::{
         assemble_plan_quality_evaluation_request, assemble_training_plan_initial_window_request,
-        latest_training_plan_user_message_epoch_seconds, parse_training_plan_llm_envelope,
-        planning_conversation_messages, should_retry_training_plan_llm_envelope_repair,
-        training_plan_correction_system_prompt, training_plan_llm_envelope_json_schema,
-        training_plan_output_grammar, training_plan_stable_context,
-        training_plan_tool_context_today, PlanQualityEvaluation, PlanQualityEvaluationInput,
-        PlanQualityEvaluatorLlmConfigPort, TrainingPlanError, TrainingPlanGenerator,
-        TrainingPlanInitialWindowPromptInput, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
-        TrainingPlanToolLoopCheckpoint, WorkoutPlanningLlmConfigPort,
+        format_plan_quality_availability, latest_training_plan_user_message_epoch_seconds,
+        parse_training_plan_llm_envelope, planning_conversation_messages,
+        should_retry_training_plan_llm_envelope_repair, training_plan_correction_system_prompt,
+        training_plan_llm_envelope_json_schema, training_plan_output_grammar,
+        training_plan_stable_context, training_plan_tool_context_today, PlanQualityEvaluation,
+        PlanQualityEvaluationInput, PlanQualityEvaluatorLlmConfigPort, TrainingPlanError,
+        TrainingPlanGenerator, TrainingPlanInitialWindowPromptInput, TrainingPlanPhaseOutput,
+        TrainingPlanPlanningContext, TrainingPlanToolLoopCheckpoint, WorkoutPlanningLlmConfigPort,
+        TRAINING_PLAN_WINDOW_DAY_COUNT,
     },
     workout_summary::WorkoutRecap,
 };
@@ -40,6 +42,7 @@ where
     llm_config_provider: Arc<dyn WorkoutPlanningLlmConfigPort>,
     plan_quality_config_provider: Option<Arc<dyn PlanQualityEvaluatorLlmConfigPort>>,
     training_context_builder: Arc<dyn TrainingContextBuilder>,
+    settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
     clock: Time,
 }
@@ -59,6 +62,7 @@ where
             llm_config_provider,
             plan_quality_config_provider: None,
             training_context_builder,
+            settings_service: None,
             data_port: None,
             clock,
         }
@@ -66,6 +70,14 @@ where
 
     pub fn with_data_port(mut self, data_port: Arc<dyn GetSelectedWorkoutDataPort>) -> Self {
         self.data_port = Some(data_port);
+        self
+    }
+
+    pub fn with_settings_service(
+        mut self,
+        settings_service: Arc<dyn UserSettingsUseCases>,
+    ) -> Self {
+        self.settings_service = Some(settings_service);
         self
     }
 
@@ -210,6 +222,7 @@ where
         let planning_context = input.planning_context.cloned();
         let draft_plan_text = input.draft_plan_text.to_string();
         let evidence = input.evidence.cloned();
+        let availability_summary = input.availability_summary.map(str::to_string);
 
         Box::pin(async move {
             let config_provider = plan_quality_config_provider.ok_or_else(|| {
@@ -227,6 +240,7 @@ where
                 planning_context.as_ref(),
                 &draft_plan_text,
                 evidence.as_ref(),
+                availability_summary.as_deref(),
             );
             let response = llm_chat_port
                 .chat(config, request)
@@ -234,6 +248,50 @@ where
                 .map_err(map_llm_error)?;
             let text = require_assistant_text(&response)?;
             parse_plan_quality_evaluation_json(&text)
+        })
+    }
+
+    fn plan_quality_availability_summary(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<String, TrainingPlanError>> {
+        let settings_service = self.settings_service.clone();
+        let clock = self.clock.clone();
+        let user_id = user_id.to_string();
+
+        Box::pin(async move {
+            let Some(settings_service) = settings_service else {
+                return Ok("availability: not configured".to_string());
+            };
+
+            let settings = settings_service
+                .get_settings(&user_id)
+                .await
+                .map_err(|error| TrainingPlanError::Unavailable(error.to_string()))?;
+
+            let today = clock_today_date(&clock)?;
+            let availability_configured = settings.availability.is_configured();
+            let weekly_availability = if availability_configured {
+                settings
+                    .availability
+                    .days
+                    .into_iter()
+                    .map(|day| WeeklyAvailabilityContext {
+                        weekday: day.weekday,
+                        available: day.available,
+                        max_duration_minutes: day.max_duration_minutes,
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+
+            Ok(format_plan_quality_availability(
+                &today,
+                availability_configured,
+                &weekly_availability,
+                TRAINING_PLAN_WINDOW_DAY_COUNT as i64,
+            ))
         })
     }
 }
@@ -450,6 +508,16 @@ where
 
 fn map_llm_error(error: LlmError) -> TrainingPlanError {
     TrainingPlanError::Unavailable(error.to_string())
+}
+
+fn clock_today_date(clock: &impl Clock) -> Result<String, TrainingPlanError> {
+    use chrono::{TimeZone, Utc};
+    Utc.timestamp_opt(clock.now_epoch_seconds(), 0)
+        .single()
+        .map(|dt| dt.date_naive().format("%Y-%m-%d").to_string())
+        .ok_or_else(|| {
+            TrainingPlanError::Unavailable("invalid generator clock epoch for availability".into())
+        })
 }
 
 fn map_phase_checkpoint(checkpoint: TrainingPlanToolLoopCheckpoint) -> ToolLoopCheckpoint {
