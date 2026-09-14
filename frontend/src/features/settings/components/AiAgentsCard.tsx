@@ -27,6 +27,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     workoutChatProviderOption,
     workoutPlanningProviderOption,
     mesoProviderOption,
+    planQualityEvaluatorProviderOption,
     updateDraft,
     updateProvider,
     updateOverrideProvider,
@@ -115,6 +116,40 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         }
         onModelChange={(value) => updateDraft('mesoCycleModel', value)}
       />
+
+      <OptionalProviderOverrideFields
+        title="Plan quality evaluator"
+        description="Optional override for training-plan quality evaluation. Leave empty to use the active provider and model above."
+        providerId="plan-quality-evaluator-provider"
+        modelId="plan-quality-evaluator-model"
+        providerValue={draft.planQualityEvaluatorProvider}
+        modelValue={draft.planQualityEvaluatorModel}
+        providerOption={planQualityEvaluatorProviderOption}
+        onProviderChange={(value) =>
+          updateOverrideProvider('planQualityEvaluatorProvider', 'planQualityEvaluatorModel', value)
+        }
+        onModelChange={(value) => updateDraft('planQualityEvaluatorModel', value)}
+      />
+
+      <label className="mt-4 block">
+        <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-400">
+          Plan quality max loops
+        </span>
+        <input
+          id="plan-quality-max-loops"
+          type="number"
+          min={1}
+          max={10}
+          step={1}
+          placeholder="5"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-400/50"
+          value={draft.planQualityMaxLoops}
+          onChange={(event) => updateDraft('planQualityMaxLoops', event.target.value)}
+        />
+        <span className="mt-1 block text-xs text-slate-500">
+          Leave empty to use the default of 5 quality-evaluation loops (1–10).
+        </span>
+      </label>
 
       <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
         <input

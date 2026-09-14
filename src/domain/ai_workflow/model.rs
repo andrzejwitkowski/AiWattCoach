@@ -10,6 +10,7 @@ pub enum WorkflowPhase {
     WorkoutRecap,
     InitialGeneration,
     Correction,
+    QualityEvaluation,
     ProjectionUpdate,
 }
 

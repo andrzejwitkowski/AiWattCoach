@@ -15,9 +15,13 @@ type AgentOverrideFieldKey =
   | 'workoutPlanningProvider'
   | 'workoutPlanningModel'
   | 'mesoCycleProvider'
-  | 'mesoCycleModel';
+  | 'mesoCycleModel'
+  | 'planQualityEvaluatorProvider'
+  | 'planQualityEvaluatorModel';
 
-type ValidatedAiAgents = Partial<Record<AiAgentsFieldKey | AgentOverrideFieldKey, string | null>>;
+type ValidatedAiAgents = Partial<Record<AiAgentsFieldKey | AgentOverrideFieldKey, string | null>> & {
+  planQualityMaxLoops?: number | null;
+};
 
 function trimToUndefined(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -75,14 +79,16 @@ const AGENT_OVERRIDE_FIELDS: AgentOverrideFieldKey[] = [
   'workoutPlanningModel',
   'mesoCycleProvider',
   'mesoCycleModel',
+  'planQualityEvaluatorProvider',
+  'planQualityEvaluatorModel',
 ];
 
 export function buildAiAgentsConnectionBody(
   data: unknown,
   validated: ValidatedAiAgents,
   options?: { includeAgentOverrides?: boolean },
-): Record<string, string | null | boolean> {
-  const body: Record<string, string | null | boolean> = {};
+): Record<string, string | null | boolean | number> {
+  const body: Record<string, string | null | boolean | number> = {};
   const fields: AiAgentsFieldKey[] = [
     'openaiApiKey',
     'geminiApiKey',
@@ -115,6 +121,17 @@ export function buildAiAgentsConnectionBody(
     const includePowerImage = (data as Record<string, unknown>).includePowerImage;
     if (typeof includePowerImage === 'boolean') {
       body.includePowerImage = includePowerImage;
+    }
+  }
+
+  if (data && typeof data === 'object' && 'planQualityMaxLoops' in data) {
+    const planQualityMaxLoops = (data as Record<string, unknown>).planQualityMaxLoops;
+    if (planQualityMaxLoops === null) {
+      body.planQualityMaxLoops = null;
+    } else if (typeof planQualityMaxLoops === 'number') {
+      body.planQualityMaxLoops = planQualityMaxLoops;
+    } else if (typeof validated.planQualityMaxLoops === 'number' || validated.planQualityMaxLoops === null) {
+      body.planQualityMaxLoops = validated.planQualityMaxLoops;
     }
   }
 

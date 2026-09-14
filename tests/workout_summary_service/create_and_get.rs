@@ -531,6 +531,9 @@ async fn mark_saved_uses_preferred_completed_workout_id_for_side_effects() {
         },
         active_projected_days: Vec::new(),
         was_generated: true,
+        quality_evaluations: Vec::new(),
+        shipped_quality: None,
+        quality_progress_messages: Vec::new(),
     });
     let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
         "wahoo-workout:450868242",
@@ -586,6 +589,9 @@ async fn mark_saved_notifies_requested_alias_after_background_work_completes() {
         },
         active_projected_days: Vec::new(),
         was_generated: true,
+        quality_evaluations: Vec::new(),
+        shipped_quality: None,
+        quality_progress_messages: Vec::new(),
     });
     let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
         "wahoo-workout:450868242",
@@ -1062,6 +1068,9 @@ async fn repeat_mark_saved_reloads_summary_after_successful_training_plan_retry(
         },
         active_projected_days: Vec::new(),
         was_generated: false,
+        quality_evaluations: Vec::new(),
+        shipped_quality: None,
+        quality_progress_messages: Vec::new(),
     });
     let service = test_service_with_training_plan(
         repository.clone(),
@@ -1117,6 +1126,9 @@ async fn repeat_mark_saved_does_not_report_generated_recap_for_timestamp_only_re
         },
         active_projected_days: Vec::new(),
         was_generated: false,
+        quality_evaluations: Vec::new(),
+        shipped_quality: None,
+        quality_progress_messages: Vec::new(),
     });
     let service = test_service_with_training_plan(
         repository.clone(),

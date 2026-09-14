@@ -54,6 +54,7 @@ impl TrainingPlanGenerator for CheckpointingInitialPlanGenerator {
         _planning_context: Option<&TrainingPlanPlanningContext>,
         restored_state: Option<LlmToolLoopState>,
         checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+        _quality_feedback: Option<&str>,
     ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
         self.restored_states.lock().unwrap().push(restored_state);
         let call_number = {
@@ -99,6 +100,26 @@ impl TrainingPlanGenerator for CheckpointingInitialPlanGenerator {
     ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
         Box::pin(async move { unreachable!("recovery test does not use correction flow") })
     }
+
+    fn evaluate_plan_quality(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+        _workout_recap: &WorkoutRecap,
+        _planning_context: Option<&TrainingPlanPlanningContext>,
+        _draft_plan_text: &str,
+    ) -> BoxFuture<
+        Result<aiwattcoach::domain::training_plan::PlanQualityEvaluation, TrainingPlanError>,
+    > {
+        Box::pin(async {
+            Ok(aiwattcoach::domain::training_plan::PlanQualityEvaluation {
+                attempt: 0,
+                score: 10,
+                critique: String::new(),
+            })
+        })
+    }
 }
 
 impl TrainingPlanGenerator for CompletedResponseCrashGenerator {
@@ -120,6 +141,7 @@ impl TrainingPlanGenerator for CompletedResponseCrashGenerator {
         _planning_context: Option<&TrainingPlanPlanningContext>,
         restored_state: Option<LlmToolLoopState>,
         checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+        _quality_feedback: Option<&str>,
     ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
         self.restored_states
             .lock()
@@ -191,6 +213,26 @@ impl TrainingPlanGenerator for CompletedResponseCrashGenerator {
         _checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
     ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
         Box::pin(async move { unreachable!("recovery test does not use correction flow") })
+    }
+
+    fn evaluate_plan_quality(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+        _workout_recap: &WorkoutRecap,
+        _planning_context: Option<&TrainingPlanPlanningContext>,
+        _draft_plan_text: &str,
+    ) -> BoxFuture<
+        Result<aiwattcoach::domain::training_plan::PlanQualityEvaluation, TrainingPlanError>,
+    > {
+        Box::pin(async {
+            Ok(aiwattcoach::domain::training_plan::PlanQualityEvaluation {
+                attempt: 0,
+                score: 10,
+                critique: String::new(),
+            })
+        })
     }
 }
 

@@ -27,7 +27,9 @@ type OptionalOverrideField =
   | 'workoutPlanningProvider'
   | 'workoutPlanningModel'
   | 'mesoCycleProvider'
-  | 'mesoCycleModel';
+  | 'mesoCycleModel'
+  | 'planQualityEvaluatorProvider'
+  | 'planQualityEvaluatorModel';
 
 const OPTIONAL_OVERRIDE_CHECKS: Array<{
   provider: OptionalOverrideField;
@@ -37,6 +39,11 @@ const OPTIONAL_OVERRIDE_CHECKS: Array<{
   { provider: 'workoutChatProvider', model: 'workoutChatModel', label: 'post-workout conversation' },
   { provider: 'workoutPlanningProvider', model: 'workoutPlanningModel', label: 'post-workout planning' },
   { provider: 'mesoCycleProvider', model: 'mesoCycleModel', label: 'meso cycle' },
+  {
+    provider: 'planQualityEvaluatorProvider',
+    model: 'planQualityEvaluatorModel',
+    label: 'plan quality evaluator',
+  },
 ];
 
 export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCardOptions) {
@@ -53,6 +60,12 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
         workoutPlanningModel: aiAgents.workoutPlanningModel ?? '',
         mesoCycleProvider: aiAgents.mesoCycleProvider ?? '',
         mesoCycleModel: aiAgents.mesoCycleModel ?? '',
+        planQualityEvaluatorProvider: aiAgents.planQualityEvaluatorProvider ?? '',
+        planQualityEvaluatorModel: aiAgents.planQualityEvaluatorModel ?? '',
+        planQualityMaxLoops:
+          aiAgents.planQualityMaxLoops === null || aiAgents.planQualityMaxLoops === undefined
+            ? ''
+            : String(aiAgents.planQualityMaxLoops),
         includePowerImage: aiAgents.includePowerImage ?? false,
       }),
     [
@@ -60,6 +73,9 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
       aiAgents.mesoCycleModel,
       aiAgents.mesoCycleProvider,
       aiAgents.openaiCompatibleBaseUrl,
+      aiAgents.planQualityEvaluatorModel,
+      aiAgents.planQualityEvaluatorProvider,
+      aiAgents.planQualityMaxLoops,
       aiAgents.selectedModel,
       aiAgents.selectedProvider,
       aiAgents.workoutChatModel,
@@ -93,12 +109,14 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
   const workoutChatProviderOption = getProviderOption(draft.workoutChatProvider);
   const workoutPlanningProviderOption = getProviderOption(draft.workoutPlanningProvider);
   const mesoProviderOption = getProviderOption(draft.mesoCycleProvider);
+  const planQualityEvaluatorProviderOption = getProviderOption(draft.planQualityEvaluatorProvider);
   const providerKeyState = getProviderKeyState(draft.selectedProvider, draft, aiAgents);
   const validationMessage =
     resolveProviderValidationMessage(draft, providerKeyState) ??
     OPTIONAL_OVERRIDE_CHECKS.map(({ provider, model, label }) =>
       resolveOptionalOverrideValidationMessage(draft[provider], draft[model], label),
     ).find(Boolean) ??
+    resolvePlanQualityMaxLoopsValidationMessage(draft.planQualityMaxLoops) ??
     null;
   const canSave = hasDirtyDraft && !validationMessage;
   const canTest =
@@ -229,6 +247,7 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
     workoutChatProviderOption,
     workoutPlanningProviderOption,
     mesoProviderOption,
+    planQualityEvaluatorProviderOption,
     updateDraft,
     updateProvider,
     updateOverrideProvider,
@@ -268,6 +287,21 @@ function resolveOptionalOverrideValidationMessage(
   return null;
 }
 
+function resolvePlanQualityMaxLoopsValidationMessage(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (!/^\d+$/.test(trimmed)) {
+    return 'Plan quality max loops must be a whole number between 1 and 10.';
+  }
+  const parsed = Number(trimmed);
+  if (parsed < 1 || parsed > 10) {
+    return 'Plan quality max loops must be between 1 and 10.';
+  }
+  return null;
+}
+
 function resolveProviderValidationMessage(
   draft: AiAgentsDraftState,
   providerKeyState: ReturnType<typeof getProviderKeyState>,
@@ -283,6 +317,7 @@ function resolveProviderValidationMessage(
     draft.workoutChatProvider,
     draft.workoutPlanningProvider,
     draft.mesoCycleProvider,
+    draft.planQualityEvaluatorProvider,
   ].some((provider) => provider === 'openai_compatible');
   if (usesOpenaiCompatible) {
     const baseUrl = draft.openaiCompatibleBaseUrl.trim();

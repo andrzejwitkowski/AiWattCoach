@@ -86,6 +86,21 @@ pub fn validate_optional_profile_text(
     }
 }
 
+pub fn validate_plan_quality_max_loops(
+    max_loops: Option<u32>,
+) -> Result<Option<u32>, SettingsError> {
+    match max_loops {
+        Some(v) if !(1..=10).contains(&v) => Err(SettingsError::Validation(
+            "planQualityMaxLoops must be between 1 and 10".to_string(),
+        )),
+        _ => Ok(max_loops),
+    }
+}
+
+pub fn effective_plan_quality_max_loops(max_loops: Option<u32>) -> u32 {
+    max_loops.unwrap_or(5)
+}
+
 pub fn validate_ai_provider(
     provider: Option<LlmProvider>,
 ) -> Result<Option<LlmProvider>, SettingsError> {
@@ -165,8 +180,28 @@ fn validate_availability_day(day: &AvailabilityDay) -> Result<(), SettingsError>
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_availability, validate_optional_profile_text};
+    use super::{
+        effective_plan_quality_max_loops, validate_availability, validate_optional_profile_text,
+        validate_plan_quality_max_loops,
+    };
     use crate::domain::settings::{AvailabilityDay, AvailabilitySettings, SettingsError, Weekday};
+
+    #[test]
+    fn plan_quality_max_loops_defaults_to_five_and_rejects_out_of_range() {
+        assert_eq!(effective_plan_quality_max_loops(None), 5);
+        assert_eq!(effective_plan_quality_max_loops(Some(3)), 3);
+        assert_eq!(validate_plan_quality_max_loops(None).unwrap(), None);
+        assert_eq!(validate_plan_quality_max_loops(Some(1)).unwrap(), Some(1));
+        assert_eq!(validate_plan_quality_max_loops(Some(10)).unwrap(), Some(10));
+        assert_eq!(
+            validate_plan_quality_max_loops(Some(0)).unwrap_err(),
+            SettingsError::Validation("planQualityMaxLoops must be between 1 and 10".to_string())
+        );
+        assert_eq!(
+            validate_plan_quality_max_loops(Some(11)).unwrap_err(),
+            SettingsError::Validation("planQualityMaxLoops must be between 1 and 10".to_string())
+        );
+    }
 
     #[test]
     fn validate_optional_profile_text_trims_value() {

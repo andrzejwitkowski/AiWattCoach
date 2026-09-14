@@ -1,6 +1,6 @@
 use crate::domain::{llm::LlmProvider, settings::SettingsError};
 
-use super::dto::OptionalStringInput;
+use super::dto::{OptionalStringInput, OptionalU32Input};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum FieldUpdate<T> {
@@ -29,6 +29,14 @@ pub(super) fn normalize_string_input(input: OptionalStringInput) -> FieldUpdate<
                 FieldUpdate::Set(trimmed.to_string())
             }
         }
+    }
+}
+
+pub(super) fn normalize_u32_input(input: OptionalU32Input) -> FieldUpdate<u32> {
+    match input {
+        OptionalU32Input::Missing => FieldUpdate::Missing,
+        OptionalU32Input::Null => FieldUpdate::Clear,
+        OptionalU32Input::Value(value) => FieldUpdate::Set(value),
     }
 }
 

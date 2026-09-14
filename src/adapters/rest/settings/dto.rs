@@ -20,6 +20,26 @@ impl<'de> Deserialize<'de> for OptionalStringInput {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) enum OptionalU32Input {
+    #[default]
+    Missing,
+    Null,
+    Value(u32),
+}
+
+impl<'de> Deserialize<'de> for OptionalU32Input {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(match Option::<u32>::deserialize(deserializer)? {
+            Some(value) => Self::Value(value),
+            None => Self::Null,
+        })
+    }
+}
+
 #[derive(Serialize)]
 pub(super) struct UserSettingsDto {
     #[serde(rename = "aiAgents")]
@@ -75,6 +95,12 @@ pub(super) struct AiAgentsDto {
     pub(super) meso_cycle_provider: Option<String>,
     #[serde(rename = "mesoCycleModel")]
     pub(super) meso_cycle_model: Option<String>,
+    #[serde(rename = "planQualityEvaluatorProvider")]
+    pub(super) plan_quality_evaluator_provider: Option<String>,
+    #[serde(rename = "planQualityEvaluatorModel")]
+    pub(super) plan_quality_evaluator_model: Option<String>,
+    #[serde(rename = "planQualityMaxLoops")]
+    pub(super) plan_quality_max_loops: Option<u32>,
     #[serde(rename = "includePowerImage")]
     pub(super) include_power_image: bool,
 }
@@ -180,6 +206,12 @@ pub(crate) struct UpdateAiAgentsRequest {
     pub(super) meso_cycle_provider: OptionalStringInput,
     #[serde(default, rename = "mesoCycleModel")]
     pub(super) meso_cycle_model: OptionalStringInput,
+    #[serde(default, rename = "planQualityEvaluatorProvider")]
+    pub(super) plan_quality_evaluator_provider: OptionalStringInput,
+    #[serde(default, rename = "planQualityEvaluatorModel")]
+    pub(super) plan_quality_evaluator_model: OptionalStringInput,
+    #[serde(default, rename = "planQualityMaxLoops")]
+    pub(super) plan_quality_max_loops: OptionalU32Input,
     #[serde(default, rename = "includePowerImage")]
     pub(super) include_power_image: Option<bool>,
 }

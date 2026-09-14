@@ -4,6 +4,7 @@ mod planning_context;
 mod ports;
 mod prompt;
 mod prompt_guidance;
+mod quality_prompt;
 mod race_projection_cleanup;
 mod service;
 
@@ -15,15 +16,16 @@ pub use llm_output::{
     TrainingPlanLlmEnvelope,
 };
 pub use model::{
-    GeneratedTrainingPlan, TrainingPlanConversationMessage, TrainingPlanConversationRole,
-    TrainingPlanDay, TrainingPlanError, TrainingPlanFailureState,
+    GeneratedTrainingPlan, PlanQualityEvaluation, TrainingPlanConversationMessage,
+    TrainingPlanConversationRole, TrainingPlanDay, TrainingPlanError, TrainingPlanFailureState,
     TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation, TrainingPlanPhaseOutput,
     TrainingPlanPlanningContext, TrainingPlanProjectedDay, TrainingPlanReplacementResult,
     TrainingPlanSnapshot,
 };
 pub use planning_context::{map_workout_summary_to_planning_context, workout_recap_from_summary};
 pub use ports::{
-    BoxFuture, TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
+    BoxFuture, PlanQualityEvaluatorLlmConfigPort, PlanQualityProgressPort,
+    TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
     TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
     TrainingPlanToolLoopCheckpoint, TrainingPlanWorkoutSummaryPort, WorkoutPlanningLlmConfigPort,
 };
@@ -36,6 +38,11 @@ pub use prompt::{
 };
 pub use prompt_guidance::{
     training_plan_output_grammar, training_plan_planning_guidelines, TRAINING_PLAN_WINDOW_DAY_COUNT,
+};
+pub use quality_prompt::{
+    assemble_plan_quality_evaluation_request, format_quality_feedback,
+    plan_quality_attempt_message, plan_quality_finished_accepted_message,
+    plan_quality_finished_best_message, PLAN_QUALITY_PASS_SCORE,
 };
 pub use race_projection_cleanup::{
     dates_to_supersede_for_race_date, is_race_placeholder_name, is_race_prep_name,

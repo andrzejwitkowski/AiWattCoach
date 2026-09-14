@@ -352,6 +352,35 @@ describe('AiAgentsCard', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
+  it('saves plan quality evaluator override and max loops', async () => {
+    updateAiAgentsMock.mockResolvedValue(buildTestSettings());
+    const onSave = vi.fn();
+
+    render(<AiAgentsCard settings={buildTestSettings()} apiBaseUrl="" onSave={onSave} />);
+
+    fireEvent.change(
+      screen.getByLabelText(/^Provider$/i, { selector: '#plan-quality-evaluator-provider' }),
+      { target: { value: 'gemini' } },
+    );
+    fireEvent.change(
+      screen.getByLabelText(/^Model$/i, { selector: '#plan-quality-evaluator-model' }),
+      { target: { value: 'gemini-2.5-flash' } },
+    );
+    fireEvent.change(screen.getByLabelText(/plan quality max loops/i), {
+      target: { value: '3' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    await waitFor(() => {
+      expect(updateAiAgentsMock).toHaveBeenCalledWith('', {
+        planQualityEvaluatorProvider: 'gemini',
+        planQualityEvaluatorModel: 'gemini-2.5-flash',
+        planQualityMaxLoops: 3,
+      });
+    });
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps edits made while a save request is in flight', async () => {
     let resolveSave:
       | ((value: UserSettingsResponse) => void)

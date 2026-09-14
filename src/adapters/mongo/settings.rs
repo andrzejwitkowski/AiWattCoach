@@ -70,6 +70,12 @@ struct AiAgentsDocument {
     #[serde(default)]
     meso_cycle_model: Option<String>,
     #[serde(default)]
+    plan_quality_evaluator_provider: Option<String>,
+    #[serde(default)]
+    plan_quality_evaluator_model: Option<String>,
+    #[serde(default)]
+    plan_quality_max_loops: Option<u32>,
+    #[serde(default)]
     include_power_image: bool,
 }
 
@@ -554,6 +560,9 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "ai_agents.workout_planning_model": &ai_agents.workout_planning_model,
                             "ai_agents.meso_cycle_provider": ai_agents.meso_cycle_provider.as_ref().map(|provider| provider.as_str()),
                             "ai_agents.meso_cycle_model": &ai_agents.meso_cycle_model,
+                            "ai_agents.plan_quality_evaluator_provider": ai_agents.plan_quality_evaluator_provider.as_ref().map(|provider| provider.as_str()),
+                            "ai_agents.plan_quality_evaluator_model": &ai_agents.plan_quality_evaluator_model,
+                            "ai_agents.plan_quality_max_loops": ai_agents.plan_quality_max_loops,
                             "ai_agents.include_power_image": ai_agents.include_power_image,
                             "updated_at_epoch_seconds": updated_at,
                             "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at), "updated_at")
@@ -735,6 +744,13 @@ fn map_document_to_domain(doc: SettingsDocument) -> Result<UserSettings, Setting
                 .as_deref()
                 .and_then(LlmProvider::parse),
             meso_cycle_model: doc.ai_agents.meso_cycle_model,
+            plan_quality_evaluator_provider: doc
+                .ai_agents
+                .plan_quality_evaluator_provider
+                .as_deref()
+                .and_then(LlmProvider::parse),
+            plan_quality_evaluator_model: doc.ai_agents.plan_quality_evaluator_model,
+            plan_quality_max_loops: doc.ai_agents.plan_quality_max_loops,
             include_power_image: doc.ai_agents.include_power_image,
         },
         intervals: IntervalsConfig {
@@ -812,6 +828,13 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
                 .as_ref()
                 .map(|provider| provider.as_str().to_string()),
             meso_cycle_model: settings.ai_agents.meso_cycle_model.clone(),
+            plan_quality_evaluator_provider: settings
+                .ai_agents
+                .plan_quality_evaluator_provider
+                .as_ref()
+                .map(|provider| provider.as_str().to_string()),
+            plan_quality_evaluator_model: settings.ai_agents.plan_quality_evaluator_model.clone(),
+            plan_quality_max_loops: settings.ai_agents.plan_quality_max_loops,
             include_power_image: settings.ai_agents.include_power_image,
         },
         intervals: IntervalsDocument {

@@ -10,7 +10,8 @@ use super::dto::{
     UpdateOptionsRequest, UserSettingsDto, WahooDto,
 };
 use super::input::{
-    apply_field_update, normalize_string_input, parse_provider_settings_input, FieldUpdate,
+    apply_field_update, normalize_string_input, normalize_u32_input, parse_provider_settings_input,
+    FieldUpdate,
 };
 
 fn api_key_is_set(value: &Option<String>) -> bool {
@@ -64,6 +65,13 @@ pub(super) fn map_settings_to_dto(
                 .as_ref()
                 .map(|provider| provider.as_str().to_string()),
             meso_cycle_model: settings.ai_agents.meso_cycle_model.clone(),
+            plan_quality_evaluator_provider: settings
+                .ai_agents
+                .plan_quality_evaluator_provider
+                .as_ref()
+                .map(|provider| provider.as_str().to_string()),
+            plan_quality_evaluator_model: settings.ai_agents.plan_quality_evaluator_model.clone(),
+            plan_quality_max_loops: settings.ai_agents.plan_quality_max_loops,
             include_power_image: settings.ai_agents.include_power_image,
         },
         intervals: IntervalsDto {
@@ -153,6 +161,11 @@ pub(super) fn map_ai_agents_update(
     let workout_planning_model_update = normalize_string_input(body.workout_planning_model);
     let meso_cycle_provider_update = parse_provider_settings_input(body.meso_cycle_provider)?;
     let meso_cycle_model_update = normalize_string_input(body.meso_cycle_model);
+    let plan_quality_evaluator_provider_update =
+        parse_provider_settings_input(body.plan_quality_evaluator_provider)?;
+    let plan_quality_evaluator_model_update =
+        normalize_string_input(body.plan_quality_evaluator_model);
+    let plan_quality_max_loops_update = normalize_u32_input(body.plan_quality_max_loops);
     let openai_api_key = normalize_string_input(body.openai_api_key);
     let gemini_api_key = normalize_string_input(body.gemini_api_key);
     let openrouter_api_key = normalize_string_input(body.openrouter_api_key);
@@ -220,6 +233,19 @@ pub(super) fn map_ai_agents_update(
         "mesoCycleProvider",
         "mesoCycleModel",
     )?;
+    let (plan_quality_evaluator_provider, plan_quality_evaluator_model) =
+        map_optional_provider_override(
+            plan_quality_evaluator_provider_update,
+            plan_quality_evaluator_model_update,
+            &current.ai_agents.plan_quality_evaluator_provider,
+            &current.ai_agents.plan_quality_evaluator_model,
+            "planQualityEvaluatorProvider",
+            "planQualityEvaluatorModel",
+        )?;
+    let plan_quality_max_loops = validation::validate_plan_quality_max_loops(apply_field_update(
+        plan_quality_max_loops_update,
+        current.ai_agents.plan_quality_max_loops,
+    ))?;
 
     let openai_compatible_base_url = apply_field_update(
         openai_compatible_base_url,
@@ -234,6 +260,7 @@ pub(super) fn map_ai_agents_update(
         workout_chat_provider.as_ref(),
         workout_planning_provider.as_ref(),
         meso_cycle_provider.as_ref(),
+        plan_quality_evaluator_provider.as_ref(),
     ]
     .into_iter()
     .flatten()
@@ -275,6 +302,11 @@ pub(super) fn map_ai_agents_update(
         workout_planning_model,
         meso_cycle_provider: validation::validate_ai_provider(meso_cycle_provider)?,
         meso_cycle_model,
+        plan_quality_evaluator_provider: validation::validate_ai_provider(
+            plan_quality_evaluator_provider,
+        )?,
+        plan_quality_evaluator_model,
+        plan_quality_max_loops,
         include_power_image: body
             .include_power_image
             .unwrap_or(current.ai_agents.include_power_image),

@@ -357,6 +357,7 @@ fn map_phase_to_document(phase: &WorkflowPhase) -> &'static str {
         WorkflowPhase::WorkoutRecap => "workout_recap",
         WorkflowPhase::InitialGeneration => "initial_generation",
         WorkflowPhase::Correction => "correction",
+        WorkflowPhase::QualityEvaluation => "quality_evaluation",
         WorkflowPhase::ProjectionUpdate => "projection_update",
     }
 }
@@ -366,6 +367,7 @@ fn map_document_to_phase(phase: &str) -> Result<WorkflowPhase, MesoCycleError> {
         "workout_recap" => Ok(WorkflowPhase::WorkoutRecap),
         "initial_generation" => Ok(WorkflowPhase::InitialGeneration),
         "correction" => Ok(WorkflowPhase::Correction),
+        "quality_evaluation" => Ok(WorkflowPhase::QualityEvaluation),
         "projection_update" => Ok(WorkflowPhase::ProjectionUpdate),
         _ => Err(MesoCycleError::Repository(format!(
             "invalid meso cycle attempt phase: {phase}"

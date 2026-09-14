@@ -565,6 +565,7 @@ where
                 training_context,
                 conversation_epoch_seconds: preview_epoch,
                 data_port: self.data_port.clone(),
+                quality_feedback: None,
             });
 
         Ok(Self::map_response(MappedPreviewResponse {

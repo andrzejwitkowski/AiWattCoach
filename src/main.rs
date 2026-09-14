@@ -677,6 +677,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_data_port(get_selected_workout_data_port.clone())
         .with_planned_workout_update_port(planned_workout_update_port.clone()),
     );
+    let save_notifier = Arc::new(aiwattcoach::adapters::rest::WorkoutSummarySaveNotifier::new());
     let training_plan_direct_service = Arc::new(
         TrainingPlanGenerationService::new(
             training_plan_snapshot_repository,
@@ -688,11 +689,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 training_context_builder.clone(),
                 SystemClock,
             )
-            .with_data_port(get_selected_workout_data_port.clone()),
+            .with_data_port(get_selected_workout_data_port.clone())
+            .with_plan_quality_evaluator_config(workout_llm_config_provider.clone()),
             TrainingPlanWorkoutSummaryAdapter::new(workout_summary_direct_service.clone()),
             SystemClock,
         )
-        .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
+        .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone())
+        .with_plan_quality_evaluator_config(workout_llm_config_provider.clone())
+        .with_plan_quality_progress(save_notifier.clone()),
     );
     let training_plan_service = Arc::new(SchedulerBackedTrainingPlanService::new(
         training_plan_direct_service.clone(),
@@ -758,7 +762,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_completed_workouts(authoritative_completed_workout_repository.clone())
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
-    let save_notifier = Arc::new(aiwattcoach::adapters::rest::WorkoutSummarySaveNotifier::new());
     let workout_summary_direct_service = Arc::new(
         (*workout_summary_direct_service)
             .clone()

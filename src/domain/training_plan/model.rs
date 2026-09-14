@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::domain::{
     ai_workflow::{AttemptRecord, ValidationIssue, WorkflowPhase, WorkflowStatus},
     intervals::PlannedWorkout,
@@ -44,6 +46,13 @@ pub struct TrainingPlanPhaseOutput {
     pub raw_response: String,
     pub description: Option<String>,
     pub tool_loop_state: LlmToolLoopState,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanQualityEvaluation {
+    pub attempt: u32,
+    pub score: u8,
+    pub critique: String,
 }
 
 impl std::fmt::Display for TrainingPlanError {
@@ -123,6 +132,9 @@ pub struct TrainingPlanGenerationOperation {
     pub raw_correction_description: Option<String>,
     pub correction_tool_loop_state: Option<LlmToolLoopState>,
     pub validation_issues: Vec<ValidationIssue>,
+    pub quality_evaluations: Vec<PlanQualityEvaluation>,
+    pub best_quality_evaluation: Option<PlanQualityEvaluation>,
+    pub best_quality_plan_response: Option<String>,
     pub attempts: Vec<AttemptRecord>,
     pub failure: Option<TrainingPlanFailureState>,
     pub started_at_epoch_seconds: i64,
@@ -158,6 +170,9 @@ impl TrainingPlanGenerationOperation {
             raw_correction_description: None,
             correction_tool_loop_state: None,
             validation_issues: Vec::new(),
+            quality_evaluations: Vec::new(),
+            best_quality_evaluation: None,
+            best_quality_plan_response: None,
             attempts: Vec::new(),
             failure: None,
             started_at_epoch_seconds: now_epoch_seconds,
@@ -168,62 +183,28 @@ impl TrainingPlanGenerationOperation {
         }
     }
 
+    fn transition(
+        &self,
+        status: WorkflowStatus,
+        failure: Option<TrainingPlanFailureState>,
+        updated_at_epoch_seconds: i64,
+    ) -> Self {
+        let mut updated = self.clone();
+        updated.status = status;
+        updated.failure = failure;
+        updated.updated_at_epoch_seconds = updated_at_epoch_seconds;
+        updated
+    }
+
     pub fn reclaim(&self, now_epoch_seconds: i64) -> Self {
-        Self {
-            operation_key: self.operation_key.clone(),
-            user_id: self.user_id.clone(),
-            workout_id: self.workout_id.clone(),
-            saved_at_epoch_seconds: self.saved_at_epoch_seconds,
-            status: WorkflowStatus::Pending,
-            workout_recap_text: self.workout_recap_text.clone(),
-            workout_recap_provider: self.workout_recap_provider.clone(),
-            workout_recap_model: self.workout_recap_model.clone(),
-            workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
-            projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
-            raw_plan_response: self.raw_plan_response.clone(),
-            raw_plan_description: self.raw_plan_description.clone(),
-            initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
-            raw_correction_response: self.raw_correction_response.clone(),
-            raw_correction_description: self.raw_correction_description.clone(),
-            correction_tool_loop_state: self.correction_tool_loop_state.clone(),
-            validation_issues: self.validation_issues.clone(),
-            attempts: self.attempts.clone(),
-            failure: None,
-            started_at_epoch_seconds: self.started_at_epoch_seconds,
-            last_attempt_at_epoch_seconds: now_epoch_seconds,
-            attempt_count: self.attempt_count.saturating_add(1),
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: now_epoch_seconds,
-        }
+        let mut updated = self.clone_pending_update(now_epoch_seconds);
+        updated.last_attempt_at_epoch_seconds = now_epoch_seconds;
+        updated.attempt_count = self.attempt_count.saturating_add(1);
+        updated
     }
 
     fn clone_pending_update(&self, updated_at_epoch_seconds: i64) -> Self {
-        Self {
-            operation_key: self.operation_key.clone(),
-            user_id: self.user_id.clone(),
-            workout_id: self.workout_id.clone(),
-            saved_at_epoch_seconds: self.saved_at_epoch_seconds,
-            status: WorkflowStatus::Pending,
-            workout_recap_text: self.workout_recap_text.clone(),
-            workout_recap_provider: self.workout_recap_provider.clone(),
-            workout_recap_model: self.workout_recap_model.clone(),
-            workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
-            projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
-            raw_plan_response: self.raw_plan_response.clone(),
-            raw_plan_description: self.raw_plan_description.clone(),
-            initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
-            raw_correction_response: self.raw_correction_response.clone(),
-            raw_correction_description: self.raw_correction_description.clone(),
-            correction_tool_loop_state: self.correction_tool_loop_state.clone(),
-            validation_issues: self.validation_issues.clone(),
-            attempts: self.attempts.clone(),
-            failure: None,
-            started_at_epoch_seconds: self.started_at_epoch_seconds,
-            last_attempt_at_epoch_seconds: self.last_attempt_at_epoch_seconds,
-            attempt_count: self.attempt_count,
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds,
-        }
+        self.transition(WorkflowStatus::Pending, None, updated_at_epoch_seconds)
     }
 
     pub fn with_workout_recap(
@@ -367,6 +348,31 @@ impl TrainingPlanGenerationOperation {
         updated
     }
 
+    pub fn with_quality_evaluation(
+        &self,
+        evaluation: PlanQualityEvaluation,
+        best_plan_response: Option<String>,
+        recorded_at_epoch_seconds: i64,
+    ) -> Self {
+        let mut attempts = self.attempts.clone();
+        attempts.push(AttemptRecord {
+            phase: WorkflowPhase::QualityEvaluation,
+            attempt_number: evaluation.attempt,
+            recorded_at_epoch_seconds,
+        });
+        let mut quality_evaluations = self.quality_evaluations.clone();
+        quality_evaluations.push(evaluation.clone());
+
+        let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
+        updated.quality_evaluations = quality_evaluations;
+        updated.attempts = attempts;
+        if let Some(best_plan_response) = best_plan_response {
+            updated.best_quality_evaluation = Some(evaluation);
+            updated.best_quality_plan_response = Some(best_plan_response);
+        }
+        updated
+    }
+
     pub fn with_projection_update(&self, recorded_at_epoch_seconds: i64) -> Self {
         let mut attempts = self.attempts.clone();
         attempts.push(AttemptRecord {
@@ -392,32 +398,7 @@ impl TrainingPlanGenerationOperation {
     }
 
     pub fn mark_completed(&self, updated_at_epoch_seconds: i64) -> Self {
-        Self {
-            operation_key: self.operation_key.clone(),
-            user_id: self.user_id.clone(),
-            workout_id: self.workout_id.clone(),
-            saved_at_epoch_seconds: self.saved_at_epoch_seconds,
-            status: WorkflowStatus::Completed,
-            workout_recap_text: self.workout_recap_text.clone(),
-            workout_recap_provider: self.workout_recap_provider.clone(),
-            workout_recap_model: self.workout_recap_model.clone(),
-            workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
-            projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
-            raw_plan_response: self.raw_plan_response.clone(),
-            raw_plan_description: self.raw_plan_description.clone(),
-            initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
-            raw_correction_response: self.raw_correction_response.clone(),
-            raw_correction_description: self.raw_correction_description.clone(),
-            correction_tool_loop_state: self.correction_tool_loop_state.clone(),
-            validation_issues: self.validation_issues.clone(),
-            attempts: self.attempts.clone(),
-            failure: None,
-            started_at_epoch_seconds: self.started_at_epoch_seconds,
-            last_attempt_at_epoch_seconds: self.last_attempt_at_epoch_seconds,
-            attempt_count: self.attempt_count,
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds,
-        }
+        self.transition(WorkflowStatus::Completed, None, updated_at_epoch_seconds)
     }
 
     pub fn mark_failed(
@@ -427,32 +408,13 @@ impl TrainingPlanGenerationOperation {
         validation_issues: Vec<ValidationIssue>,
         updated_at_epoch_seconds: i64,
     ) -> Self {
-        Self {
-            operation_key: self.operation_key.clone(),
-            user_id: self.user_id.clone(),
-            workout_id: self.workout_id.clone(),
-            saved_at_epoch_seconds: self.saved_at_epoch_seconds,
-            status: WorkflowStatus::Failed,
-            workout_recap_text: self.workout_recap_text.clone(),
-            workout_recap_provider: self.workout_recap_provider.clone(),
-            workout_recap_model: self.workout_recap_model.clone(),
-            workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
-            projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
-            raw_plan_response: self.raw_plan_response.clone(),
-            raw_plan_description: self.raw_plan_description.clone(),
-            initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
-            raw_correction_response: self.raw_correction_response.clone(),
-            raw_correction_description: self.raw_correction_description.clone(),
-            correction_tool_loop_state: self.correction_tool_loop_state.clone(),
-            validation_issues,
-            attempts: self.attempts.clone(),
-            failure: Some(TrainingPlanFailureState { phase, message }),
-            started_at_epoch_seconds: self.started_at_epoch_seconds,
-            last_attempt_at_epoch_seconds: self.last_attempt_at_epoch_seconds,
-            attempt_count: self.attempt_count,
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
+        let mut updated = self.transition(
+            WorkflowStatus::Failed,
+            Some(TrainingPlanFailureState { phase, message }),
             updated_at_epoch_seconds,
-        }
+        );
+        updated.validation_issues = validation_issues;
+        updated
     }
 }
 
@@ -467,6 +429,9 @@ pub struct GeneratedTrainingPlan {
     pub snapshot: TrainingPlanSnapshot,
     pub active_projected_days: Vec<TrainingPlanProjectedDay>,
     pub was_generated: bool,
+    pub quality_evaluations: Vec<PlanQualityEvaluation>,
+    pub shipped_quality: Option<PlanQualityEvaluation>,
+    pub quality_progress_messages: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -474,4 +439,100 @@ pub struct TrainingPlanReplacementResult {
     pub snapshot: TrainingPlanSnapshot,
     pub projected_days: Vec<TrainingPlanProjectedDay>,
     pub superseded_date_range: Option<(String, String)>,
+}
+
+#[cfg(test)]
+mod operation_transition_tests {
+    use super::{PlanQualityEvaluation, TrainingPlanGenerationOperation};
+    use crate::domain::ai_workflow::{ValidationIssue, WorkflowPhase, WorkflowStatus};
+
+    fn sample_operation() -> TrainingPlanGenerationOperation {
+        let mut op = TrainingPlanGenerationOperation::pending(
+            "training-plan:u:w:1".to_string(),
+            "u".to_string(),
+            "w".to_string(),
+            100,
+            200,
+        );
+        op.workout_recap_text = Some("recap".to_string());
+        op.raw_plan_response = Some("plan".to_string());
+        op.quality_evaluations = vec![PlanQualityEvaluation {
+            attempt: 1,
+            score: 6,
+            critique: "tempo heavy".to_string(),
+        }];
+        op.best_quality_evaluation = Some(PlanQualityEvaluation {
+            attempt: 1,
+            score: 6,
+            critique: "tempo heavy".to_string(),
+        });
+        op.best_quality_plan_response = Some("best-plan".to_string());
+        op.attempt_count = 3;
+        op
+    }
+
+    #[test]
+    fn reclaim_keeps_payload_clears_failure_bumps_attempt() {
+        let mut op = sample_operation();
+        op.status = WorkflowStatus::Failed;
+        op.failure = Some(super::TrainingPlanFailureState {
+            phase: WorkflowPhase::Correction,
+            message: "boom".to_string(),
+        });
+
+        let reclaimed = op.reclaim(500);
+        assert_eq!(reclaimed.status, WorkflowStatus::Pending);
+        assert!(reclaimed.failure.is_none());
+        assert_eq!(reclaimed.attempt_count, 4);
+        assert_eq!(reclaimed.last_attempt_at_epoch_seconds, 500);
+        assert_eq!(reclaimed.updated_at_epoch_seconds, 500);
+        assert_eq!(reclaimed.workout_recap_text.as_deref(), Some("recap"));
+        assert_eq!(reclaimed.raw_plan_response.as_deref(), Some("plan"));
+        assert_eq!(
+            reclaimed.best_quality_plan_response.as_deref(),
+            Some("best-plan")
+        );
+        assert_eq!(reclaimed.quality_evaluations.len(), 1);
+        assert_eq!(reclaimed.created_at_epoch_seconds, 200);
+    }
+
+    #[test]
+    fn mark_completed_preserves_payload_and_clears_failure() {
+        let mut op = sample_operation();
+        op.failure = Some(super::TrainingPlanFailureState {
+            phase: WorkflowPhase::QualityEvaluation,
+            message: "x".to_string(),
+        });
+        let completed = op.mark_completed(600);
+        assert_eq!(completed.status, WorkflowStatus::Completed);
+        assert!(completed.failure.is_none());
+        assert_eq!(completed.updated_at_epoch_seconds, 600);
+        assert_eq!(completed.attempt_count, 3);
+        assert_eq!(
+            completed.best_quality_plan_response.as_deref(),
+            Some("best-plan")
+        );
+    }
+
+    #[test]
+    fn mark_failed_sets_failure_and_validation_issues() {
+        let op = sample_operation();
+        let failed = op.mark_failed(
+            WorkflowPhase::Correction,
+            "nope".to_string(),
+            vec![ValidationIssue {
+                scope: "2026-04-10".to_string(),
+                message: "bad".to_string(),
+            }],
+            700,
+        );
+        assert_eq!(failed.status, WorkflowStatus::Failed);
+        assert_eq!(
+            failed.failure.as_ref().map(|f| f.message.as_str()),
+            Some("nope")
+        );
+        assert_eq!(failed.validation_issues.len(), 1);
+        assert_eq!(failed.updated_at_epoch_seconds, 700);
+        assert_eq!(failed.raw_plan_response.as_deref(), Some("plan"));
+    }
 }

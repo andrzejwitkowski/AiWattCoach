@@ -475,6 +475,7 @@ impl TrainingPlanGenerator for PanicOnceTrainingPlanGenerator {
         _planning_context: Option<&TrainingPlanPlanningContext>,
         _restored_state: Option<aiwattcoach::domain::llm_tools::LlmToolLoopState>,
         _checkpoint: Option<aiwattcoach::domain::training_plan::TrainingPlanToolLoopCheckpoint>,
+        _quality_feedback: Option<&str>,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
         Result<TrainingPlanPhaseOutput, TrainingPlanError>,
     > {
@@ -504,6 +505,26 @@ impl TrainingPlanGenerator for PanicOnceTrainingPlanGenerator {
         Box::pin(
             async move { unreachable!("correction should not run in panic-once generator test") },
         )
+    }
+
+    fn evaluate_plan_quality(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+        _workout_recap: &WorkoutRecap,
+        _planning_context: Option<&TrainingPlanPlanningContext>,
+        _draft_plan_text: &str,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<aiwattcoach::domain::training_plan::PlanQualityEvaluation, TrainingPlanError>,
+    > {
+        Box::pin(async {
+            Ok(aiwattcoach::domain::training_plan::PlanQualityEvaluation {
+                attempt: 0,
+                score: 10,
+                critique: String::new(),
+            })
+        })
     }
 }
 
@@ -536,6 +557,7 @@ impl TrainingPlanGenerator for BlockingTrainingPlanGenerator {
         _planning_context: Option<&TrainingPlanPlanningContext>,
         _restored_state: Option<aiwattcoach::domain::llm_tools::LlmToolLoopState>,
         _checkpoint: Option<aiwattcoach::domain::training_plan::TrainingPlanToolLoopCheckpoint>,
+        _quality_feedback: Option<&str>,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
         Result<TrainingPlanPhaseOutput, TrainingPlanError>,
     > {
@@ -565,6 +587,26 @@ impl TrainingPlanGenerator for BlockingTrainingPlanGenerator {
         Box::pin(
             async move { unreachable!("correction should not run in blocking generator test") },
         )
+    }
+
+    fn evaluate_plan_quality(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+        _workout_recap: &WorkoutRecap,
+        _planning_context: Option<&TrainingPlanPlanningContext>,
+        _draft_plan_text: &str,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<aiwattcoach::domain::training_plan::PlanQualityEvaluation, TrainingPlanError>,
+    > {
+        Box::pin(async {
+            Ok(aiwattcoach::domain::training_plan::PlanQualityEvaluation {
+                attempt: 0,
+                score: 10,
+                critique: String::new(),
+            })
+        })
     }
 }
 

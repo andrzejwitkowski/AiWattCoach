@@ -4,9 +4,9 @@ use crate::domain::workout_summary::WorkoutRecap;
 use crate::domain::{ai_workflow::ValidationIssue, llm_tools::LlmToolLoopState};
 
 use super::{
-    TrainingPlanError, TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
-    TrainingPlanPhaseOutput, TrainingPlanPlanningContext, TrainingPlanProjectedDay,
-    TrainingPlanReplacementResult, TrainingPlanSnapshot,
+    PlanQualityEvaluation, TrainingPlanError, TrainingPlanGenerationClaimResult,
+    TrainingPlanGenerationOperation, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
+    TrainingPlanProjectedDay, TrainingPlanReplacementResult, TrainingPlanSnapshot,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -100,7 +100,7 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
 
     #[expect(
         clippy::too_many_arguments,
-        reason = "training plan initial generation needs workout identity, recap context, planning context, restore state, and checkpoint callback together"
+        reason = "training plan initial generation needs workout identity, recap context, planning context, restore state, checkpoint callback, and optional quality feedback together"
     )]
     fn generate_initial_plan_window_with_state(
         &self,
@@ -111,6 +111,7 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
         planning_context: Option<&TrainingPlanPlanningContext>,
         restored_state: Option<LlmToolLoopState>,
         checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+        quality_feedback: Option<&str>,
     ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>>;
 
     fn generate_initial_plan_window(
@@ -127,6 +128,7 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
             saved_at_epoch_seconds,
             workout_recap,
             planning_context,
+            None,
             None,
             None,
         )
@@ -175,6 +177,16 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
             None,
         )
     }
+
+    fn evaluate_plan_quality(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        saved_at_epoch_seconds: i64,
+        workout_recap: &WorkoutRecap,
+        planning_context: Option<&TrainingPlanPlanningContext>,
+        draft_plan_text: &str,
+    ) -> BoxFuture<Result<PlanQualityEvaluation, TrainingPlanError>>;
 }
 
 pub trait TrainingPlanWorkoutSummaryPort: Send + Sync + 'static {
@@ -197,4 +209,20 @@ pub trait WorkoutPlanningLlmConfigPort: Send + Sync + 'static {
         &self,
         user_id: &str,
     ) -> BoxFuture<Result<crate::domain::llm::LlmProviderConfig, TrainingPlanError>>;
+}
+
+pub trait PlanQualityEvaluatorLlmConfigPort: Send + Sync + 'static {
+    fn get_plan_quality_evaluator_config(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<crate::domain::llm::LlmProviderConfig, TrainingPlanError>>;
+
+    fn get_plan_quality_max_loops(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<u32, TrainingPlanError>>;
+}
+
+pub trait PlanQualityProgressPort: Send + Sync + 'static {
+    fn on_quality_progress(&self, user_id: &str, workout_id: &str, message: String);
 }

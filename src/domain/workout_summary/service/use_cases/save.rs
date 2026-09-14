@@ -154,8 +154,11 @@ async fn run_background_save_workflow(workflow: BackgroundSaveWorkflow) {
     }
 
     if let Some(port) = workflow.save_completion_port {
-        let (recap_status, plan_status, messages) =
+        let (recap_status, plan_status, mut messages) =
             completion_workflow(recap_ok.is_ok(), plan_result.is_ok());
+        if let Ok(generated) = &plan_result {
+            messages.extend(generated.quality_progress_messages.iter().cloned());
+        }
         port.on_completed(
             &workflow.user_id,
             &workflow.completion_workout_id,
@@ -327,11 +330,16 @@ where
             Err(_) => SaveWorkflowStatus::Failed,
         };
 
+        let mut messages = retry_workflow_messages(recap_status, plan_status);
+        if let Ok(generated_plan) = &plan_result {
+            messages.extend(generated_plan.quality_progress_messages.iter().cloned());
+        }
+
         Ok(self.present_save_summary_result(
             SaveSummaryResult {
                 summary,
                 workflow: SaveWorkflowResult {
-                    messages: retry_workflow_messages(recap_status, plan_status),
+                    messages,
                     recap_status,
                     plan_status,
                 },

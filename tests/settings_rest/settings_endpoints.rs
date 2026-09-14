@@ -846,6 +846,111 @@ async fn update_ai_agents_persists_post_workout_model_overrides() {
 }
 
 #[tokio::test]
+async fn update_ai_agents_persists_plan_quality_evaluator_override_and_max_loops() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let patch_body = serde_json::json!({
+        "openrouterApiKey": "or-key-123456",
+        "selectedProvider": "openrouter",
+        "selectedModel": "openai/gpt-4o-mini",
+        "planQualityEvaluatorProvider": "gemini",
+        "planQualityEvaluatorModel": "gemini-2.5-flash",
+        "planQualityMaxLoops": 3
+    });
+
+    let patch_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/ai-agents")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&patch_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(patch_response.status(), StatusCode::OK);
+
+    let get_response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/settings")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let response_body: Value = get_json(get_response).await;
+    let ai_agents = response_body.get("aiAgents").unwrap();
+
+    assert_eq!(
+        ai_agents
+            .get("planQualityEvaluatorProvider")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "gemini"
+    );
+    assert_eq!(
+        ai_agents
+            .get("planQualityEvaluatorModel")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "gemini-2.5-flash"
+    );
+    assert_eq!(
+        ai_agents
+            .get("planQualityMaxLoops")
+            .unwrap()
+            .as_u64()
+            .unwrap(),
+        3
+    );
+}
+
+#[tokio::test]
+async fn update_ai_agents_rejects_plan_quality_max_loops_out_of_range() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let patch_body = serde_json::json!({
+        "openrouterApiKey": "or-key-123456",
+        "selectedProvider": "openrouter",
+        "selectedModel": "openai/gpt-4o-mini",
+        "planQualityMaxLoops": 11
+    });
+
+    let patch_response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/ai-agents")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&patch_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(patch_response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn update_ai_agents_supports_openai_compatible_provider_key_and_base_url() {
     let app = settings_test_app(
         TestIdentityServiceWithSession::default(),
@@ -1527,6 +1632,9 @@ async fn test_ai_agents_connection_returns_bad_request_when_provider_changes_wit
         workout_planning_model: None,
         meso_cycle_provider: None,
         meso_cycle_model: None,
+        plan_quality_evaluator_provider: None,
+        plan_quality_evaluator_model: None,
+        plan_quality_max_loops: None,
         include_power_image: false,
     };
     let app = settings_test_app_with_services(

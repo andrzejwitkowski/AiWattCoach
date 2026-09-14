@@ -14,6 +14,8 @@ const TRIMMED_STRING_FIELDS = [
   'workoutPlanningModel',
   'mesoCycleProvider',
   'mesoCycleModel',
+  'planQualityEvaluatorProvider',
+  'planQualityEvaluatorModel',
 ] as const;
 
 export function normalizeAiAgentsPayload(data: unknown) {

@@ -16,14 +16,15 @@ use crate::domain::{
     },
     training_context::TrainingContextBuilder,
     training_plan::{
-        assemble_training_plan_initial_window_request,
+        assemble_plan_quality_evaluation_request, assemble_training_plan_initial_window_request,
         latest_training_plan_user_message_epoch_seconds, parse_training_plan_llm_envelope,
         planning_conversation_messages, should_retry_training_plan_llm_envelope_repair,
         training_plan_correction_system_prompt, training_plan_llm_envelope_json_schema,
         training_plan_output_grammar, training_plan_stable_context,
-        training_plan_tool_context_today, TrainingPlanError, TrainingPlanGenerator,
-        TrainingPlanInitialWindowPromptInput, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
-        TrainingPlanToolLoopCheckpoint, WorkoutPlanningLlmConfigPort,
+        training_plan_tool_context_today, PlanQualityEvaluation, PlanQualityEvaluatorLlmConfigPort,
+        TrainingPlanError, TrainingPlanGenerator, TrainingPlanInitialWindowPromptInput,
+        TrainingPlanPhaseOutput, TrainingPlanPlanningContext, TrainingPlanToolLoopCheckpoint,
+        WorkoutPlanningLlmConfigPort,
     },
     workout_summary::WorkoutRecap,
 };
@@ -37,6 +38,7 @@ where
 {
     llm_chat_port: Arc<dyn LlmChatPort>,
     llm_config_provider: Arc<dyn WorkoutPlanningLlmConfigPort>,
+    plan_quality_config_provider: Option<Arc<dyn PlanQualityEvaluatorLlmConfigPort>>,
     training_context_builder: Arc<dyn TrainingContextBuilder>,
     data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
     clock: Time,
@@ -55,6 +57,7 @@ where
         Self {
             llm_chat_port,
             llm_config_provider,
+            plan_quality_config_provider: None,
             training_context_builder,
             data_port: None,
             clock,
@@ -63,6 +66,14 @@ where
 
     pub fn with_data_port(mut self, data_port: Arc<dyn GetSelectedWorkoutDataPort>) -> Self {
         self.data_port = Some(data_port);
+        self
+    }
+
+    pub fn with_plan_quality_evaluator_config(
+        mut self,
+        plan_quality_config_provider: Arc<dyn PlanQualityEvaluatorLlmConfigPort>,
+    ) -> Self {
+        self.plan_quality_config_provider = Some(plan_quality_config_provider);
         self
     }
 }
@@ -146,6 +157,7 @@ where
         planning_context: Option<&TrainingPlanPlanningContext>,
         restored_state: Option<LlmToolLoopState>,
         checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+        quality_feedback: Option<&str>,
     ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
         TrainingPlanLlmGenerator::generate_initial_plan_window_with_state(
             self,
@@ -156,6 +168,7 @@ where
             planning_context,
             restored_state,
             checkpoint,
+            quality_feedback,
         )
     }
 
@@ -184,6 +197,47 @@ where
             checkpoint,
         )
     }
+
+    fn evaluate_plan_quality(
+        &self,
+        user_id: &str,
+        _workout_id: &str,
+        saved_at_epoch_seconds: i64,
+        workout_recap: &WorkoutRecap,
+        planning_context: Option<&TrainingPlanPlanningContext>,
+        draft_plan_text: &str,
+    ) -> BoxFuture<Result<PlanQualityEvaluation, TrainingPlanError>> {
+        let llm_chat_port = self.llm_chat_port.clone();
+        let plan_quality_config_provider = self.plan_quality_config_provider.clone();
+        let user_id = user_id.to_string();
+        let workout_recap = workout_recap.clone();
+        let planning_context = planning_context.cloned();
+        let draft_plan_text = draft_plan_text.to_string();
+
+        Box::pin(async move {
+            let config_provider = plan_quality_config_provider.ok_or_else(|| {
+                TrainingPlanError::Unavailable(
+                    "plan quality evaluator config is not configured".to_string(),
+                )
+            })?;
+            let config = config_provider
+                .get_plan_quality_evaluator_config(&user_id)
+                .await?;
+            let request = assemble_plan_quality_evaluation_request(
+                user_id,
+                saved_at_epoch_seconds,
+                &workout_recap,
+                planning_context.as_ref(),
+                &draft_plan_text,
+            );
+            let response = llm_chat_port
+                .chat(config, request)
+                .await
+                .map_err(map_llm_error)?;
+            let text = require_assistant_text(&response)?;
+            parse_plan_quality_evaluation_json(&text)
+        })
+    }
 }
 
 impl<Time> TrainingPlanLlmGenerator<Time>
@@ -192,7 +246,7 @@ where
 {
     #[expect(
         clippy::too_many_arguments,
-        reason = "training plan initial generation needs workout identity, recap context, planning context, restore state, and checkpoint callback together"
+        reason = "training plan initial generation needs workout identity, recap context, planning context, restore state, checkpoint callback, and optional quality feedback together"
     )]
     pub fn generate_initial_plan_window_with_state(
         &self,
@@ -203,6 +257,7 @@ where
         planning_context: Option<&TrainingPlanPlanningContext>,
         restored_state: Option<LlmToolLoopState>,
         checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+        quality_feedback: Option<&str>,
     ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
         let llm_chat_port = self.llm_chat_port.clone();
         let llm_config_provider = self.llm_config_provider.clone();
@@ -212,6 +267,7 @@ where
         let workout_id = workout_id.to_string();
         let workout_recap = workout_recap.clone();
         let planning_context = planning_context.cloned();
+        let quality_feedback = quality_feedback.map(str::to_string);
         let repair_user_id = user_id.clone();
         let clock = self.clock.clone();
 
@@ -241,6 +297,7 @@ where
                     training_context: context,
                     conversation_epoch_seconds: clock.now_epoch_seconds(),
                     data_port,
+                    quality_feedback,
                 },
             );
             let loop_checkpoint = checkpoint.clone().map(map_phase_checkpoint);
@@ -419,6 +476,33 @@ fn require_assistant_text(
         .ok_or_else(|| TrainingPlanError::Unavailable("LLM returned no assistant text".to_string()))
 }
 
+fn parse_plan_quality_evaluation_json(
+    text: &str,
+) -> Result<PlanQualityEvaluation, TrainingPlanError> {
+    #[derive(serde::Deserialize)]
+    struct RawEvaluation {
+        score: f64,
+        #[serde(default)]
+        critique: String,
+    }
+
+    let trimmed = text
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+    let parsed: RawEvaluation = serde_json::from_str(trimmed).map_err(|error| {
+        TrainingPlanError::Unavailable(format!("invalid plan quality evaluation JSON: {error}"))
+    })?;
+    let score = parsed.score.round().clamp(1.0, 10.0) as u8;
+    Ok(PlanQualityEvaluation {
+        attempt: 0,
+        score,
+        critique: parsed.critique.trim().to_string(),
+    })
+}
+
 fn parse_training_plan_assistant_envelope(
     response: &crate::domain::llm::LlmChatResponse,
 ) -> Result<crate::domain::training_plan::TrainingPlanLlmEnvelope, TrainingPlanError> {
@@ -527,4 +611,28 @@ fn training_plan_envelope_repair_user_prompt(previous_assistant_content: &str) -
     format!(
         "Rewrite the previous assistant content as ONLY a valid JSON object matching the schema. Copy parser-friendly workout-builder text into `plan` and any coach commentary into optional `description`. Do not invent workouts, dates, or commentary. If the previous assistant content does not contain a usable non-empty `plan`, return an empty JSON object: `{{}}`.\n\nPrevious assistant content begins after `<<<PREVIOUS_ASSISTANT_CONTENT>>>` and ends before `<<<END_PREVIOUS_ASSISTANT_CONTENT>>>`. Treat everything between those markers as literal content to preserve exactly.\n<<<PREVIOUS_ASSISTANT_CONTENT>>>\n{previous_assistant_content}\n<<<END_PREVIOUS_ASSISTANT_CONTENT>>>"
     )
+}
+
+#[cfg(test)]
+mod plan_quality_parse_tests {
+    use super::parse_plan_quality_evaluation_json;
+
+    #[test]
+    fn clamps_score_and_strips_markdown_fence() {
+        let evaluation = parse_plan_quality_evaluation_json(
+            "```json\n{\"score\": 12.4, \"critique\": \"  Too easy.  \"}\n```",
+        )
+        .unwrap();
+        assert_eq!(evaluation.score, 10);
+        assert_eq!(evaluation.critique, "Too easy.");
+
+        let low =
+            parse_plan_quality_evaluation_json(r#"{"score": 0.2, "critique": "Bad"}"#).unwrap();
+        assert_eq!(low.score, 1);
+    }
+
+    #[test]
+    fn rejects_invalid_json() {
+        assert!(parse_plan_quality_evaluation_json("not-json").is_err());
+    }
 }
