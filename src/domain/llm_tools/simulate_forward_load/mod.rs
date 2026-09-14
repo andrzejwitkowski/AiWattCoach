@@ -2,10 +2,7 @@ use chrono::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::domain::{
-    intervals::parse_planned_workout_days,
-    llm::LlmToolDefinition,
-};
+use crate::domain::{intervals::parse_planned_workout_days, llm::LlmToolDefinition};
 
 use super::{LlmTool, ToolExecutionContext};
 

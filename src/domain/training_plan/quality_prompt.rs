@@ -56,7 +56,10 @@ pub fn format_plan_quality_evidence(
     evidence: Option<&PlanQualityEvidence>,
     availability_summary: Option<&str>,
 ) -> String {
-    let availability_line = match availability_summary.map(str::trim).filter(|s| !s.is_empty()) {
+    let availability_line = match availability_summary
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(summary) => format!("\n{summary}"),
         None => String::new(),
     };
@@ -84,8 +87,9 @@ pub fn format_plan_quality_evidence(
     };
 
     // Budget fields so labels + missing + three sections always fit the block cap.
-    let overhead =
-        EVIDENCE_BLOCK_LABEL_OVERHEAD + missing_line.chars().count() + availability_line.chars().count();
+    let overhead = EVIDENCE_BLOCK_LABEL_OVERHEAD
+        + missing_line.chars().count()
+        + availability_line.chars().count();
     let field_budget = EVIDENCE_BLOCK_MAX_CHARS.saturating_sub(overhead).max(3) / 3;
     let load = truncate_snippet(field_or_missing(evidence.load.as_deref()), field_budget);
     let power_curve = truncate_snippet(

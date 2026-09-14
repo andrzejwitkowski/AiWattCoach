@@ -390,4 +390,3 @@ pub(super) fn format_date(value: NaiveDate) -> String {
 pub(super) fn round_to_2(value: f64) -> f64 {
     (value * 100.0).round() / 100.0
 }
-

@@ -218,8 +218,7 @@ fn simulate_forward_load_marks_unknown_race_tss_as_none() {
 
     let notes = parsed["notes"].as_array().expect("notes");
     assert!(notes.iter().any(|note| {
-        note.as_str()
-            == Some("2026-05-08: race TSS unknown; TSB shown assumes zero race load")
+        note.as_str() == Some("2026-05-08: race TSS unknown; TSB shown assumes zero race load")
     }));
 }
 
