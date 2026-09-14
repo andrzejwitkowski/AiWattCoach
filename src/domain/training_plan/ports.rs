@@ -221,6 +221,11 @@ pub trait PlanQualityEvaluatorLlmConfigPort: Send + Sync + 'static {
         &self,
         user_id: &str,
     ) -> BoxFuture<Result<u32, TrainingPlanError>>;
+
+    fn get_plan_quality_pass_score(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<u8, TrainingPlanError>>;
 }
 
 pub trait PlanQualityProgressPort: Send + Sync + 'static {

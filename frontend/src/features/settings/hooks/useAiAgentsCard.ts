@@ -66,6 +66,10 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
           aiAgents.planQualityMaxLoops === null || aiAgents.planQualityMaxLoops === undefined
             ? ''
             : String(aiAgents.planQualityMaxLoops),
+        planQualityPassScore:
+          aiAgents.planQualityPassScore === null || aiAgents.planQualityPassScore === undefined
+            ? ''
+            : String(aiAgents.planQualityPassScore),
         includePowerImage: aiAgents.includePowerImage ?? false,
       }),
     [
@@ -76,6 +80,7 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
       aiAgents.planQualityEvaluatorModel,
       aiAgents.planQualityEvaluatorProvider,
       aiAgents.planQualityMaxLoops,
+      aiAgents.planQualityPassScore,
       aiAgents.selectedModel,
       aiAgents.selectedProvider,
       aiAgents.workoutChatModel,
@@ -116,7 +121,14 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
     OPTIONAL_OVERRIDE_CHECKS.map(({ provider, model, label }) =>
       resolveOptionalOverrideValidationMessage(draft[provider], draft[model], label),
     ).find(Boolean) ??
-    resolvePlanQualityMaxLoopsValidationMessage(draft.planQualityMaxLoops) ??
+    resolvePlanQualityBoundedIntValidationMessage(
+      draft.planQualityMaxLoops,
+      'Plan quality max loops',
+    ) ??
+    resolvePlanQualityBoundedIntValidationMessage(
+      draft.planQualityPassScore,
+      'Plan quality pass score',
+    ) ??
     null;
   const canSave = hasDirtyDraft && !validationMessage;
   const canTest =
@@ -287,17 +299,17 @@ function resolveOptionalOverrideValidationMessage(
   return null;
 }
 
-function resolvePlanQualityMaxLoopsValidationMessage(value: string) {
+function resolvePlanQualityBoundedIntValidationMessage(value: string, label: string) {
   const trimmed = value.trim();
   if (!trimmed) {
     return null;
   }
   if (!/^\d+$/.test(trimmed)) {
-    return 'Plan quality max loops must be a whole number between 1 and 10.';
+    return `${label} must be a whole number between 1 and 10.`;
   }
   const parsed = Number(trimmed);
   if (parsed < 1 || parsed > 10) {
-    return 'Plan quality max loops must be between 1 and 10.';
+    return `${label} must be between 1 and 10.`;
   }
   return null;
 }

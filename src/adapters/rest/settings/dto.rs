@@ -101,6 +101,8 @@ pub(super) struct AiAgentsDto {
     pub(super) plan_quality_evaluator_model: Option<String>,
     #[serde(rename = "planQualityMaxLoops")]
     pub(super) plan_quality_max_loops: Option<u32>,
+    #[serde(rename = "planQualityPassScore")]
+    pub(super) plan_quality_pass_score: Option<u32>,
     #[serde(rename = "includePowerImage")]
     pub(super) include_power_image: bool,
 }
@@ -212,6 +214,8 @@ pub(crate) struct UpdateAiAgentsRequest {
     pub(super) plan_quality_evaluator_model: OptionalStringInput,
     #[serde(default, rename = "planQualityMaxLoops")]
     pub(super) plan_quality_max_loops: OptionalU32Input,
+    #[serde(default, rename = "planQualityPassScore")]
+    pub(super) plan_quality_pass_score: OptionalU32Input,
     #[serde(default, rename = "includePowerImage")]
     pub(super) include_power_image: Option<bool>,
 }

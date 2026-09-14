@@ -19,6 +19,7 @@ export type AiAgentsDraftState = {
   planQualityEvaluatorProvider: string;
   planQualityEvaluatorModel: string;
   planQualityMaxLoops: string;
+  planQualityPassScore: string;
   includePowerImage: boolean;
 };
 
@@ -36,6 +37,7 @@ type PersistedAiAgentsDraft = Pick<
   | 'planQualityEvaluatorProvider'
   | 'planQualityEvaluatorModel'
   | 'planQualityMaxLoops'
+  | 'planQualityPassScore'
   | 'includePowerImage'
 >;
 
@@ -61,6 +63,7 @@ export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiA
     planQualityEvaluatorProvider: persisted.planQualityEvaluatorProvider,
     planQualityEvaluatorModel: persisted.planQualityEvaluatorModel,
     planQualityMaxLoops: persisted.planQualityMaxLoops,
+    planQualityPassScore: persisted.planQualityPassScore,
     includePowerImage: persisted.includePowerImage,
   };
 }
@@ -160,6 +163,10 @@ export function mergeDraftWithPersisted(
       current.planQualityMaxLoops === previousPersisted.planQualityMaxLoops
         ? persisted.planQualityMaxLoops
         : current.planQualityMaxLoops,
+    planQualityPassScore:
+      current.planQualityPassScore === previousPersisted.planQualityPassScore
+        ? persisted.planQualityPassScore
+        : current.planQualityPassScore,
     includePowerImage:
       current.includePowerImage === previousPersisted.includePowerImage
         ? persisted.includePowerImage
@@ -187,6 +194,7 @@ export function isAiAgentsDraftDirty(current: AiAgentsDraftState, clean: AiAgent
     current.planQualityEvaluatorProvider !== clean.planQualityEvaluatorProvider ||
     current.planQualityEvaluatorModel !== clean.planQualityEvaluatorModel ||
     current.planQualityMaxLoops !== clean.planQualityMaxLoops ||
+    current.planQualityPassScore !== clean.planQualityPassScore ||
     current.includePowerImage !== clean.includePowerImage
   );
 }
@@ -269,16 +277,36 @@ export function buildVisibleAiAgentsRequest(
     persisted.planQualityEvaluatorModel,
   );
 
-  const trimmedMaxLoops = draft.planQualityMaxLoops.trim();
-  if (trimmedMaxLoops !== persisted.planQualityMaxLoops) {
-    request.planQualityMaxLoops = trimmedMaxLoops.length > 0 ? Number(trimmedMaxLoops) : null;
-  }
+  assignChangedOptionalIntField(
+    request,
+    'planQualityMaxLoops',
+    draft.planQualityMaxLoops,
+    persisted.planQualityMaxLoops,
+  );
+  assignChangedOptionalIntField(
+    request,
+    'planQualityPassScore',
+    draft.planQualityPassScore,
+    persisted.planQualityPassScore,
+  );
 
   if (draft.includePowerImage !== persisted.includePowerImage) {
     request.includePowerImage = draft.includePowerImage;
   }
 
   return request;
+}
+
+function assignChangedOptionalIntField(
+  request: Partial<Record<keyof AiAgentsDraftState, AiAgentsRequestValue>>,
+  key: 'planQualityMaxLoops' | 'planQualityPassScore',
+  currentValue: string,
+  persistedValue: string,
+) {
+  const trimmed = currentValue.trim();
+  if (trimmed !== persistedValue) {
+    request[key] = trimmed.length > 0 ? Number(trimmed) : null;
+  }
 }
 
 export function buildTestStatusMessage(result: TestAiAgentsConnectionResponse) {

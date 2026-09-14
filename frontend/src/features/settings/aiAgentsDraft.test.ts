@@ -20,6 +20,7 @@ function emptyPersisted(): AiAgentsDraftState {
     planQualityEvaluatorProvider: '',
     planQualityEvaluatorModel: '',
     planQualityMaxLoops: '',
+    planQualityPassScore: '',
     includePowerImage: false,
   });
 }

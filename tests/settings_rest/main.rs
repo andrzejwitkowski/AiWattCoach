@@ -1,4 +1,5 @@
 mod admin_endpoints;
+mod ai_agents_endpoints;
 mod athlete_summary_endpoints;
 mod intervals_connection;
 mod observability;

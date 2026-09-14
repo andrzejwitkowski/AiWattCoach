@@ -369,6 +369,9 @@ describe('AiAgentsCard', () => {
     fireEvent.change(screen.getByLabelText(/plan quality max loops/i), {
       target: { value: '3' },
     });
+    fireEvent.change(screen.getByLabelText(/plan quality pass score/i), {
+      target: { value: '9' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
 
     await waitFor(() => {
@@ -376,6 +379,7 @@ describe('AiAgentsCard', () => {
         planQualityEvaluatorProvider: 'gemini',
         planQualityEvaluatorModel: 'gemini-2.5-flash',
         planQualityMaxLoops: 3,
+        planQualityPassScore: 9,
       });
     });
     expect(onSave).toHaveBeenCalledTimes(1);

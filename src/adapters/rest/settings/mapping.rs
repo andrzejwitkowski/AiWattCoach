@@ -72,6 +72,7 @@ pub(super) fn map_settings_to_dto(
                 .map(|provider| provider.as_str().to_string()),
             plan_quality_evaluator_model: settings.ai_agents.plan_quality_evaluator_model.clone(),
             plan_quality_max_loops: settings.ai_agents.plan_quality_max_loops,
+            plan_quality_pass_score: settings.ai_agents.plan_quality_pass_score,
             include_power_image: settings.ai_agents.include_power_image,
         },
         intervals: IntervalsDto {
@@ -166,6 +167,7 @@ pub(super) fn map_ai_agents_update(
     let plan_quality_evaluator_model_update =
         normalize_string_input(body.plan_quality_evaluator_model);
     let plan_quality_max_loops_update = normalize_u32_input(body.plan_quality_max_loops);
+    let plan_quality_pass_score_update = normalize_u32_input(body.plan_quality_pass_score);
     let openai_api_key = normalize_string_input(body.openai_api_key);
     let gemini_api_key = normalize_string_input(body.gemini_api_key);
     let openrouter_api_key = normalize_string_input(body.openrouter_api_key);
@@ -246,6 +248,11 @@ pub(super) fn map_ai_agents_update(
         plan_quality_max_loops_update,
         current.ai_agents.plan_quality_max_loops,
     ))?;
+    let plan_quality_pass_score =
+        validation::validate_plan_quality_pass_score(apply_field_update(
+            plan_quality_pass_score_update,
+            current.ai_agents.plan_quality_pass_score,
+        ))?;
 
     let openai_compatible_base_url = apply_field_update(
         openai_compatible_base_url,
@@ -307,6 +314,7 @@ pub(super) fn map_ai_agents_update(
         )?,
         plan_quality_evaluator_model,
         plan_quality_max_loops,
+        plan_quality_pass_score,
         include_power_image: body
             .include_power_image
             .unwrap_or(current.ai_agents.include_power_image),

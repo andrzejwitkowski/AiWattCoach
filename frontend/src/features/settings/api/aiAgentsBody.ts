@@ -21,6 +21,7 @@ type AgentOverrideFieldKey =
 
 type ValidatedAiAgents = Partial<Record<AiAgentsFieldKey | AgentOverrideFieldKey, string | null>> & {
   planQualityMaxLoops?: number | null;
+  planQualityPassScore?: number | null;
 };
 
 function trimToUndefined(value: string | null | undefined) {
@@ -124,16 +125,27 @@ export function buildAiAgentsConnectionBody(
     }
   }
 
-  if (data && typeof data === 'object' && 'planQualityMaxLoops' in data) {
-    const planQualityMaxLoops = (data as Record<string, unknown>).planQualityMaxLoops;
-    if (planQualityMaxLoops === null) {
-      body.planQualityMaxLoops = null;
-    } else if (typeof planQualityMaxLoops === 'number') {
-      body.planQualityMaxLoops = planQualityMaxLoops;
-    } else if (typeof validated.planQualityMaxLoops === 'number' || validated.planQualityMaxLoops === null) {
-      body.planQualityMaxLoops = validated.planQualityMaxLoops;
-    }
-  }
+  assignOptionalNumberField(body, data, 'planQualityMaxLoops', validated.planQualityMaxLoops);
+  assignOptionalNumberField(body, data, 'planQualityPassScore', validated.planQualityPassScore);
 
   return body;
+}
+
+function assignOptionalNumberField(
+  body: Record<string, unknown>,
+  data: unknown,
+  key: 'planQualityMaxLoops' | 'planQualityPassScore',
+  validatedValue: number | null | undefined,
+) {
+  if (!data || typeof data !== 'object' || !(key in data)) {
+    return;
+  }
+  const rawValue = (data as Record<string, unknown>)[key];
+  if (rawValue === null) {
+    body[key] = null;
+  } else if (typeof rawValue === 'number') {
+    body[key] = rawValue;
+  } else if (typeof validatedValue === 'number' || validatedValue === null) {
+    body[key] = validatedValue;
+  }
 }

@@ -4,7 +4,7 @@ use super::super::{
     format_quality_feedback, plan_quality_attempt_message, plan_quality_finished_accepted_message,
     plan_quality_finished_best_message, PlanQualityEvaluation, PlanQualityEvaluatorLlmConfigPort,
     PlanQualityProgressPort, TrainingPlanError, TrainingPlanGenerationOperation,
-    TrainingPlanSnapshot, PLAN_QUALITY_PASS_SCORE,
+    TrainingPlanSnapshot,
 };
 use super::ctx::{GenerationIdentity, GenerationPlanning};
 use super::structural::CorrectionRoundInput;
@@ -83,13 +83,16 @@ where
             .get_plan_quality_max_loops(identity.user_id)
             .await?
             .max(1);
+        let pass_score = plan_quality_config
+            .get_plan_quality_pass_score(identity.user_id)
+            .await?;
         let mut quality_progress_messages = Vec::new();
         let mut best =
             self.seed_best_quality_draft(&identity, &operation, &snapshot, &draft_plan_text)?;
         let start_attempt = (operation.quality_evaluations.len() as u32).saturating_add(1);
         let mut accepted = best
             .as_ref()
-            .is_some_and(|draft| draft.evaluation.score >= PLAN_QUALITY_PASS_SCORE);
+            .is_some_and(|draft| draft.evaluation.score >= pass_score);
 
         if !accepted {
             for attempt in start_attempt..=max_loops {
@@ -150,7 +153,7 @@ where
                     ))
                     .await?;
 
-                if evaluation.score >= PLAN_QUALITY_PASS_SCORE {
+                if evaluation.score >= pass_score {
                     accepted = true;
                     break;
                 }

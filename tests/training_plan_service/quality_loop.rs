@@ -14,6 +14,7 @@ use super::support::*;
 #[derive(Clone)]
 struct FixedPlanQualityConfig {
     max_loops: u32,
+    pass_score: u8,
 }
 
 impl PlanQualityEvaluatorLlmConfigPort for FixedPlanQualityConfig {
@@ -38,6 +39,14 @@ impl PlanQualityEvaluatorLlmConfigPort for FixedPlanQualityConfig {
     ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<u32, TrainingPlanError>> {
         let max_loops = self.max_loops;
         Box::pin(async move { Ok(max_loops) })
+    }
+
+    fn get_plan_quality_pass_score(
+        &self,
+        _user_id: &str,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<u8, TrainingPlanError>> {
+        let pass_score = self.pass_score;
+        Box::pin(async move { Ok(pass_score) })
     }
 }
 
@@ -84,7 +93,10 @@ async fn quality_loop_replans_until_score_passes_and_records_progress() {
     let progress = RecordingPlanQualityProgress::default();
     let service = built
         .service
-        .with_plan_quality_evaluator_config(Arc::new(FixedPlanQualityConfig { max_loops: 5 }))
+        .with_plan_quality_evaluator_config(Arc::new(FixedPlanQualityConfig {
+            max_loops: 5,
+            pass_score: 7,
+        }))
         .with_plan_quality_progress(Arc::new(progress.clone()));
 
     let result = service
@@ -136,7 +148,10 @@ async fn quality_loop_exhaustion_ships_highest_scoring_draft() {
     let progress = RecordingPlanQualityProgress::default();
     let service = built
         .service
-        .with_plan_quality_evaluator_config(Arc::new(FixedPlanQualityConfig { max_loops: 2 }))
+        .with_plan_quality_evaluator_config(Arc::new(FixedPlanQualityConfig {
+            max_loops: 2,
+            pass_score: 7,
+        }))
         .with_plan_quality_progress(Arc::new(progress.clone()));
 
     let result = service

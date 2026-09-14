@@ -39,6 +39,7 @@ pub struct AiAgentsConfig {
     pub plan_quality_evaluator_provider: Option<LlmProvider>,
     pub plan_quality_evaluator_model: Option<String>,
     pub plan_quality_max_loops: Option<u32>,
+    pub plan_quality_pass_score: Option<u32>,
     pub include_power_image: bool,
 }
 
