@@ -114,9 +114,13 @@ pub(super) fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedL
         sources.join("+")
     };
 
-    let tss_source = non_event_tss_source
-        .or(event_tss_source)
-        .unwrap_or(TssSource::Default);
+    let tss_source = if event_tss_source == Some(TssSource::None) {
+        TssSource::None
+    } else {
+        non_event_tss_source
+            .or(event_tss_source)
+            .unwrap_or(TssSource::Default)
+    };
 
     PlannedLoadEstimate {
         tss: total_tss,
@@ -129,7 +133,7 @@ pub(super) fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedL
         tss_source,
         emit_race_tss_unknown_note,
         is_rest: is_rest_day,
-        rest_reason,
+        rest_reason: if is_rest_day { rest_reason } else { None },
     }
 }
 

@@ -248,3 +248,86 @@ fn simulate_forward_load_input_overrides_upcoming() {
     assert!(response.contains("\"2026-05-05\""));
     assert!(response.contains("\"source\":\"input\""));
 }
+
+#[test]
+fn simulate_forward_load_keeps_none_when_workout_shares_unknown_race_day() {
+    let mut ctx = sample_context();
+    ctx.training_context.future_events =
+        vec![crate::domain::training_context::FuturePlannedEventContext {
+            event_id: 1,
+            start_date_local: "2026-05-05T08:00:00".to_string(),
+            category: "race".to_string(),
+            event_type: Some("road".to_string()),
+            name: Some("Test Race".to_string()),
+            description: None,
+            estimated_duration_seconds: Some(7200),
+            estimated_training_stress_score: None,
+            estimated_intensity_factor: None,
+            estimated_normalized_power_watts: None,
+        }];
+
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(
+        tool.execute(r#"{"dated_workout_text":"2026-05-05\n- 60m 65%"}"#, &ctx),
+    );
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    let day = parsed["days"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|day| day["date"] == "2026-05-05")
+        .expect("shared day");
+
+    assert_eq!(day["source"], "input+future_event");
+    assert_eq!(day["tss_source"], "none");
+    assert!(parsed["notes"].as_array().unwrap().iter().any(|note| {
+        note.as_str() == Some("2026-05-05: race TSS unknown; TSB shown assumes zero race load")
+    }));
+}
+
+#[test]
+fn simulate_forward_load_clears_rest_reason_when_race_makes_day_non_rest() {
+    let mut ctx = sample_context();
+    ctx.training_context.future_events =
+        vec![crate::domain::training_context::FuturePlannedEventContext {
+            event_id: 1,
+            start_date_local: "2026-05-06T08:00:00".to_string(),
+            category: "race".to_string(),
+            event_type: Some("road".to_string()),
+            name: Some("Test Race".to_string()),
+            description: None,
+            estimated_duration_seconds: Some(7200),
+            estimated_training_stress_score: Some(120.0),
+            estimated_intensity_factor: None,
+            estimated_normalized_power_watts: None,
+        }];
+
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(
+        r#"{"dated_workout_text":"2026-05-06\nRest Day: absorb load"}"#,
+        &ctx,
+    ));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    let day = parsed["days"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|day| day["date"] == "2026-05-06")
+        .expect("rest+race day");
+
+    assert_eq!(day["rest_day"], false);
+    assert!(day["rest_day_reason"].is_null());
+    assert_eq!(day["source"], "input+future_event");
+}
+
+#[test]
+fn simulate_forward_load_rejects_invalid_dated_workout_text() {
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(
+        r#"{"dated_workout_text":"not-a-date\n- 60m 65%"}"#,
+        &sample_context(),
+    ));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    let error = parsed["error"].as_str().expect("error");
+    assert!(error.contains("invalid dated_workout_text"));
+}

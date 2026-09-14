@@ -117,12 +117,18 @@ fn simulate_forward_load(arguments_json: &str, context: &ToolExecutionContext) -
         }
     };
 
-    let input_days = args
-        .dated_workout_text
-        .as_deref()
-        .and_then(|text| parse_planned_workout_days(text).ok())
-        .map(|parsed| parsed.days)
-        .unwrap_or_default();
+    let input_days = match args.dated_workout_text.as_deref() {
+        None => Vec::new(),
+        Some(text) => match parse_planned_workout_days(text) {
+            Ok(parsed) => parsed.days,
+            Err(error) => {
+                return json!({
+                    "error": format!("invalid dated_workout_text: {error}")
+                })
+                .to_string();
+            }
+        },
+    };
 
     let Some(today) = parse_date(&context.today) else {
         return json!({

@@ -14,8 +14,7 @@ use crate::domain::{
         run_tool_loop_with_checkpoint, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
         LlmToolLoopOutput, LlmToolLoopState, ToolExecutionContext, ToolLoopCheckpoint, ToolScope,
     },
-    settings::UserSettingsUseCases,
-    training_context::{TrainingContextBuilder, WeeklyAvailabilityContext},
+    training_context::TrainingContextBuilder,
     training_plan::{
         assemble_plan_quality_evaluation_request, assemble_training_plan_initial_window_request,
         format_plan_quality_availability, latest_training_plan_user_message_epoch_seconds,
@@ -42,7 +41,6 @@ where
     llm_config_provider: Arc<dyn WorkoutPlanningLlmConfigPort>,
     plan_quality_config_provider: Option<Arc<dyn PlanQualityEvaluatorLlmConfigPort>>,
     training_context_builder: Arc<dyn TrainingContextBuilder>,
-    settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
     clock: Time,
 }
@@ -62,7 +60,6 @@ where
             llm_config_provider,
             plan_quality_config_provider: None,
             training_context_builder,
-            settings_service: None,
             data_port: None,
             clock,
         }
@@ -70,14 +67,6 @@ where
 
     pub fn with_data_port(mut self, data_port: Arc<dyn GetSelectedWorkoutDataPort>) -> Self {
         self.data_port = Some(data_port);
-        self
-    }
-
-    pub fn with_settings_service(
-        mut self,
-        settings_service: Arc<dyn UserSettingsUseCases>,
-    ) -> Self {
-        self.settings_service = Some(settings_service);
         self
     }
 
@@ -254,42 +243,23 @@ where
     fn plan_quality_availability_summary(
         &self,
         user_id: &str,
+        workout_id: &str,
     ) -> BoxFuture<Result<String, TrainingPlanError>> {
-        let settings_service = self.settings_service.clone();
-        let clock = self.clock.clone();
+        let training_context_builder = self.training_context_builder.clone();
         let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
 
         Box::pin(async move {
-            let Some(settings_service) = settings_service else {
-                return Ok("availability: not configured".to_string());
-            };
-
-            let settings = settings_service
-                .get_settings(&user_id)
+            let context = training_context_builder
+                .build(&user_id, &workout_id)
                 .await
-                .map_err(|error| TrainingPlanError::Unavailable(error.to_string()))?;
-
-            let today = clock_today_date(&clock)?;
-            let availability_configured = settings.availability.is_configured();
-            let weekly_availability = if availability_configured {
-                settings
-                    .availability
-                    .days
-                    .into_iter()
-                    .map(|day| WeeklyAvailabilityContext {
-                        weekday: day.weekday,
-                        available: day.available,
-                        max_duration_minutes: day.max_duration_minutes,
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            };
-
+                .map_err(map_llm_error)?;
+            // Same today anchor as generation tools (history.window_end).
+            let today = training_plan_tool_context_today(&context.context);
             Ok(format_plan_quality_availability(
                 &today,
-                availability_configured,
-                &weekly_availability,
+                context.context.profile.availability_configured,
+                &context.context.profile.weekly_availability,
                 TRAINING_PLAN_WINDOW_DAY_COUNT as i64,
             ))
         })
@@ -508,16 +478,6 @@ where
 
 fn map_llm_error(error: LlmError) -> TrainingPlanError {
     TrainingPlanError::Unavailable(error.to_string())
-}
-
-fn clock_today_date(clock: &impl Clock) -> Result<String, TrainingPlanError> {
-    use chrono::{TimeZone, Utc};
-    Utc.timestamp_opt(clock.now_epoch_seconds(), 0)
-        .single()
-        .map(|dt| dt.date_naive().format("%Y-%m-%d").to_string())
-        .ok_or_else(|| {
-            TrainingPlanError::Unavailable("invalid generator clock epoch for availability".into())
-        })
 }
 
 fn map_phase_checkpoint(checkpoint: TrainingPlanToolLoopCheckpoint) -> ToolLoopCheckpoint {

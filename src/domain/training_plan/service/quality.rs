@@ -142,7 +142,7 @@ where
     ) -> Result<bool, TrainingPlanError> {
         let availability_summary = match self
             .generator
-            .plan_quality_availability_summary(identity.user_id)
+            .plan_quality_availability_summary(identity.user_id, identity.workout_id)
             .await
         {
             Ok(summary) => summary,

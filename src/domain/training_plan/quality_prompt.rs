@@ -19,7 +19,7 @@ Scoring rubric (use the full range; 7 is not a default):\n\
 \n\
 Anti-collapse: use the full 1-10 range. Reserve 8+ for drafts whose claims the evidence block confirms. If a draft satisfies every must-have and its load claims are verified, score it 8 or higher.\n\
 \n\
-Unavailable evidence is not a plan fault: If the evidence block or the draft states that a datum is unavailable and gives the reason (no race TSS, no power samples / insufficient data, no executed intervals), do NOT deduct for the missing datum. Score how the plan handles that uncertainty: conservative targets with a stated rationale are acceptable, and such a draft can score 8 or higher.\n\
+Unavailable evidence is not a plan fault: If the evidence block states that a datum is unavailable and gives the reason (no race TSS, no power samples / insufficient data, no executed intervals), do NOT deduct for the missing datum. Score how the plan handles that uncertainty: conservative targets with a stated rationale are acceptable, and such a draft can score 8 or higher. Draft-only claims of unavailable data without evidence-block support do not qualify.\n\
 \n\
 Treat availability lines in the evidence block as authoritative constraints. A rest day on an unavailable weekday is not a conflict with the recap.\n\
 \n\
@@ -378,6 +378,9 @@ mod tests {
         assert!(system.contains("6-7:"));
         assert!(system.contains("use the full"));
         assert!(system.contains("Unavailable evidence is not a plan fault"));
+        assert!(system.contains(
+            "Draft-only claims of unavailable data without evidence-block support do not qualify"
+        ));
         assert!(system.contains("raise_to_next"));
         assert!(!system.contains(RACING_STRATEGIST_APP_EVIDENCE_CONTRACT));
         assert!(!system.contains(RACING_STRATEGIST_OPERATIONAL_GUIDELINES));

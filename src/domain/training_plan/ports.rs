@@ -187,6 +187,7 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
     fn plan_quality_availability_summary(
         &self,
         _user_id: &str,
+        _workout_id: &str,
     ) -> BoxFuture<Result<String, TrainingPlanError>> {
         Box::pin(async move { Ok("availability: not configured".to_string()) })
     }
