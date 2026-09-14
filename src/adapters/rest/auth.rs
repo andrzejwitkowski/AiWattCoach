@@ -36,7 +36,7 @@ pub struct StartWahooConnectQuery {
 
 #[derive(Deserialize)]
 pub struct WahooCallbackQuery {
-    state: String,
+    state: Option<String>,
     code: String,
 }
 
@@ -183,7 +183,7 @@ pub async fn finish_wahoo_connect(
     };
 
     match wahoo_service
-        .finish_connect(&user_id, &query.state, &query.code)
+        .finish_connect(&user_id, query.state.as_deref(), &query.code)
         .await
     {
         Ok(result) => Redirect::to(&result.redirect_to).into_response(),

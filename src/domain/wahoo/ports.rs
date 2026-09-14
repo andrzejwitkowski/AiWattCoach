@@ -16,6 +16,11 @@ pub trait WahooConnectStateRepository: Clone + Send + Sync + 'static {
         state_id: &str,
         user_id: &str,
     ) -> BoxFuture<Result<Option<WahooConnectState>, WahooError>>;
+
+    fn consume_latest_for_user(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<WahooConnectState>, WahooError>>;
 }
 
 pub trait WahooOAuthPort: Clone + Send + Sync + 'static {

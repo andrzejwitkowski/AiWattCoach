@@ -81,6 +81,22 @@ impl WahooConnectStateRepository for MongoWahooConnectStateRepository {
             Ok(document.map(map_document_to_domain))
         })
     }
+
+    fn consume_latest_for_user(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<WahooConnectState>, WahooError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let document = collection
+                .find_one_and_delete(doc! { "user_id": user_id })
+                .sort(doc! { "created_at_epoch_seconds": -1 })
+                .await
+                .map_err(|error| WahooError::Repository(error.to_string()))?;
+            Ok(document.map(map_document_to_domain))
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

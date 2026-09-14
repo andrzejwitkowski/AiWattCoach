@@ -2483,7 +2483,7 @@ impl WahooUseCases for RecordingWahooService {
     fn finish_connect(
         &self,
         _user_id: &str,
-        _state: &str,
+        _state: Option<&str>,
         _code: &str,
     ) -> crate::domain::wahoo::BoxFuture<Result<crate::domain::wahoo::WahooAuthExchange, WahooError>>
     {
