@@ -278,6 +278,9 @@ where
                 snapshot: generated.snapshot,
                 active_projected_days: generated.active_projected_days,
                 was_generated: completed.was_generated,
+                quality_evaluations: generated.quality_evaluations,
+                shipped_quality: generated.shipped_quality,
+                quality_progress_messages: generated.quality_progress_messages,
             })
         })
     }

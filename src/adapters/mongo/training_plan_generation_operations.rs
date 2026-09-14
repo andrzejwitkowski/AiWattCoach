@@ -9,8 +9,9 @@ use crate::domain::{
     ai_workflow::{AttemptRecord, ValidationIssue, WorkflowPhase, WorkflowStatus},
     llm_tools::LlmToolLoopState,
     training_plan::{
-        BoxFuture, TrainingPlanError, TrainingPlanFailureState, TrainingPlanGenerationClaimResult,
-        TrainingPlanGenerationOperation, TrainingPlanGenerationOperationRepository,
+        BoxFuture, PlanQualityEvaluation, TrainingPlanError, TrainingPlanFailureState,
+        TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
+        TrainingPlanGenerationOperationRepository,
     },
 };
 
@@ -54,6 +55,12 @@ struct TrainingPlanGenerationOperationDocument {
     #[serde(default)]
     validation_issues: Vec<ValidationIssueDocument>,
     #[serde(default)]
+    quality_evaluations: Vec<PlanQualityEvaluationDocument>,
+    #[serde(default)]
+    best_quality_evaluation: Option<PlanQualityEvaluationDocument>,
+    #[serde(default)]
+    best_quality_plan_response: Option<String>,
+    #[serde(default)]
     attempts: Vec<AttemptRecordDocument>,
     failure: Option<TrainingPlanFailureStateDocument>,
     started_at_epoch_seconds: Option<i64>,
@@ -69,6 +76,13 @@ struct TrainingPlanGenerationOperationDocument {
     updated_at_epoch_seconds: Option<i64>,
     #[serde(default)]
     updated_at: Option<DateTime>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PlanQualityEvaluationDocument {
+    attempt: i64,
+    score: i64,
+    critique: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -271,6 +285,17 @@ fn map_operation_to_document(
             .iter()
             .map(map_issue_to_document)
             .collect(),
+        quality_evaluations: operation
+            .quality_evaluations
+            .iter()
+            .map(map_quality_evaluation_to_document)
+            .collect::<Result<Vec<_>, _>>()?,
+        best_quality_evaluation: operation
+            .best_quality_evaluation
+            .as_ref()
+            .map(map_quality_evaluation_to_document)
+            .transpose()?,
+        best_quality_plan_response: operation.best_quality_plan_response.clone(),
         attempts: operation
             .attempts
             .iter()
@@ -341,6 +366,16 @@ fn map_document_to_operation(
             .into_iter()
             .map(map_document_to_issue)
             .collect(),
+        quality_evaluations: document
+            .quality_evaluations
+            .into_iter()
+            .map(map_document_to_quality_evaluation)
+            .collect::<Result<Vec<_>, _>>()?,
+        best_quality_evaluation: document
+            .best_quality_evaluation
+            .map(map_document_to_quality_evaluation)
+            .transpose()?,
+        best_quality_plan_response: document.best_quality_plan_response,
         attempts: document
             .attempts
             .into_iter()
@@ -374,6 +409,29 @@ fn map_document_to_operation(
             "updated_at",
         )
         .map_err(TrainingPlanError::Repository)?,
+    })
+}
+
+fn map_quality_evaluation_to_document(
+    evaluation: &PlanQualityEvaluation,
+) -> Result<PlanQualityEvaluationDocument, TrainingPlanError> {
+    Ok(PlanQualityEvaluationDocument {
+        attempt: i64::from(evaluation.attempt),
+        score: i64::from(evaluation.score),
+        critique: evaluation.critique.clone(),
+    })
+}
+
+fn map_document_to_quality_evaluation(
+    document: PlanQualityEvaluationDocument,
+) -> Result<PlanQualityEvaluation, TrainingPlanError> {
+    Ok(PlanQualityEvaluation {
+        attempt: u32::try_from(document.attempt).map_err(|_| {
+            TrainingPlanError::Repository("invalid plan quality attempt".to_string())
+        })?,
+        score: u8::try_from(document.score)
+            .map_err(|_| TrainingPlanError::Repository("invalid plan quality score".to_string()))?,
+        critique: document.critique,
     })
 }
 
@@ -443,6 +501,7 @@ fn map_phase_to_document(phase: &WorkflowPhase) -> &'static str {
         WorkflowPhase::WorkoutRecap => "workout_recap",
         WorkflowPhase::InitialGeneration => "initial_generation",
         WorkflowPhase::Correction => "correction",
+        WorkflowPhase::QualityEvaluation => "quality_evaluation",
         WorkflowPhase::ProjectionUpdate => "projection_update",
     }
 }
@@ -452,6 +511,7 @@ fn map_document_to_phase(value: &str) -> Result<WorkflowPhase, TrainingPlanError
         "workout_recap" => Ok(WorkflowPhase::WorkoutRecap),
         "initial_generation" => Ok(WorkflowPhase::InitialGeneration),
         "correction" => Ok(WorkflowPhase::Correction),
+        "quality_evaluation" => Ok(WorkflowPhase::QualityEvaluation),
         "projection_update" => Ok(WorkflowPhase::ProjectionUpdate),
         other => Err(TrainingPlanError::Repository(format!(
             "unknown training plan workflow phase: {other}"

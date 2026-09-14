@@ -591,6 +591,8 @@ fn should_invalidate_llm_cache(previous: &AiAgentsConfig, updated: &AiAgentsConf
         || previous.workout_planning_model != updated.workout_planning_model
         || previous.meso_cycle_provider != updated.meso_cycle_provider
         || previous.meso_cycle_model != updated.meso_cycle_model
+        || previous.plan_quality_evaluator_provider != updated.plan_quality_evaluator_provider
+        || previous.plan_quality_evaluator_model != updated.plan_quality_evaluator_model
         || previous.openai_api_key != updated.openai_api_key
         || previous.gemini_api_key != updated.gemini_api_key
         || previous.openrouter_api_key != updated.openrouter_api_key

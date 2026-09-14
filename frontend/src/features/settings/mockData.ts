@@ -43,6 +43,10 @@ export function buildTestSettings(overrides: TestSettingsOverrides = {}): UserSe
       workoutPlanningModel: null,
       mesoCycleProvider: null,
       mesoCycleModel: null,
+      planQualityEvaluatorProvider: null,
+      planQualityEvaluatorModel: null,
+      planQualityMaxLoops: null,
+      planQualityPassScore: null,
     },
     intervals: {
       apiKey: null,

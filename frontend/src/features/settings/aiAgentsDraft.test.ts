@@ -17,6 +17,10 @@ function emptyPersisted(): AiAgentsDraftState {
     workoutPlanningModel: '',
     mesoCycleProvider: '',
     mesoCycleModel: '',
+    planQualityEvaluatorProvider: '',
+    planQualityEvaluatorModel: '',
+    planQualityMaxLoops: '',
+    planQualityPassScore: '',
     includePowerImage: false,
   });
 }

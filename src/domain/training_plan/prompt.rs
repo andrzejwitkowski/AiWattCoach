@@ -36,6 +36,7 @@ pub struct TrainingPlanInitialWindowPromptInput {
     pub training_context: TrainingContextBuildResult,
     pub conversation_epoch_seconds: i64,
     pub data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
+    pub quality_feedback: Option<String>,
 }
 
 pub fn assemble_training_plan_initial_window_request(
@@ -56,9 +57,14 @@ pub fn assemble_training_plan_initial_window_request(
         input.training_context.rendered.volatile_context
     );
     let mut conversation = planning_conversation_messages(input.planning_context.as_ref());
-    conversation.push(LlmChatMessage::user(
-        TRAINING_PLAN_INITIAL_WINDOW_USER_PROMPT,
-    ));
+    let mut user_prompt = TRAINING_PLAN_INITIAL_WINDOW_USER_PROMPT.to_string();
+    if let Some(feedback) = input
+        .quality_feedback
+        .filter(|value| !value.trim().is_empty())
+    {
+        user_prompt = format!("{user_prompt}\n\n{feedback}");
+    }
+    conversation.push(LlmChatMessage::user(user_prompt));
 
     let tool_context = ToolExecutionContext {
         user_id: input.user_id.clone(),

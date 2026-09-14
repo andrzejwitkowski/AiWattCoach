@@ -36,6 +36,10 @@ pub struct AiAgentsConfig {
     pub workout_planning_model: Option<String>,
     pub meso_cycle_provider: Option<LlmProvider>,
     pub meso_cycle_model: Option<String>,
+    pub plan_quality_evaluator_provider: Option<LlmProvider>,
+    pub plan_quality_evaluator_model: Option<String>,
+    pub plan_quality_max_loops: Option<u32>,
+    pub plan_quality_pass_score: Option<u32>,
     pub include_power_image: bool,
 }
 

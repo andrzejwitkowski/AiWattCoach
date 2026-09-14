@@ -11,3 +11,7 @@ pub use model::{
 pub use noop_repository::NoopUserSettingsRepository;
 pub use ports::{BoxFuture, UserSettingsRepository, WahooUserIdBackfillCandidate};
 pub use service::{UserSettingsService, UserSettingsUseCases};
+pub use validation::{
+    effective_plan_quality_max_loops, effective_plan_quality_pass_score,
+    validate_plan_quality_max_loops, validate_plan_quality_pass_score,
+};

@@ -86,6 +86,52 @@ pub fn validate_optional_profile_text(
     }
 }
 
+pub const PLAN_QUALITY_BOUNDED_INT_MIN: u32 = 1;
+pub const PLAN_QUALITY_BOUNDED_INT_MAX: u32 = 10;
+
+pub fn validate_plan_quality_bounded_int(
+    value: Option<u32>,
+    field: &str,
+) -> Result<Option<u32>, SettingsError> {
+    match value {
+        Some(v) if !(PLAN_QUALITY_BOUNDED_INT_MIN..=PLAN_QUALITY_BOUNDED_INT_MAX).contains(&v) => {
+            Err(SettingsError::Validation(format!(
+                "{field} must be between {PLAN_QUALITY_BOUNDED_INT_MIN} and {PLAN_QUALITY_BOUNDED_INT_MAX}"
+            )))
+        }
+        _ => Ok(value),
+    }
+}
+
+pub fn validate_plan_quality_max_loops(
+    max_loops: Option<u32>,
+) -> Result<Option<u32>, SettingsError> {
+    validate_plan_quality_bounded_int(max_loops, "planQualityMaxLoops")
+}
+
+pub fn validate_plan_quality_pass_score(
+    pass_score: Option<u32>,
+) -> Result<Option<u32>, SettingsError> {
+    validate_plan_quality_bounded_int(pass_score, "planQualityPassScore")
+}
+
+pub fn effective_plan_quality_max_loops(max_loops: Option<u32>) -> u32 {
+    max_loops
+        .filter(|value| {
+            (PLAN_QUALITY_BOUNDED_INT_MIN..=PLAN_QUALITY_BOUNDED_INT_MAX).contains(value)
+        })
+        .unwrap_or(5)
+}
+
+pub fn effective_plan_quality_pass_score(pass_score: Option<u32>) -> u8 {
+    pass_score
+        .filter(|score| {
+            (PLAN_QUALITY_BOUNDED_INT_MIN..=PLAN_QUALITY_BOUNDED_INT_MAX).contains(score)
+        })
+        .and_then(|score| u8::try_from(score).ok())
+        .unwrap_or(crate::domain::training_plan::PLAN_QUALITY_PASS_SCORE)
+}
+
 pub fn validate_ai_provider(
     provider: Option<LlmProvider>,
 ) -> Result<Option<LlmProvider>, SettingsError> {
@@ -165,8 +211,66 @@ fn validate_availability_day(day: &AvailabilityDay) -> Result<(), SettingsError>
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_availability, validate_optional_profile_text};
+    use super::{
+        effective_plan_quality_max_loops, effective_plan_quality_pass_score, validate_availability,
+        validate_optional_profile_text, validate_plan_quality_bounded_int,
+        validate_plan_quality_max_loops, validate_plan_quality_pass_score,
+    };
     use crate::domain::settings::{AvailabilityDay, AvailabilitySettings, SettingsError, Weekday};
+
+    #[test]
+    fn plan_quality_bounded_int_rejects_outside_1_to_10() {
+        assert_eq!(
+            validate_plan_quality_bounded_int(Some(0), "fieldX").unwrap_err(),
+            SettingsError::Validation("fieldX must be between 1 and 10".to_string())
+        );
+        assert_eq!(
+            validate_plan_quality_bounded_int(Some(7), "fieldX").unwrap(),
+            Some(7)
+        );
+    }
+
+    #[test]
+    fn plan_quality_max_loops_defaults_to_five_and_rejects_out_of_range() {
+        assert_eq!(effective_plan_quality_max_loops(None), 5);
+        assert_eq!(effective_plan_quality_max_loops(Some(3)), 3);
+        assert_eq!(effective_plan_quality_max_loops(Some(0)), 5);
+        assert_eq!(effective_plan_quality_max_loops(Some(11)), 5);
+        assert_eq!(validate_plan_quality_max_loops(None).unwrap(), None);
+        assert_eq!(validate_plan_quality_max_loops(Some(1)).unwrap(), Some(1));
+        assert_eq!(validate_plan_quality_max_loops(Some(10)).unwrap(), Some(10));
+        assert_eq!(
+            validate_plan_quality_max_loops(Some(0)).unwrap_err(),
+            SettingsError::Validation("planQualityMaxLoops must be between 1 and 10".to_string())
+        );
+        assert_eq!(
+            validate_plan_quality_max_loops(Some(11)).unwrap_err(),
+            SettingsError::Validation("planQualityMaxLoops must be between 1 and 10".to_string())
+        );
+    }
+
+    #[test]
+    fn plan_quality_pass_score_defaults_to_seven_and_rejects_out_of_range() {
+        assert_eq!(effective_plan_quality_pass_score(None), 7);
+        assert_eq!(effective_plan_quality_pass_score(Some(9)), 9);
+        assert_eq!(effective_plan_quality_pass_score(Some(0)), 7);
+        assert_eq!(effective_plan_quality_pass_score(Some(11)), 7);
+        assert_eq!(effective_plan_quality_pass_score(Some(256)), 7);
+        assert_eq!(validate_plan_quality_pass_score(None).unwrap(), None);
+        assert_eq!(validate_plan_quality_pass_score(Some(1)).unwrap(), Some(1));
+        assert_eq!(
+            validate_plan_quality_pass_score(Some(10)).unwrap(),
+            Some(10)
+        );
+        assert_eq!(
+            validate_plan_quality_pass_score(Some(0)).unwrap_err(),
+            SettingsError::Validation("planQualityPassScore must be between 1 and 10".to_string())
+        );
+        assert_eq!(
+            validate_plan_quality_pass_score(Some(11)).unwrap_err(),
+            SettingsError::Validation("planQualityPassScore must be between 1 and 10".to_string())
+        );
+    }
 
     #[test]
     fn validate_optional_profile_text_trims_value() {

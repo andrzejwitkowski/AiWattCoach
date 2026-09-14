@@ -2,9 +2,13 @@ use std::sync::Arc;
 
 use super::resolve_settings_llm_config::resolve_llm_config;
 use crate::domain::{
-    settings::{AiAgentsConfig, UserSettingsUseCases},
+    settings::{
+        effective_plan_quality_max_loops, effective_plan_quality_pass_score, AiAgentsConfig,
+        UserSettingsUseCases,
+    },
     training_plan::{
-        BoxFuture as TrainingPlanBoxFuture, TrainingPlanError, WorkoutPlanningLlmConfigPort,
+        BoxFuture as TrainingPlanBoxFuture, PlanQualityEvaluatorLlmConfigPort, TrainingPlanError,
+        WorkoutPlanningLlmConfigPort,
     },
     workout_summary::{
         BoxFuture as WorkoutSummaryBoxFuture, WorkoutChatLlmConfigPort, WorkoutSummaryError,
@@ -64,6 +68,67 @@ impl WorkoutPlanningLlmConfigPort for WorkoutLlmConfigProvider {
             .map_err(|error| TrainingPlanError::Unavailable(error.to_string()))
         })
     }
+}
+
+impl PlanQualityEvaluatorLlmConfigPort for WorkoutLlmConfigProvider {
+    fn get_plan_quality_evaluator_config(
+        &self,
+        user_id: &str,
+    ) -> TrainingPlanBoxFuture<Result<crate::domain::llm::LlmProviderConfig, TrainingPlanError>>
+    {
+        let settings_service = self.settings_service.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let ai_agents = load_ai_agents(&settings_service, &user_id)
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+            resolve_llm_config(
+                &ai_agents,
+                ai_agents.plan_quality_evaluator_provider.clone(),
+                ai_agents.plan_quality_evaluator_model.clone(),
+            )
+            .map_err(|error| TrainingPlanError::Unavailable(error.to_string()))
+        })
+    }
+
+    fn get_plan_quality_max_loops(
+        &self,
+        user_id: &str,
+    ) -> TrainingPlanBoxFuture<Result<u32, TrainingPlanError>> {
+        map_ai_agents(
+            self.settings_service.clone(),
+            user_id.to_string(),
+            |ai_agents| effective_plan_quality_max_loops(ai_agents.plan_quality_max_loops),
+        )
+    }
+
+    fn get_plan_quality_pass_score(
+        &self,
+        user_id: &str,
+    ) -> TrainingPlanBoxFuture<Result<u8, TrainingPlanError>> {
+        map_ai_agents(
+            self.settings_service.clone(),
+            user_id.to_string(),
+            |ai_agents| effective_plan_quality_pass_score(ai_agents.plan_quality_pass_score),
+        )
+    }
+}
+
+fn map_ai_agents<T, F>(
+    settings_service: Arc<dyn UserSettingsUseCases>,
+    user_id: String,
+    map: F,
+) -> TrainingPlanBoxFuture<Result<T, TrainingPlanError>>
+where
+    T: Send + 'static,
+    F: FnOnce(AiAgentsConfig) -> T + Send + 'static,
+{
+    Box::pin(async move {
+        let ai_agents = load_ai_agents(&settings_service, &user_id)
+            .await
+            .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+        Ok(map(ai_agents))
+    })
 }
 
 async fn load_ai_agents(

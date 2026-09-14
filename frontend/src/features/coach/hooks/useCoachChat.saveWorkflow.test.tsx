@@ -40,9 +40,9 @@ describe('useCoachChat save workflow', () => {
     vi.mocked(saveWorkoutSummary).mockResolvedValue({
       summary: { ...summaryFixture, rpe: 9, savedAtEpochSeconds: 3 },
       workflow: {
-        recapStatus: 'generated',
+        recapStatus: 'skipped',
         planStatus: 'skipped',
-        messages: ['Workout recap generated.', '14-day schedule skipped because this is not the latest completed activity.'],
+        messages: ['Workout recap skipped.', '14-day schedule skipped.'],
       },
     });
 
@@ -64,9 +64,9 @@ describe('useCoachChat save workflow', () => {
     expect(saveWorkoutSummary).toHaveBeenCalledWith('', '101');
     expect(result.current.isSaved).toBe(true);
     expect(result.current.messages.at(-2)?.role).toBe('system');
-    expect(result.current.messages.at(-2)?.content).toBe('Workout recap generated.');
+    expect(result.current.messages.at(-2)?.content).toBe('Workout recap skipped.');
     expect(result.current.messages.at(-1)?.role).toBe('system');
-    expect(result.current.messages.at(-1)?.content).toBe('14-day schedule skipped because this is not the latest completed activity.');
+    expect(result.current.messages.at(-1)?.content).toBe('14-day schedule skipped.');
   });
 
   it('shows saving summary progress for the whole save workflow request', async () => {
@@ -235,6 +235,84 @@ describe('useCoachChat save workflow', () => {
     });
 
     expect(result.current.error).toBeNull();
+  });
+
+  it('appends plan quality attempt and finished lines from save workflow messages', async () => {
+    installFakeWebSocket();
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+    vi.mocked(saveWorkoutSummary).mockResolvedValue({
+      summary: { ...summaryFixture, savedAtEpochSeconds: 3 },
+      workflow: {
+        recapStatus: 'generated',
+        planStatus: 'generated',
+        messages: [
+          'Workout recap generated.',
+          '14-day schedule generated.',
+          'Plan quality attempt 1/5: 5/10. Too much tempo.',
+          'Plan quality attempt 2/5: 8/10. Polarized and race-aware.',
+          'Plan quality finished: shipped 8/10 (accepted).',
+        ],
+      },
+    });
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.summary?.workoutId).toBe('101');
+    });
+
+    await act(async () => {
+      await result.current.saveSummary();
+    });
+
+    expect(result.current.messages.map((message) => message.content)).toEqual(
+      expect.arrayContaining([
+        'Plan quality attempt 1/5: 5/10. Too much tempo.',
+        'Plan quality attempt 2/5: 8/10. Polarized and race-aware.',
+        'Plan quality finished: shipped 8/10 (accepted).',
+      ]),
+    );
+  });
+
+  it('surfaces live plan quality progress system messages over websocket', async () => {
+    installFakeWebSocket();
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    act(() => {
+      const socket =
+        (global.WebSocket as unknown as typeof FakeWebSocket).instances?.[0] ?? undefined;
+      socket?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'system_message',
+            content: 'Plan quality attempt 1/5: 5/10. Too much tempo.',
+          }),
+        }),
+      );
+      socket?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'system_message',
+            content: 'Plan quality finished: shipped 8/10 (accepted).',
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.messages.map((message) => message.content)).toEqual([
+        'Plan quality attempt 1/5: 5/10. Too much tempo.',
+        'Plan quality finished: shipped 8/10 (accepted).',
+      ]);
+    });
   });
 
   it('does not treat a system message as completed conversation', async () => {

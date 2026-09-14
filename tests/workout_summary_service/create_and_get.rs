@@ -18,11 +18,10 @@ use completed_workout_support::{completed_workout, InMemoryCompletedWorkoutRepos
 use crate::shared::{
     existing_summary, existing_summary_with_finished_conversation,
     scheduler_backed_training_plan_service, test_service, test_service_with_settings,
-    test_service_with_training_plan, test_service_with_training_plan_and_latest_activity,
-    test_service_with_training_plan_latest_activity_and_completed_target,
+    test_service_with_training_plan, test_service_with_training_plan_and_completed_target,
     InMemoryWorkoutSummaryRepository, PersistCheckingTrainingPlanService,
-    RecordingCompletedWorkoutTargetService, RecordingLatestCompletedActivityService,
-    RecordingTrainingPlanService, RefreshingTrainingPlanService, TestAvailabilitySettingsService,
+    RecordingCompletedWorkoutTargetService, RecordingTrainingPlanService,
+    RefreshingTrainingPlanService, TestAvailabilitySettingsService,
 };
 
 #[derive(Clone, Default)]
@@ -322,65 +321,15 @@ async fn mark_saved_skips_recap_and_plan_when_latest_message_is_from_user() {
 }
 
 #[tokio::test]
-async fn mark_saved_generates_recap_only_for_finished_conversation_on_non_latest_activity() {
+async fn mark_saved_generates_recap_and_plan_for_finished_conversation() {
     let mut summary = existing_summary_with_finished_conversation();
     summary.workout_id = "workout-older".to_string();
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let training_plan = RecordingTrainingPlanService::default();
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-latest"));
-    let service = test_service_with_training_plan_and_latest_activity(
-        repository,
-        std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity.clone()),
-    );
+    let service =
+        test_service_with_training_plan(repository, std::sync::Arc::new(training_plan.clone()));
 
     let result = service.mark_saved("user-1", "workout-older").await.unwrap();
-
-    assert_eq!(result.workflow.recap_status.as_str(), "processing");
-    assert_eq!(result.workflow.plan_status.as_str(), "skipped");
-    assert_eq!(
-        result.workflow.messages,
-        vec!["Workout recap is being generated in the background.".to_string(),]
-    );
-    wait_for_training_plan_calls(
-        &training_plan,
-        vec!["generate_recap_for_saved_workout:user-1:workout-older:1700000000".to_string()],
-    )
-    .await;
-    assert_eq!(
-        latest_activity.calls(),
-        vec!["latest_completed_activity_id:user-1".to_string()]
-    );
-}
-
-#[tokio::test]
-async fn mark_saved_generates_recap_and_plan_for_latest_completed_activity() {
-    let repository = InMemoryWorkoutSummaryRepository::with_summary(
-        existing_summary_with_finished_conversation(),
-    );
-    let training_plan = RecordingTrainingPlanService::default();
-    training_plan.succeed_next(aiwattcoach::domain::training_plan::GeneratedTrainingPlan {
-        snapshot: aiwattcoach::domain::training_plan::TrainingPlanSnapshot {
-            user_id: "user-1".to_string(),
-            workout_id: "workout-1".to_string(),
-            operation_key: "training-plan:user-1:workout-1:1700000000".to_string(),
-            saved_at_epoch_seconds: 1_700_000_000,
-            start_date: "2026-04-06".to_string(),
-            end_date: "2026-04-19".to_string(),
-            days: Vec::new(),
-            created_at_epoch_seconds: 1_700_000_000,
-        },
-        active_projected_days: Vec::new(),
-        was_generated: true,
-    });
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
-    let service = test_service_with_training_plan_and_latest_activity(
-        repository,
-        std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity),
-    );
-
-    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
     assert_eq!(result.workflow.recap_status.as_str(), "processing");
     assert_eq!(result.workflow.plan_status.as_str(), "processing");
@@ -394,8 +343,8 @@ async fn mark_saved_generates_recap_and_plan_for_latest_completed_activity() {
     wait_for_training_plan_calls(
         &training_plan,
         vec![
-            "generate_recap_for_saved_workout:user-1:workout-1:1700000000".to_string(),
-            "generate_for_saved_workout:user-1:workout-1:1700000000".to_string(),
+            "generate_recap_for_saved_workout:user-1:workout-older:1700000000".to_string(),
+            "generate_for_saved_workout:user-1:workout-older:1700000000".to_string(),
         ],
     )
     .await;
@@ -409,12 +358,7 @@ async fn mark_saved_preserves_visible_workflow_with_scheduler_backed_training_pl
     let training_plan = scheduler_backed_training_plan_service(
         InMemoryWorkoutSummaryRepository::with_summary(existing_summary()),
     );
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
-    let service = test_service_with_training_plan_and_latest_activity(
-        repository,
-        training_plan.service.clone(),
-        std::sync::Arc::new(latest_activity),
-    );
+    let service = test_service_with_training_plan(repository, training_plan.service.clone());
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
@@ -436,12 +380,10 @@ async fn mark_saved_rejects_planned_workout_targets() {
         existing_summary_with_finished_conversation(),
     );
     let training_plan = RecordingTrainingPlanService::default();
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
     let completed_target = RecordingCompletedWorkoutTargetService::allowing(&["activity-1"]);
-    let service = test_service_with_training_plan_latest_activity_and_completed_target(
+    let service = test_service_with_training_plan_and_completed_target(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity.clone()),
         std::sync::Arc::new(completed_target.clone()),
     );
 
@@ -455,7 +397,6 @@ async fn mark_saved_rejects_planned_workout_targets() {
     );
     assert!(repository.calls().is_empty());
     assert!(training_plan.calls().is_empty());
-    assert!(latest_activity.calls().is_empty());
     assert_eq!(
         completed_target.calls(),
         vec!["resolve_completed_workout_target:user-1:workout-1".to_string()]
@@ -590,17 +531,18 @@ async fn mark_saved_uses_preferred_completed_workout_id_for_side_effects() {
         },
         active_projected_days: Vec::new(),
         was_generated: true,
+        quality_evaluations: Vec::new(),
+        shipped_quality: None,
+        quality_progress_messages: Vec::new(),
     });
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("i144331018"));
     let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
         "wahoo-workout:450868242",
         "i144331018",
         &["i144331018", "wahoo-workout:450868242"],
     )]);
-    let service = test_service_with_training_plan_latest_activity_and_completed_target(
+    let service = test_service_with_training_plan_and_completed_target(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity.clone()),
         std::sync::Arc::new(completed_target.clone()),
     );
 
@@ -622,10 +564,6 @@ async fn mark_saved_uses_preferred_completed_workout_id_for_side_effects() {
         ],
     )
     .await;
-    assert_eq!(
-        latest_activity.calls(),
-        vec!["latest_completed_activity_id:user-1".to_string()]
-    );
     assert_eq!(
         completed_target.calls(),
         vec!["resolve_completed_workout_target:user-1:wahoo-workout:450868242".to_string()]
@@ -651,18 +589,19 @@ async fn mark_saved_notifies_requested_alias_after_background_work_completes() {
         },
         active_projected_days: Vec::new(),
         was_generated: true,
+        quality_evaluations: Vec::new(),
+        shipped_quality: None,
+        quality_progress_messages: Vec::new(),
     });
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("i144331018"));
     let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
         "wahoo-workout:450868242",
         "i144331018",
         &["i144331018", "wahoo-workout:450868242"],
     )]);
     let completion_port = RecordingSaveCompletionPort::default();
-    let service = test_service_with_training_plan_latest_activity_and_completed_target(
+    let service = test_service_with_training_plan_and_completed_target(
         repository,
         std::sync::Arc::new(training_plan),
-        std::sync::Arc::new(latest_activity),
         std::sync::Arc::new(completed_target),
     )
     .with_save_completion_port(std::sync::Arc::new(completion_port.clone()));
@@ -690,16 +629,14 @@ async fn mark_saved_retries_side_effects_with_existing_alias_storage_workout_id(
     summary.saved_at_epoch_seconds = Some(1_700_000_000);
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let training_plan = RecordingTrainingPlanService::default();
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("i144331018"));
     let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
         "i144331018",
         "i144331018",
         &["i144331018", "wahoo-workout:450868242"],
     )]);
-    let service = test_service_with_training_plan_latest_activity_and_completed_target(
+    let service = test_service_with_training_plan_and_completed_target(
         repository,
         std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity),
         std::sync::Arc::new(completed_target),
     );
 
@@ -711,57 +648,6 @@ async fn mark_saved_retries_side_effects_with_existing_alias_storage_workout_id(
         training_plan.calls(),
         vec!["generate_for_saved_workout:user-1:wahoo-workout:450868242:1700000000".to_string()]
     );
-}
-
-#[tokio::test]
-async fn mark_saved_treats_stripped_latest_activity_id_as_latest_for_prefixed_completed_target() {
-    let mut summary = existing_summary_with_finished_conversation();
-    summary.workout_id = "wahoo-workout:450868242".to_string();
-    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
-    let training_plan = RecordingTrainingPlanService::default();
-    training_plan.succeed_next(aiwattcoach::domain::training_plan::GeneratedTrainingPlan {
-        snapshot: aiwattcoach::domain::training_plan::TrainingPlanSnapshot {
-            user_id: "user-1".to_string(),
-            workout_id: "wahoo-workout:450868242".to_string(),
-            operation_key: "training-plan:user-1:wahoo-workout:450868242:1700000000".to_string(),
-            saved_at_epoch_seconds: 1_700_000_000,
-            start_date: "2026-04-06".to_string(),
-            end_date: "2026-04-19".to_string(),
-            days: Vec::new(),
-            created_at_epoch_seconds: 1_700_000_000,
-        },
-        active_projected_days: Vec::new(),
-        was_generated: true,
-    });
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("450868242"));
-    let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
-        "wahoo-workout:450868242",
-        "wahoo-workout:450868242",
-        &["wahoo-workout:450868242"],
-    )]);
-    let service = test_service_with_training_plan_latest_activity_and_completed_target(
-        repository,
-        std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity),
-        std::sync::Arc::new(completed_target),
-    );
-
-    let result = service
-        .mark_saved("user-1", "wahoo-workout:450868242")
-        .await
-        .unwrap();
-
-    assert_eq!(result.workflow.recap_status.as_str(), "processing");
-    assert_eq!(result.workflow.plan_status.as_str(), "processing");
-    wait_for_training_plan_calls(
-        &training_plan,
-        vec![
-            "generate_recap_for_saved_workout:user-1:wahoo-workout:450868242:1700000000"
-                .to_string(),
-            "generate_for_saved_workout:user-1:wahoo-workout:450868242:1700000000".to_string(),
-        ],
-    )
-    .await;
 }
 
 #[tokio::test]
@@ -979,12 +865,8 @@ async fn mark_saved_spawns_background_work_when_training_plan_generation_would_f
             "llm temporarily unavailable".to_string(),
         ),
     );
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
-    let service = test_service_with_training_plan_and_latest_activity(
-        repository,
-        std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity),
-    );
+    let service =
+        test_service_with_training_plan(repository, std::sync::Arc::new(training_plan.clone()));
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
@@ -1022,8 +904,7 @@ async fn mark_saved_skips_generation_when_training_plan_service_is_not_configure
         result.workflow.messages,
         vec![
             "Workout recap skipped.".to_string(),
-            "14-day schedule skipped because this is not the latest completed activity."
-                .to_string(),
+            "14-day schedule skipped.".to_string(),
         ]
     );
 }
@@ -1034,11 +915,9 @@ async fn mark_saved_triggers_training_plan_generation_after_persisting_saved_sta
         existing_summary_with_finished_conversation(),
     );
     let training_plan = PersistCheckingTrainingPlanService::new(repository.clone());
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
-    let service = test_service_with_training_plan_and_latest_activity(
+    let service = test_service_with_training_plan(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity),
     );
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
@@ -1061,11 +940,9 @@ async fn repeat_mark_saved_retries_training_plan_generation_for_already_saved_su
     summary.saved_at_epoch_seconds = Some(1_700_000_000);
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let training_plan = RecordingTrainingPlanService::default();
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
-    let service = test_service_with_training_plan_and_latest_activity(
+    let service = test_service_with_training_plan(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity),
     );
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
@@ -1121,11 +998,9 @@ async fn repeat_mark_saved_reports_generated_recap_when_retry_persists_recap_bef
             "plan generation failed after recap persisted".to_string(),
         ),
     );
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
-    let service = test_service_with_training_plan_and_latest_activity(
+    let service = test_service_with_training_plan(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity),
     );
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
@@ -1155,11 +1030,9 @@ async fn repeat_mark_saved_keeps_recap_unchanged_when_retry_fails_after_existing
     summary.workout_recap_generated_at_epoch_seconds = Some(1_700_000_010);
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let training_plan = RecordingTrainingPlanService::default();
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
-    let service = test_service_with_training_plan_and_latest_activity(
+    let service = test_service_with_training_plan(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity),
     );
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
@@ -1195,12 +1068,13 @@ async fn repeat_mark_saved_reloads_summary_after_successful_training_plan_retry(
         },
         active_projected_days: Vec::new(),
         was_generated: false,
+        quality_evaluations: Vec::new(),
+        shipped_quality: None,
+        quality_progress_messages: Vec::new(),
     });
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
-    let service = test_service_with_training_plan_and_latest_activity(
+    let service = test_service_with_training_plan(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity),
     );
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
@@ -1252,12 +1126,13 @@ async fn repeat_mark_saved_does_not_report_generated_recap_for_timestamp_only_re
         },
         active_projected_days: Vec::new(),
         was_generated: false,
+        quality_evaluations: Vec::new(),
+        shipped_quality: None,
+        quality_progress_messages: Vec::new(),
     });
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
-    let service = test_service_with_training_plan_and_latest_activity(
+    let service = test_service_with_training_plan(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity),
     );
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
@@ -1273,12 +1148,8 @@ async fn repeat_mark_saved_skips_retry_when_summary_has_no_finished_conversation
     summary.saved_at_epoch_seconds = Some(1_700_000_000);
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let training_plan = RecordingTrainingPlanService::default();
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
-    let service = test_service_with_training_plan_and_latest_activity(
-        repository,
-        std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity.clone()),
-    );
+    let service =
+        test_service_with_training_plan(repository, std::sync::Arc::new(training_plan.clone()));
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
@@ -1286,32 +1157,29 @@ async fn repeat_mark_saved_skips_retry_when_summary_has_no_finished_conversation
     assert_eq!(result.workflow.plan_status.as_str(), "skipped");
     assert_eq!(result.workflow.messages, Vec::<String>::new());
     assert!(training_plan.calls().is_empty());
-    assert!(latest_activity.calls().is_empty());
 }
 
 #[tokio::test]
-async fn repeat_mark_saved_skips_retry_when_summary_is_not_latest_completed_activity() {
+async fn repeat_mark_saved_retries_training_plan_generation_for_non_latest_activity() {
     let mut summary = existing_summary_with_finished_conversation();
     summary.workout_id = "workout-older".to_string();
     summary.saved_at_epoch_seconds = Some(1_700_000_000);
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let training_plan = RecordingTrainingPlanService::default();
-    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-latest"));
-    let service = test_service_with_training_plan_and_latest_activity(
-        repository,
-        std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity.clone()),
-    );
+    let service =
+        test_service_with_training_plan(repository, std::sync::Arc::new(training_plan.clone()));
 
     let result = service.mark_saved("user-1", "workout-older").await.unwrap();
 
     assert_eq!(result.workflow.recap_status.as_str(), "unchanged");
-    assert_eq!(result.workflow.plan_status.as_str(), "skipped");
-    assert_eq!(result.workflow.messages, Vec::<String>::new());
-    assert!(training_plan.calls().is_empty());
+    assert_eq!(result.workflow.plan_status.as_str(), "failed");
     assert_eq!(
-        latest_activity.calls(),
-        vec!["latest_completed_activity_id:user-1".to_string()]
+        result.workflow.messages,
+        vec!["14-day schedule failed on retry.".to_string()]
+    );
+    assert_eq!(
+        training_plan.calls(),
+        vec!["generate_for_saved_workout:user-1:workout-older:1700000000".to_string()]
     );
 }
 

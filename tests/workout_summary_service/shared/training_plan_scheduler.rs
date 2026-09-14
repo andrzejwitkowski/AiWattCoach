@@ -309,6 +309,7 @@ impl TrainingPlanGenerator for SaveFlowTrainingPlanGenerator {
         _planning_context: Option<&TrainingPlanPlanningContext>,
         _restored_state: Option<aiwattcoach::domain::llm_tools::LlmToolLoopState>,
         _checkpoint: Option<aiwattcoach::domain::training_plan::TrainingPlanToolLoopCheckpoint>,
+        _quality_feedback: Option<&str>,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
         Result<TrainingPlanPhaseOutput, aiwattcoach::domain::training_plan::TrainingPlanError>,
     > {
@@ -342,5 +343,28 @@ impl TrainingPlanGenerator for SaveFlowTrainingPlanGenerator {
         Result<TrainingPlanPhaseOutput, aiwattcoach::domain::training_plan::TrainingPlanError>,
     > {
         Box::pin(async { unreachable!("save-flow test does not use corrections") })
+    }
+
+    fn evaluate_plan_quality(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+        _workout_recap: &WorkoutRecap,
+        _planning_context: Option<&TrainingPlanPlanningContext>,
+        _draft_plan_text: &str,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<
+            aiwattcoach::domain::training_plan::PlanQualityEvaluation,
+            aiwattcoach::domain::training_plan::TrainingPlanError,
+        >,
+    > {
+        Box::pin(async {
+            Ok(aiwattcoach::domain::training_plan::PlanQualityEvaluation {
+                attempt: 0,
+                score: 10,
+                critique: String::new(),
+            })
+        })
     }
 }

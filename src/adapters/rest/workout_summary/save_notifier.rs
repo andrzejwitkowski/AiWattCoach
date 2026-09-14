@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use tokio::sync::watch;
+use tokio::sync::{broadcast, watch};
 use tracing::warn;
 
 use crate::domain::workout_summary::SaveWorkflowStatus;
@@ -11,8 +11,16 @@ use super::dto::SaveWorkflowDto;
 use super::mapping::map_workflow_status_to_dto;
 
 #[derive(Clone)]
+struct SaveWorkflowChannels {
+    completion: watch::Sender<Option<SaveWorkflowDto>>,
+    progress: broadcast::Sender<String>,
+}
+
+#[derive(Clone)]
 pub struct WorkoutSummarySaveNotifier {
-    channels: Arc<Mutex<HashMap<String, watch::Sender<Option<SaveWorkflowDto>>>>>,
+    channels: Arc<Mutex<HashMap<String, SaveWorkflowChannels>>>,
+    /// storage workout key → completion/client workout key for live progress routing
+    progress_aliases: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl Default for WorkoutSummarySaveNotifier {
@@ -25,17 +33,26 @@ impl WorkoutSummarySaveNotifier {
     pub fn new() -> Self {
         Self {
             channels: Arc::new(Mutex::new(HashMap::new())),
+            progress_aliases: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    fn progress_aliases(&self, operation: &str) -> MutexGuard<'_, HashMap<String, String>> {
+        self.progress_aliases.lock().unwrap_or_else(|error| {
+            warn!(
+                operation = %operation,
+                error = %error,
+                "Workout summary save notifier alias lock was poisoned; recovering state"
+            );
+            error.into_inner()
+        })
     }
 
     fn key(user_id: &str, workout_id: &str) -> String {
         format!("{user_id}:{workout_id}")
     }
 
-    fn channels(
-        &self,
-        operation: &str,
-    ) -> MutexGuard<'_, HashMap<String, watch::Sender<Option<SaveWorkflowDto>>>> {
+    fn channels(&self, operation: &str) -> MutexGuard<'_, HashMap<String, SaveWorkflowChannels>> {
         self.channels.lock().unwrap_or_else(|error| {
             warn!(
                 operation = %operation,
@@ -46,18 +63,43 @@ impl WorkoutSummarySaveNotifier {
         })
     }
 
+    fn new_channels() -> (
+        SaveWorkflowChannels,
+        watch::Receiver<Option<SaveWorkflowDto>>,
+    ) {
+        let (completion_tx, completion_rx) = watch::channel(None);
+        let (progress_tx, _) = broadcast::channel(32);
+        (
+            SaveWorkflowChannels {
+                completion: completion_tx,
+                progress: progress_tx,
+            },
+            completion_rx,
+        )
+    }
+
     pub fn register(
         &self,
         user_id: &str,
         workout_id: &str,
-    ) -> watch::Receiver<Option<SaveWorkflowDto>> {
+    ) -> (
+        watch::Receiver<Option<SaveWorkflowDto>>,
+        broadcast::Receiver<String>,
+    ) {
         let mut channels = self.channels("register");
         match channels.entry(Self::key(user_id, workout_id)) {
-            Entry::Occupied(entry) => entry.get().subscribe(),
+            Entry::Occupied(entry) => {
+                let channels = entry.get();
+                (
+                    channels.completion.subscribe(),
+                    channels.progress.subscribe(),
+                )
+            }
             Entry::Vacant(entry) => {
-                let (tx, rx) = watch::channel(None);
-                entry.insert(tx);
-                rx
+                let (channels, completion_rx) = Self::new_channels();
+                let progress_rx = channels.progress.subscribe();
+                entry.insert(channels);
+                (completion_rx, progress_rx)
             }
         }
     }
@@ -71,11 +113,17 @@ impl WorkoutSummarySaveNotifier {
         &self,
         user_id: &str,
         workout_id: &str,
-    ) -> Option<watch::Receiver<Option<SaveWorkflowDto>>> {
+    ) -> Option<(
+        watch::Receiver<Option<SaveWorkflowDto>>,
+        broadcast::Receiver<String>,
+    )> {
         let key = Self::key(user_id, workout_id);
-        self.channels("subscribe")
-            .get(&key)
-            .map(|tx| tx.subscribe())
+        self.channels("subscribe").get(&key).map(|channels| {
+            (
+                channels.completion.subscribe(),
+                channels.progress.subscribe(),
+            )
+        })
     }
 
     pub fn send(
@@ -87,7 +135,10 @@ impl WorkoutSummarySaveNotifier {
         messages: Vec<String>,
     ) {
         let key = Self::key(user_id, workout_id);
-        let tx = self.channels("send").get(&key).cloned();
+        let tx = self
+            .channels("send")
+            .get(&key)
+            .map(|c| c.completion.clone());
         if let Some(tx) = tx {
             let payload = SaveWorkflowDto {
                 recap_status: map_workflow_status_to_dto(recap_status),
@@ -95,6 +146,22 @@ impl WorkoutSummarySaveNotifier {
                 messages,
             };
             tx.send_replace(Some(payload));
+        }
+    }
+
+    pub fn send_progress(&self, user_id: &str, workout_id: &str, message: String) {
+        let key = Self::key(user_id, workout_id);
+        let resolved = self
+            .progress_aliases("send_progress")
+            .get(&key)
+            .cloned()
+            .unwrap_or(key);
+        let tx = self
+            .channels("send_progress")
+            .get(&resolved)
+            .map(|c| c.progress.clone());
+        if let Some(tx) = tx {
+            let _ = tx.send(message);
         }
     }
 }
@@ -110,11 +177,37 @@ impl crate::domain::workout_summary::SaveWorkflowCompletionPort for WorkoutSumma
     ) {
         self.send(user_id, workout_id, recap_status, plan_status, messages);
     }
+
+    fn bind_progress_alias(
+        &self,
+        user_id: &str,
+        storage_workout_id: &str,
+        completion_workout_id: &str,
+    ) {
+        if storage_workout_id == completion_workout_id {
+            return;
+        }
+        self.progress_aliases("bind_progress_alias").insert(
+            Self::key(user_id, storage_workout_id),
+            Self::key(user_id, completion_workout_id),
+        );
+    }
+
+    fn clear_progress_alias(&self, user_id: &str, storage_workout_id: &str) {
+        self.progress_aliases("clear_progress_alias")
+            .remove(&Self::key(user_id, storage_workout_id));
+    }
+}
+
+impl crate::domain::training_plan::PlanQualityProgressPort for WorkoutSummarySaveNotifier {
+    fn on_quality_progress(&self, user_id: &str, workout_id: &str, message: String) {
+        self.send_progress(user_id, workout_id, message);
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::workout_summary::SaveWorkflowStatus;
+    use crate::domain::workout_summary::{SaveWorkflowCompletionPort, SaveWorkflowStatus};
 
     use super::WorkoutSummarySaveNotifier;
 
@@ -131,14 +224,14 @@ mod tests {
             vec!["done".to_string()],
         );
 
-        let received = notifier.subscribe("user-1", "workout-1").unwrap();
+        let (received, _) = notifier.subscribe("user-1", "workout-1").unwrap();
         assert!(received.borrow().is_some());
     }
 
     #[test]
     fn register_reuses_existing_sender_for_current_subscribers() {
         let notifier = WorkoutSummarySaveNotifier::new();
-        let current = notifier.register("user-1", "workout-1");
+        let (current, _) = notifier.register("user-1", "workout-1");
         let _second_registration = notifier.register("user-1", "workout-1");
 
         notifier.send(
@@ -150,5 +243,19 @@ mod tests {
         );
 
         assert!(current.borrow().is_some());
+    }
+
+    #[test]
+    fn send_progress_routes_storage_id_through_completion_alias() {
+        let notifier = WorkoutSummarySaveNotifier::new();
+        let (_completion_rx, mut progress_rx) = notifier.register("user-1", "requested-id");
+        notifier.bind_progress_alias("user-1", "storage-id", "requested-id");
+
+        notifier.send_progress("user-1", "storage-id", "quality attempt 1".to_string());
+
+        let message = progress_rx
+            .try_recv()
+            .expect("progress should reach alias channel");
+        assert_eq!(message, "quality attempt 1");
     }
 }

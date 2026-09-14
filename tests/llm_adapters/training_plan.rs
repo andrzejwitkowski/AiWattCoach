@@ -1063,6 +1063,7 @@ async fn training_plan_generator_checkpoints_final_no_tool_response_before_retur
             Some(&sample_planning_context()),
             None,
             Some(checkpoint),
+            None,
         )
         .await
         .unwrap();
@@ -1112,6 +1113,7 @@ async fn training_plan_generator_returns_error_when_final_checkpoint_fails() {
             Some(&sample_planning_context()),
             None,
             Some(checkpoint),
+            None,
         )
         .await
         .unwrap_err();
@@ -1161,6 +1163,7 @@ async fn training_plan_generator_reuses_completed_tool_loop_state_without_second
             ),
             Some(&sample_planning_context()),
             Some(restored_state),
+            None,
             None,
         )
         .await

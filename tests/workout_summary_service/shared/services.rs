@@ -297,34 +297,9 @@ pub(crate) fn test_service_with_training_plan(
     .with_training_plan_service(training_plan_service)
 }
 
-pub(crate) fn test_service_with_training_plan_and_latest_activity(
+pub(crate) fn test_service_with_training_plan_and_completed_target(
     repository: InMemoryWorkoutSummaryRepository,
     training_plan_service: Arc<dyn TrainingPlanUseCases>,
-    latest_completed_activity_service: Arc<
-        dyn aiwattcoach::domain::workout_summary::LatestCompletedActivityUseCases,
-    >,
-) -> WorkoutSummaryService<
-    InMemoryWorkoutSummaryRepository,
-    InMemoryCoachReplyOperationRepository,
-    TestClock,
-    TestIdGenerator,
-> {
-    WorkoutSummaryService::new(
-        repository,
-        InMemoryCoachReplyOperationRepository::default(),
-        TestClock,
-        TestIdGenerator::default(),
-    )
-    .with_training_plan_service(training_plan_service)
-    .with_latest_completed_activity_service(latest_completed_activity_service)
-}
-
-pub(crate) fn test_service_with_training_plan_latest_activity_and_completed_target(
-    repository: InMemoryWorkoutSummaryRepository,
-    training_plan_service: Arc<dyn TrainingPlanUseCases>,
-    latest_completed_activity_service: Arc<
-        dyn aiwattcoach::domain::workout_summary::LatestCompletedActivityUseCases,
-    >,
     completed_workout_target_service: Arc<dyn CompletedWorkoutTargetUseCases>,
 ) -> WorkoutSummaryService<
     InMemoryWorkoutSummaryRepository,
@@ -339,7 +314,6 @@ pub(crate) fn test_service_with_training_plan_latest_activity_and_completed_targ
         TestIdGenerator::default(),
     )
     .with_training_plan_service(training_plan_service)
-    .with_latest_completed_activity_service(latest_completed_activity_service)
     .with_completed_workout_target_service(completed_workout_target_service)
 }
 
@@ -387,28 +361,9 @@ pub(crate) struct RecordingTrainingPlanService {
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct RecordingLatestCompletedActivityService {
-    latest_activity_id: Arc<Mutex<Option<String>>>,
-    calls: Arc<Mutex<Vec<String>>>,
-}
-
-#[derive(Clone, Default)]
 pub(crate) struct RecordingCompletedWorkoutTargetService {
     resolved_targets: Arc<Mutex<BTreeMap<String, ResolvedCompletedWorkoutTarget>>>,
     calls: Arc<Mutex<Vec<String>>>,
-}
-
-impl RecordingLatestCompletedActivityService {
-    pub(crate) fn new(latest_activity_id: Option<&str>) -> Self {
-        Self {
-            latest_activity_id: Arc::new(Mutex::new(latest_activity_id.map(str::to_string))),
-            calls: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
-
-    pub(crate) fn calls(&self) -> Vec<String> {
-        self.calls.lock().unwrap().clone()
-    }
 }
 
 impl RecordingCompletedWorkoutTargetService {
@@ -460,27 +415,6 @@ impl RecordingCompletedWorkoutTargetService {
 
     pub(crate) fn calls(&self) -> Vec<String> {
         self.calls.lock().unwrap().clone()
-    }
-}
-
-impl aiwattcoach::domain::workout_summary::LatestCompletedActivityUseCases
-    for RecordingLatestCompletedActivityService
-{
-    fn latest_completed_activity_id(
-        &self,
-        user_id: &str,
-    ) -> aiwattcoach::domain::workout_summary::BoxFuture<Result<Option<String>, WorkoutSummaryError>>
-    {
-        let latest_activity_id = self.latest_activity_id.lock().unwrap().clone();
-        let calls = self.calls.clone();
-        let user_id = user_id.to_string();
-        Box::pin(async move {
-            calls
-                .lock()
-                .unwrap()
-                .push(format!("latest_completed_activity_id:{user_id}"));
-            Ok(latest_activity_id)
-        })
     }
 }
 

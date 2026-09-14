@@ -15,9 +15,14 @@ type AgentOverrideFieldKey =
   | 'workoutPlanningProvider'
   | 'workoutPlanningModel'
   | 'mesoCycleProvider'
-  | 'mesoCycleModel';
+  | 'mesoCycleModel'
+  | 'planQualityEvaluatorProvider'
+  | 'planQualityEvaluatorModel';
 
-type ValidatedAiAgents = Partial<Record<AiAgentsFieldKey | AgentOverrideFieldKey, string | null>>;
+type ValidatedAiAgents = Partial<Record<AiAgentsFieldKey | AgentOverrideFieldKey, string | null>> & {
+  planQualityMaxLoops?: number | null;
+  planQualityPassScore?: number | null;
+};
 
 function trimToUndefined(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -75,14 +80,16 @@ const AGENT_OVERRIDE_FIELDS: AgentOverrideFieldKey[] = [
   'workoutPlanningModel',
   'mesoCycleProvider',
   'mesoCycleModel',
+  'planQualityEvaluatorProvider',
+  'planQualityEvaluatorModel',
 ];
 
 export function buildAiAgentsConnectionBody(
   data: unknown,
   validated: ValidatedAiAgents,
   options?: { includeAgentOverrides?: boolean },
-): Record<string, string | null | boolean> {
-  const body: Record<string, string | null | boolean> = {};
+): Record<string, string | null | boolean | number> {
+  const body: Record<string, string | null | boolean | number> = {};
   const fields: AiAgentsFieldKey[] = [
     'openaiApiKey',
     'geminiApiKey',
@@ -118,5 +125,27 @@ export function buildAiAgentsConnectionBody(
     }
   }
 
+  assignOptionalNumberField(body, data, 'planQualityMaxLoops', validated.planQualityMaxLoops);
+  assignOptionalNumberField(body, data, 'planQualityPassScore', validated.planQualityPassScore);
+
   return body;
+}
+
+function assignOptionalNumberField(
+  body: Record<string, unknown>,
+  data: unknown,
+  key: 'planQualityMaxLoops' | 'planQualityPassScore',
+  validatedValue: number | null | undefined,
+) {
+  if (!data || typeof data !== 'object' || !(key in data)) {
+    return;
+  }
+  const rawValue = (data as Record<string, unknown>)[key];
+  if (rawValue === null) {
+    body[key] = null;
+  } else if (typeof rawValue === 'number') {
+    body[key] = rawValue;
+  } else if (typeof validatedValue === 'number' || validatedValue === null) {
+    body[key] = validatedValue;
+  }
 }

@@ -1,11 +1,14 @@
 mod correction;
+mod ctx;
 pub(crate) mod parsing;
+mod quality;
 mod scheduler;
 mod snapshot;
+mod structural;
 
 use chrono::{TimeZone, Utc};
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::domain::{
@@ -16,19 +19,20 @@ use crate::domain::{
 };
 
 use super::{
-    BoxFuture, GeneratedTrainingPlan, TrainingPlanDay, TrainingPlanError,
-    TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
-    TrainingPlanGenerationOperationRepository, TrainingPlanGenerator, TrainingPlanPlanningContext,
-    TrainingPlanProjectionRepository, TrainingPlanSnapshot, TrainingPlanSnapshotRepository,
-    TrainingPlanWorkoutSummaryPort,
+    BoxFuture, GeneratedTrainingPlan, PlanQualityEvaluatorLlmConfigPort, PlanQualityProgressPort,
+    TrainingPlanDay, TrainingPlanError, TrainingPlanGenerationClaimResult,
+    TrainingPlanGenerationOperation, TrainingPlanGenerationOperationRepository,
+    TrainingPlanGenerator, TrainingPlanPlanningContext, TrainingPlanProjectionRepository,
+    TrainingPlanSnapshot, TrainingPlanSnapshotRepository, TrainingPlanWorkoutSummaryPort,
 };
 
 pub use scheduler::{training_plan_generate_task_handler, SchedulerBackedTrainingPlanService};
 
 const TRAINING_PLAN_STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
 const TRAINING_PLAN_DESCRIPTION_PREVIEW_LIMIT: usize = 120;
+pub(super) const MAX_CORRECTION_ATTEMPTS: usize = 2;
 
-fn description_log_metadata(description: Option<&str>) -> (bool, usize, String) {
+pub(super) fn description_log_metadata(description: Option<&str>) -> (bool, usize, String) {
     let has_description = description.is_some();
     let description_chars = description.map(|value| value.chars().count()).unwrap_or(0);
     let description_preview = description
@@ -86,6 +90,8 @@ pub struct TrainingPlanGenerationService<
     workout_summary: WorkoutSummary,
     clock: Time,
     refresh: Refresh,
+    plan_quality_config: Option<Arc<dyn PlanQualityEvaluatorLlmConfigPort>>,
+    plan_quality_progress: Option<Arc<dyn PlanQualityProgressPort>>,
 }
 
 pub(super) struct ParsedPlanWindow {
@@ -127,6 +133,8 @@ where
             workout_summary,
             clock,
             refresh: NoopCalendarEntryViewRefresh,
+            plan_quality_config: None,
+            plan_quality_progress: None,
         }
     }
 
@@ -153,6 +161,8 @@ where
             workout_summary: self.workout_summary,
             clock: self.clock,
             refresh,
+            plan_quality_config: self.plan_quality_config,
+            plan_quality_progress: self.plan_quality_progress,
         }
     }
 }
@@ -176,8 +186,23 @@ where
     Time: Clock + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
 {
+    pub fn with_plan_quality_evaluator_config(
+        mut self,
+        plan_quality_config: Arc<dyn PlanQualityEvaluatorLlmConfigPort>,
+    ) -> Self {
+        self.plan_quality_config = Some(plan_quality_config);
+        self
+    }
+
+    pub fn with_plan_quality_progress(
+        mut self,
+        plan_quality_progress: Arc<dyn PlanQualityProgressPort>,
+    ) -> Self {
+        self.plan_quality_progress = Some(plan_quality_progress);
+        self
+    }
+
     const SNAPSHOT_DAY_COUNT: usize = 14;
-    const MAX_CORRECTION_ATTEMPTS: usize = 2;
 
     fn operation_key(
         &self,
@@ -214,10 +239,21 @@ where
             .into_iter()
             .filter(|day| day.is_active_on(&today))
             .collect();
+        let (quality_evaluations, shipped_quality) =
+            match self.operations.find_by_operation_key(operation_key).await? {
+                Some(operation) => (
+                    operation.quality_evaluations,
+                    operation.best_quality_evaluation,
+                ),
+                None => (Vec::new(), None),
+            };
         Ok(Some(GeneratedTrainingPlan {
             snapshot,
             active_projected_days,
             was_generated: false,
+            quality_evaluations,
+            shipped_quality,
+            quality_progress_messages: Vec::new(),
         }))
     }
 
@@ -459,6 +495,9 @@ where
             snapshot: replacement.snapshot,
             active_projected_days,
             was_generated: true,
+            quality_evaluations: Vec::new(),
+            shipped_quality: None,
+            quality_progress_messages: Vec::new(),
         })
     }
 }
@@ -645,6 +684,7 @@ where
                                 .then(|| operation.initial_plan_tool_loop_state.clone())
                                 .flatten(),
                             Some(service.initial_plan_checkpoint(&operation)),
+                            None,
                         )
                         .await
                     {
@@ -713,220 +753,24 @@ where
                         .await?;
             }
 
-            let mut invalid_dates = issues
-                .iter()
-                .map(|issue| issue.scope.clone())
-                .collect::<BTreeSet<_>>();
-
-            if !invalid_dates.is_empty() {
-                if let Some(raw_correction_response) = operation.raw_correction_response.clone() {
-                    let corrected = match service.parse_window(&raw_correction_response) {
-                        Ok(corrected) => corrected,
-                        Err(error) => {
-                            return Err(service
-                                .fail_operation(
-                                    &operation,
-                                    WorkflowPhase::Correction,
-                                    error,
-                                    operation.validation_issues.clone(),
-                                )
-                                .await?)
-                        }
-                    };
-                    let corrected_dates = corrected
-                        .days_by_date
-                        .keys()
-                        .cloned()
-                        .collect::<BTreeSet<_>>();
-                    service.merge_corrections(
-                        &mut days_by_date,
-                        corrected.days_by_date,
-                        &invalid_dates,
-                    );
-                    let corrected_invalid_dates = corrected
-                        .issues
-                        .iter()
-                        .map(|issue| issue.scope.clone())
-                        .collect::<BTreeSet<_>>();
-                    issues = correction::merge_unresolved_issues(
-                        &issues,
-                        &corrected.issues,
-                        &corrected_dates,
-                        &corrected_invalid_dates,
-                    );
-                    invalid_day_sections = correction::merge_invalid_day_sections(
-                        &invalid_day_sections,
-                        &corrected.invalid_day_sections,
-                        &corrected_dates,
-                        &corrected_invalid_dates,
-                    );
-                    if operation.validation_issues != issues {
-                        operation = service
-                            .operations
-                            .upsert(operation.with_validation_issues(
-                                issues.clone(),
-                                service.clock.now_epoch_seconds(),
-                            ))
-                            .await?;
-                    }
-                    invalid_dates = issues
-                        .iter()
-                        .map(|issue| issue.scope.clone())
-                        .collect::<BTreeSet<_>>();
-                }
-
-                let correction_attempts_recorded = operation
-                    .attempts
-                    .iter()
-                    .filter(|attempt| attempt.phase == WorkflowPhase::Correction)
-                    .count();
-                let correction_attempts_remaining =
-                    Self::MAX_CORRECTION_ATTEMPTS.saturating_sub(correction_attempts_recorded);
-                for _ in 0..correction_attempts_remaining {
-                    if issues.is_empty() {
-                        break;
-                    }
-
-                    if let Err(error) = service
-                        .ensure_planning_context_loaded(
-                            &mut planning_context,
-                            &mut planning_context_loaded,
-                            &user_id,
-                            &workout_id,
-                        )
-                        .await
-                    {
-                        return Err(service
-                            .fail_operation(
-                                &operation,
-                                WorkflowPhase::Correction,
-                                error,
-                                operation.validation_issues.clone(),
-                            )
-                            .await?);
-                    }
-                    let correction_response = match service
-                        .generator
-                        .correct_invalid_days_with_state(
-                            &user_id,
-                            &workout_id,
-                            saved_at_epoch_seconds,
-                            &recap,
-                            planning_context.as_ref(),
-                            &invalid_day_sections.join("\n\n"),
-                            issues.clone(),
-                            operation
-                                .raw_correction_response
-                                .is_none()
-                                .then(|| operation.correction_tool_loop_state.clone())
-                                .flatten(),
-                            Some(service.correction_checkpoint(&operation)),
-                        )
-                        .await
-                    {
-                        Ok(correction_output) => correction_output,
-                        Err(error) => {
-                            return Err(service
-                                .fail_operation(
-                                    &operation,
-                                    WorkflowPhase::Correction,
-                                    error,
-                                    operation.validation_issues.clone(),
-                                )
-                                .await?)
-                        }
-                    };
-                    let correction_tool_loop_state = correction_response.tool_loop_state;
-                    let correction_description = correction_response.description;
-                    let correction_response = correction_response.raw_response;
-                    let (has_description, description_chars, _) =
-                        description_log_metadata(correction_description.as_deref());
-                    operation = service
-                        .operations
-                        .upsert(operation.with_correction_payload(
-                            correction_response.clone(),
-                            correction_description,
-                            correction_tool_loop_state,
-                            service.clock.now_epoch_seconds(),
-                        ))
-                        .await?;
-                    tracing::info!(
-                        operation_key = %operation.operation_key,
-                        phase = "correction",
-                        has_description,
-                        description_chars,
-                        plan_chars = correction_response.chars().count(),
-                        "stored training plan llm envelope"
-                    );
-
-                    let corrected = match service.parse_window(&correction_response) {
-                        Ok(corrected) => corrected,
-                        Err(error) => {
-                            return Err(service
-                                .fail_operation(
-                                    &operation,
-                                    WorkflowPhase::Correction,
-                                    error,
-                                    operation.validation_issues.clone(),
-                                )
-                                .await?)
-                        }
-                    };
-                    let corrected_dates = corrected
-                        .days_by_date
-                        .keys()
-                        .cloned()
-                        .collect::<BTreeSet<_>>();
-                    service.merge_corrections(
-                        &mut days_by_date,
-                        corrected.days_by_date,
-                        &invalid_dates,
-                    );
-                    let corrected_invalid_dates = corrected
-                        .issues
-                        .iter()
-                        .map(|issue| issue.scope.clone())
-                        .collect::<BTreeSet<_>>();
-                    issues = correction::merge_unresolved_issues(
-                        &issues,
-                        &corrected.issues,
-                        &corrected_dates,
-                        &corrected_invalid_dates,
-                    );
-                    invalid_day_sections = correction::merge_invalid_day_sections(
-                        &invalid_day_sections,
-                        &corrected.invalid_day_sections,
-                        &corrected_dates,
-                        &corrected_invalid_dates,
-                    );
-                    if operation.validation_issues != issues {
-                        operation = service
-                            .operations
-                            .upsert(operation.with_validation_issues(
-                                issues.clone(),
-                                service.clock.now_epoch_seconds(),
-                            ))
-                            .await?;
-                    }
-                    invalid_dates = issues
-                        .iter()
-                        .map(|issue| issue.scope.clone())
-                        .collect::<BTreeSet<_>>();
-                }
-
-                if !issues.is_empty() {
-                    let failed = operation.mark_failed(
-                        WorkflowPhase::Correction,
-                        "training plan generation failed validation".to_string(),
-                        issues.clone(),
-                        service.clock.now_epoch_seconds(),
-                    );
-                    service.operations.upsert(failed).await?;
-                    return Err(TrainingPlanError::Unavailable(
-                        "training plan generation failed validation".to_string(),
-                    ));
-                }
-            }
+            service
+                .resolve_structural_corrections(
+                    ctx::GenerationIdentity {
+                        user_id: &user_id,
+                        workout_id: &workout_id,
+                        saved_at_epoch_seconds,
+                        recap: &recap,
+                    },
+                    ctx::GenerationPlanning {
+                        planning_context: &mut planning_context,
+                        planning_context_loaded: &mut planning_context_loaded,
+                    },
+                    &mut days_by_date,
+                    &mut issues,
+                    &mut invalid_day_sections,
+                    &mut operation,
+                )
+                .await?;
 
             let days = match service.validate_snapshot_days(&days_by_date) {
                 Ok(days) => days,
@@ -962,7 +806,48 @@ where
                 }
             };
 
-            service.persist_projection(snapshot, operation).await
+            let (
+                snapshot,
+                operation,
+                quality_evaluations,
+                shipped_quality,
+                quality_progress_messages,
+            ) = if let Some(plan_quality_config) = service.plan_quality_config.clone() {
+                let result = service
+                    .run_plan_quality_loop(quality::PlanQualityLoopInput {
+                        identity: quality::QualityIdentity {
+                            user_id: &user_id,
+                            workout_id: &workout_id,
+                            saved_at_epoch_seconds,
+                            recap: &recap,
+                        },
+                        planning: quality::QualityPlanning {
+                            planning_context: &mut planning_context,
+                            planning_context_loaded: &mut planning_context_loaded,
+                        },
+                        snapshot,
+                        draft_plan_text: raw_plan_response,
+                        operation,
+                        plan_quality_config: &plan_quality_config,
+                        plan_quality_progress: service.plan_quality_progress.as_ref(),
+                    })
+                    .await?;
+                (
+                    result.snapshot,
+                    result.operation,
+                    result.quality_evaluations,
+                    result.shipped_quality,
+                    result.quality_progress_messages,
+                )
+            } else {
+                (snapshot, operation, Vec::new(), None, Vec::new())
+            };
+
+            let mut generated = service.persist_projection(snapshot, operation).await?;
+            generated.quality_evaluations = quality_evaluations;
+            generated.shipped_quality = shipped_quality;
+            generated.quality_progress_messages = quality_progress_messages;
+            Ok(generated)
         })
     }
 }

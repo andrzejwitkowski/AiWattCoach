@@ -118,13 +118,6 @@ pub trait WorkoutSummaryUseCases: Send + Sync {
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>>;
 }
 
-pub trait LatestCompletedActivityUseCases: Send + Sync {
-    fn latest_completed_activity_id(
-        &self,
-        user_id: &str,
-    ) -> BoxFuture<Result<Option<String>, WorkoutSummaryError>>;
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedCompletedWorkoutTarget {
     pub preferred_workout_id: String,
@@ -237,7 +230,7 @@ pub(super) struct ResolvedWorkoutSummaryTarget {
     existing_summary: Option<WorkoutSummary>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SaveWorkflowStatus {
     Generated,
     Processing,
@@ -287,7 +280,6 @@ where
     athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
     settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     training_plan_service: Option<Arc<dyn TrainingPlanUseCases>>,
-    latest_completed_activity_service: Option<Arc<dyn LatestCompletedActivityUseCases>>,
     completed_workout_target_service: Option<Arc<dyn CompletedWorkoutTargetUseCases>>,
     save_completion_port: Option<Arc<dyn SaveWorkflowCompletionPort>>,
 }
@@ -325,7 +317,6 @@ where
             athlete_summary_service: None,
             settings_service: None,
             training_plan_service: None,
-            latest_completed_activity_service: None,
             completed_workout_target_service: None,
             save_completion_port: None,
         }
@@ -352,14 +343,6 @@ where
         training_plan_service: Arc<dyn TrainingPlanUseCases>,
     ) -> Self {
         self.training_plan_service = Some(training_plan_service);
-        self
-    }
-
-    pub fn with_latest_completed_activity_service(
-        mut self,
-        latest_completed_activity_service: Arc<dyn LatestCompletedActivityUseCases>,
-    ) -> Self {
-        self.latest_completed_activity_service = Some(latest_completed_activity_service);
         self
     }
 

@@ -111,6 +111,17 @@ pub(crate) struct StubTrainingPlanGenerator {
     correction_responses: Arc<Mutex<VecDeque<Result<String, TrainingPlanError>>>>,
     initial_plan_descriptions: Arc<Mutex<VecDeque<Option<String>>>>,
     correction_descriptions: Arc<Mutex<VecDeque<Option<String>>>>,
+    quality_evaluation_responses: Arc<
+        Mutex<
+            VecDeque<
+                Result<
+                    aiwattcoach::domain::training_plan::PlanQualityEvaluation,
+                    TrainingPlanError,
+                >,
+            >,
+        >,
+    >,
+    quality_feedbacks: Arc<Mutex<Vec<Option<String>>>>,
     recap_calls: Arc<Mutex<u32>>,
     initial_plan_calls: Arc<Mutex<u32>>,
     correction_calls: Arc<Mutex<u32>>,
@@ -135,6 +146,8 @@ impl StubTrainingPlanGenerator {
             correction_responses: Arc::new(Mutex::new(VecDeque::from(correction_responses))),
             initial_plan_descriptions: Arc::new(Mutex::new(VecDeque::new())),
             correction_descriptions: Arc::new(Mutex::new(VecDeque::new())),
+            quality_evaluation_responses: Arc::new(Mutex::new(VecDeque::new())),
+            quality_feedbacks: Arc::new(Mutex::new(Vec::new())),
             recap_calls: Arc::new(Mutex::new(0)),
             initial_plan_calls: Arc::new(Mutex::new(0)),
             correction_calls: Arc::new(Mutex::new(0)),
@@ -145,6 +158,19 @@ impl StubTrainingPlanGenerator {
             correction_restored_states: Arc::new(Mutex::new(Vec::new())),
             call_log,
         }
+    }
+
+    pub(crate) fn set_quality_evaluations(
+        &self,
+        responses: Vec<
+            Result<aiwattcoach::domain::training_plan::PlanQualityEvaluation, TrainingPlanError>,
+        >,
+    ) {
+        *self.quality_evaluation_responses.lock().unwrap() = VecDeque::from(responses);
+    }
+
+    pub(crate) fn quality_feedbacks(&self) -> Vec<Option<String>> {
+        self.quality_feedbacks.lock().unwrap().clone()
     }
 
     pub(crate) fn recap_call_count(&self) -> u32 {
@@ -216,6 +242,7 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
         planning_context: Option<&TrainingPlanPlanningContext>,
         restored_state: Option<LlmToolLoopState>,
         _checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+        quality_feedback: Option<&str>,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
         Result<TrainingPlanPhaseOutput, TrainingPlanError>,
     > {
@@ -228,6 +255,10 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
             .lock()
             .unwrap()
             .push(restored_state);
+        self.quality_feedbacks
+            .lock()
+            .unwrap()
+            .push(quality_feedback.map(str::to_string));
         push_call(&self.call_log, "generator.generate_initial_plan_window");
         let response = self
             .initial_plan_responses
@@ -297,6 +328,33 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
                 tool_loop_state: LlmToolLoopState::default(),
             })
         })
+    }
+
+    fn evaluate_plan_quality(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+        _workout_recap: &WorkoutRecap,
+        _planning_context: Option<&TrainingPlanPlanningContext>,
+        _draft_plan_text: &str,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<aiwattcoach::domain::training_plan::PlanQualityEvaluation, TrainingPlanError>,
+    > {
+        push_call(&self.call_log, "generator.evaluate_plan_quality");
+        let response = self
+            .quality_evaluation_responses
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or(Ok(
+                aiwattcoach::domain::training_plan::PlanQualityEvaluation {
+                    attempt: 0,
+                    score: 10,
+                    critique: String::new(),
+                },
+            ));
+        Box::pin(async move { response })
     }
 }
 

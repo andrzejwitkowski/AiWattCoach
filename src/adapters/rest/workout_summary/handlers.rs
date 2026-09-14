@@ -229,8 +229,7 @@ pub async fn set_saved_state(
                 .workout_summary_save_notifier
                 .as_ref()
                 .inspect(|notifier| {
-                    let _rx: tokio::sync::watch::Receiver<Option<super::dto::SaveWorkflowDto>> =
-                        notifier.register(&user_id, &path.workout_id);
+                    let (_rx, _progress_rx) = notifier.register(&user_id, &path.workout_id);
                 });
         let result = service.mark_saved(&user_id, &path.workout_id).await;
         if result.is_err() {

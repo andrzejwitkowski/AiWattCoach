@@ -74,10 +74,12 @@ async fn handle_socket(
     let mut buffered_message: Option<Result<Message, axum::Error>> = None;
     let mut socket_closed = false;
 
-    if let Some((notifier, rx)) = state.workout_summary_save_notifier.clone().map(|notifier| {
-        let rx = notifier.register(&user_id, &workout_id);
-        (notifier, rx)
-    }) {
+    if let Some((notifier, rx, mut progress_rx)) =
+        state.workout_summary_save_notifier.clone().map(|notifier| {
+            let (rx, progress_rx) = notifier.register(&user_id, &workout_id);
+            (notifier, rx, progress_rx)
+        })
+    {
         if rx.borrow().is_some() {
             let payload = rx.borrow().clone().unwrap();
             let _ = send_ws_json(&sender, save_workflow_message(payload)).await;
@@ -88,11 +90,46 @@ async fn handle_socket(
             let workout_id = workout_id.clone();
             tokio::spawn(async move {
                 let mut rx = rx;
-                if rx.changed().await.is_ok() {
-                    let payload_opt = rx.borrow().clone();
-                    if let Some(payload) = payload_opt {
-                        let _ = send_ws_json(&sender, save_workflow_message(payload)).await;
-                        notifier.unregister(&user_id, &workout_id);
+                let mut delivered_progress = Vec::new();
+                loop {
+                    tokio::select! {
+                        changed = rx.changed() => {
+                            if changed.is_err() {
+                                break;
+                            }
+                            let payload_opt = rx.borrow().clone();
+                            if let Some(mut payload) = payload_opt {
+                                payload.messages.retain(|message| {
+                                    !delivered_progress.iter().any(|seen| seen == message)
+                                });
+                                let _ = send_ws_json(&sender, save_workflow_message(payload)).await;
+                                notifier.unregister(&user_id, &workout_id);
+                                break;
+                            }
+                        }
+                        progress = progress_rx.recv() => {
+                            match progress {
+                                Ok(message) => {
+                                    delivered_progress.push(message.clone());
+                                    let _ = send_ws_json(&sender, system_message(message)).await;
+                                }
+                                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                                    let payload_opt = rx.borrow().clone();
+                                    if let Some(mut payload) = payload_opt {
+                                        payload.messages.retain(|message| {
+                                            !delivered_progress.iter().any(|seen| seen == message)
+                                        });
+                                        let _ = send_ws_json(
+                                            &sender,
+                                            save_workflow_message(payload),
+                                        )
+                                        .await;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
             });

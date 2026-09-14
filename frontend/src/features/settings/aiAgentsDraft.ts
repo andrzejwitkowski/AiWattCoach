@@ -16,6 +16,10 @@ export type AiAgentsDraftState = {
   workoutPlanningModel: string;
   mesoCycleProvider: string;
   mesoCycleModel: string;
+  planQualityEvaluatorProvider: string;
+  planQualityEvaluatorModel: string;
+  planQualityMaxLoops: string;
+  planQualityPassScore: string;
   includePowerImage: boolean;
 };
 
@@ -30,8 +34,14 @@ type PersistedAiAgentsDraft = Pick<
   | 'workoutPlanningModel'
   | 'mesoCycleProvider'
   | 'mesoCycleModel'
+  | 'planQualityEvaluatorProvider'
+  | 'planQualityEvaluatorModel'
+  | 'planQualityMaxLoops'
+  | 'planQualityPassScore'
   | 'includePowerImage'
 >;
+
+export type AiAgentsRequestValue = string | null | boolean | number;
 
 export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiAgentsDraftState {
   return {
@@ -50,6 +60,10 @@ export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiA
     workoutPlanningModel: persisted.workoutPlanningModel,
     mesoCycleProvider: persisted.mesoCycleProvider,
     mesoCycleModel: persisted.mesoCycleModel,
+    planQualityEvaluatorProvider: persisted.planQualityEvaluatorProvider,
+    planQualityEvaluatorModel: persisted.planQualityEvaluatorModel,
+    planQualityMaxLoops: persisted.planQualityMaxLoops,
+    planQualityPassScore: persisted.planQualityPassScore,
     includePowerImage: persisted.includePowerImage,
   };
 }
@@ -65,7 +79,7 @@ const API_KEY_FIELDS = [
 
 export function clearRequestedApiKeys(
   draft: AiAgentsDraftState,
-  request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>>,
+  request: Partial<Record<keyof AiAgentsDraftState, AiAgentsRequestValue>>,
   submittedDraft: AiAgentsDraftState = draft,
 ): AiAgentsDraftState {
   const next = { ...draft };
@@ -137,6 +151,22 @@ export function mergeDraftWithPersisted(
       current.mesoCycleModel === previousPersisted.mesoCycleModel
         ? persisted.mesoCycleModel
         : current.mesoCycleModel,
+    planQualityEvaluatorProvider:
+      current.planQualityEvaluatorProvider === previousPersisted.planQualityEvaluatorProvider
+        ? persisted.planQualityEvaluatorProvider
+        : current.planQualityEvaluatorProvider,
+    planQualityEvaluatorModel:
+      current.planQualityEvaluatorModel === previousPersisted.planQualityEvaluatorModel
+        ? persisted.planQualityEvaluatorModel
+        : current.planQualityEvaluatorModel,
+    planQualityMaxLoops:
+      current.planQualityMaxLoops === previousPersisted.planQualityMaxLoops
+        ? persisted.planQualityMaxLoops
+        : current.planQualityMaxLoops,
+    planQualityPassScore:
+      current.planQualityPassScore === previousPersisted.planQualityPassScore
+        ? persisted.planQualityPassScore
+        : current.planQualityPassScore,
     includePowerImage:
       current.includePowerImage === previousPersisted.includePowerImage
         ? persisted.includePowerImage
@@ -161,12 +191,16 @@ export function isAiAgentsDraftDirty(current: AiAgentsDraftState, clean: AiAgent
     current.workoutPlanningModel !== clean.workoutPlanningModel ||
     current.mesoCycleProvider !== clean.mesoCycleProvider ||
     current.mesoCycleModel !== clean.mesoCycleModel ||
+    current.planQualityEvaluatorProvider !== clean.planQualityEvaluatorProvider ||
+    current.planQualityEvaluatorModel !== clean.planQualityEvaluatorModel ||
+    current.planQualityMaxLoops !== clean.planQualityMaxLoops ||
+    current.planQualityPassScore !== clean.planQualityPassScore ||
     current.includePowerImage !== clean.includePowerImage
   );
 }
 
 function assignTrimmedApiKey(
-  request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>>,
+  request: Partial<Record<keyof AiAgentsDraftState, AiAgentsRequestValue>>,
   key: keyof AiAgentsDraftState,
   value: string,
 ) {
@@ -177,7 +211,7 @@ function assignTrimmedApiKey(
 }
 
 function assignChangedStringField(
-  request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>>,
+  request: Partial<Record<keyof AiAgentsDraftState, AiAgentsRequestValue>>,
   key: keyof AiAgentsDraftState,
   currentValue: string,
   persistedValue: string,
@@ -191,8 +225,8 @@ function assignChangedStringField(
 export function buildVisibleAiAgentsRequest(
   draft: AiAgentsDraftState,
   persisted: AiAgentsDraftState,
-): Partial<Record<keyof AiAgentsDraftState, string | null | boolean>> {
-  const request: Partial<Record<keyof AiAgentsDraftState, string | null | boolean>> = {};
+): Partial<Record<keyof AiAgentsDraftState, AiAgentsRequestValue>> {
+  const request: Partial<Record<keyof AiAgentsDraftState, AiAgentsRequestValue>> = {};
 
   assignTrimmedApiKey(request, 'openaiApiKey', draft.openaiApiKey);
   assignTrimmedApiKey(request, 'geminiApiKey', draft.geminiApiKey);
@@ -230,12 +264,49 @@ export function buildVisibleAiAgentsRequest(
   assignChangedStringField(request, 'workoutPlanningModel', draft.workoutPlanningModel, persisted.workoutPlanningModel);
   assignChangedStringField(request, 'mesoCycleProvider', draft.mesoCycleProvider, persisted.mesoCycleProvider);
   assignChangedStringField(request, 'mesoCycleModel', draft.mesoCycleModel, persisted.mesoCycleModel);
+  assignChangedStringField(
+    request,
+    'planQualityEvaluatorProvider',
+    draft.planQualityEvaluatorProvider,
+    persisted.planQualityEvaluatorProvider,
+  );
+  assignChangedStringField(
+    request,
+    'planQualityEvaluatorModel',
+    draft.planQualityEvaluatorModel,
+    persisted.planQualityEvaluatorModel,
+  );
+
+  assignChangedOptionalIntField(
+    request,
+    'planQualityMaxLoops',
+    draft.planQualityMaxLoops,
+    persisted.planQualityMaxLoops,
+  );
+  assignChangedOptionalIntField(
+    request,
+    'planQualityPassScore',
+    draft.planQualityPassScore,
+    persisted.planQualityPassScore,
+  );
 
   if (draft.includePowerImage !== persisted.includePowerImage) {
     request.includePowerImage = draft.includePowerImage;
   }
 
   return request;
+}
+
+function assignChangedOptionalIntField(
+  request: Partial<Record<keyof AiAgentsDraftState, AiAgentsRequestValue>>,
+  key: 'planQualityMaxLoops' | 'planQualityPassScore',
+  currentValue: string,
+  persistedValue: string,
+) {
+  const trimmed = currentValue.trim();
+  if (trimmed !== persistedValue) {
+    request[key] = trimmed.length > 0 ? Number(trimmed) : null;
+  }
 }
 
 export function buildTestStatusMessage(result: TestAiAgentsConnectionResponse) {
