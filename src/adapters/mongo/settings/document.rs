@@ -22,7 +22,7 @@ pub(super) struct SettingsDocument {
     pub(super) updated_at: Option<DateTime>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Deserialize, Serialize, Default)]
 pub(super) struct AiAgentsDocument {
     pub(super) openai_api_key: Option<String>,
     pub(super) gemini_api_key: Option<String>,
@@ -58,6 +58,57 @@ pub(super) struct AiAgentsDocument {
     pub(super) plan_quality_pass_score: Option<u32>,
     #[serde(default)]
     pub(super) include_power_image: bool,
+}
+
+impl std::fmt::Debug for AiAgentsDocument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AiAgentsDocument")
+            .field(
+                "openai_api_key",
+                &RedactedOptionalText(&self.openai_api_key),
+            )
+            .field(
+                "gemini_api_key",
+                &RedactedOptionalText(&self.gemini_api_key),
+            )
+            .field(
+                "openrouter_api_key",
+                &RedactedOptionalText(&self.openrouter_api_key),
+            )
+            .field(
+                "deepseek_api_key",
+                &RedactedOptionalText(&self.deepseek_api_key),
+            )
+            .field("zai_api_key", &RedactedOptionalText(&self.zai_api_key))
+            .field(
+                "openai_compatible_api_key",
+                &RedactedOptionalText(&self.openai_compatible_api_key),
+            )
+            .field(
+                "openai_compatible_base_url",
+                &self.openai_compatible_base_url,
+            )
+            .field("selected_provider", &self.selected_provider)
+            .field("selected_model", &self.selected_model)
+            .field("workout_chat_provider", &self.workout_chat_provider)
+            .field("workout_chat_model", &self.workout_chat_model)
+            .field("workout_planning_provider", &self.workout_planning_provider)
+            .field("workout_planning_model", &self.workout_planning_model)
+            .field("meso_cycle_provider", &self.meso_cycle_provider)
+            .field("meso_cycle_model", &self.meso_cycle_model)
+            .field(
+                "plan_quality_evaluator_provider",
+                &self.plan_quality_evaluator_provider,
+            )
+            .field(
+                "plan_quality_evaluator_model",
+                &self.plan_quality_evaluator_model,
+            )
+            .field("plan_quality_max_loops", &self.plan_quality_max_loops)
+            .field("plan_quality_pass_score", &self.plan_quality_pass_score)
+            .field("include_power_image", &self.include_power_image)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]

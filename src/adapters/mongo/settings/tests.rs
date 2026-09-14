@@ -26,6 +26,32 @@ use crate::domain::settings::{
 };
 
 #[test]
+fn ai_agents_document_debug_redacts_api_keys() {
+    let document = AiAgentsDocument {
+        openai_api_key: Some("sk-openai-secret".to_string()),
+        gemini_api_key: Some("sk-gemini-secret".to_string()),
+        openrouter_api_key: Some("sk-openrouter-secret".to_string()),
+        deepseek_api_key: Some("sk-deepseek-secret".to_string()),
+        zai_api_key: Some("sk-zai-secret".to_string()),
+        openai_compatible_api_key: Some("sk-compat-secret".to_string()),
+        openai_compatible_base_url: Some("http://127.0.0.1:8080/v1".to_string()),
+        selected_provider: Some("openai".to_string()),
+        selected_model: Some("gpt-4o-mini".to_string()),
+        ..AiAgentsDocument::default()
+    };
+
+    let debug = format!("{document:?}");
+    assert!(debug.contains("<redacted:"));
+    assert!(!debug.contains("sk-openai-secret"));
+    assert!(!debug.contains("sk-gemini-secret"));
+    assert!(!debug.contains("sk-openrouter-secret"));
+    assert!(!debug.contains("sk-deepseek-secret"));
+    assert!(!debug.contains("sk-zai-secret"));
+    assert!(!debug.contains("sk-compat-secret"));
+    assert!(debug.contains("gpt-4o-mini"));
+}
+
+#[test]
 fn settings_document_deserializes_missing_availability_with_full_week_default() {
     let document = serde_json::json!({
         "user_id": "user-1",

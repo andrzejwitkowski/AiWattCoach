@@ -95,115 +95,170 @@ where
             .is_some_and(|draft| draft.evaluation.score >= pass_score);
 
         if !accepted {
-            for attempt in start_attempt..=max_loops {
-                let mut evaluation = match self
-                    .generator
-                    .evaluate_plan_quality(
-                        identity.user_id,
-                        identity.workout_id,
-                        identity.saved_at_epoch_seconds,
-                        identity.recap,
-                        planning.planning_context.as_ref(),
-                        &draft_plan_text,
-                    )
-                    .await
-                {
-                    Ok(evaluation) => evaluation,
-                    Err(error) => {
-                        tracing::warn!(
-                            operation_key = %operation.operation_key,
-                            attempt,
-                            error = %error,
-                            "plan quality evaluator failed; shipping best available draft"
-                        );
-                        break;
-                    }
-                };
-                evaluation.attempt = attempt;
-
-                emit_progress(
+            accepted = self
+                .run_quality_evaluation_attempts(
+                    &identity,
+                    planning,
+                    &mut snapshot,
+                    &mut draft_plan_text,
+                    &mut operation,
+                    &mut best,
                     &mut quality_progress_messages,
                     plan_quality_progress,
+                    start_attempt,
+                    max_loops,
+                    pass_score,
+                )
+                .await?;
+        }
+
+        self.finalize_plan_quality_loop(
+            &identity,
+            snapshot,
+            operation,
+            best,
+            accepted,
+            max_loops,
+            quality_progress_messages,
+            plan_quality_progress,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn run_quality_evaluation_attempts(
+        &self,
+        identity: &GenerationIdentity<'_>,
+        planning: GenerationPlanning<'_>,
+        snapshot: &mut TrainingPlanSnapshot,
+        draft_plan_text: &mut String,
+        operation: &mut TrainingPlanGenerationOperation,
+        best: &mut Option<BestDraft>,
+        quality_progress_messages: &mut Vec<String>,
+        plan_quality_progress: Option<&Arc<dyn PlanQualityProgressPort>>,
+        start_attempt: u32,
+        max_loops: u32,
+        pass_score: u8,
+    ) -> Result<bool, TrainingPlanError> {
+        let mut accepted = false;
+        for attempt in start_attempt..=max_loops {
+            let mut evaluation = match self
+                .generator
+                .evaluate_plan_quality(
                     identity.user_id,
                     identity.workout_id,
-                    plan_quality_attempt_message(
+                    identity.saved_at_epoch_seconds,
+                    identity.recap,
+                    planning.planning_context.as_ref(),
+                    draft_plan_text,
+                )
+                .await
+            {
+                Ok(evaluation) => evaluation,
+                Err(error) => {
+                    tracing::warn!(
+                        operation_key = %operation.operation_key,
                         attempt,
-                        max_loops,
-                        evaluation.score,
-                        &evaluation.critique,
-                    ),
-                );
-
-                let is_better = best
-                    .as_ref()
-                    .is_none_or(|previous| evaluation.score >= previous.evaluation.score);
-                if is_better {
-                    best = Some(BestDraft {
-                        snapshot: snapshot.clone(),
-                        evaluation: evaluation.clone(),
-                    });
-                }
-
-                operation = self
-                    .operations
-                    .upsert(operation.with_quality_evaluation(
-                        evaluation.clone(),
-                        is_better.then(|| draft_plan_text.clone()),
-                        self.clock.now_epoch_seconds(),
-                    ))
-                    .await?;
-
-                if evaluation.score >= pass_score {
-                    accepted = true;
+                        error = %error,
+                        "plan quality evaluator failed; shipping best available draft"
+                    );
                     break;
                 }
-                if attempt == max_loops {
-                    break;
-                }
+            };
+            evaluation.attempt = attempt;
 
-                let feedback = format_quality_feedback(evaluation.score, &evaluation.critique);
-                match self
-                    .regenerate_structurally_valid_snapshot(
-                        &identity,
-                        GenerationPlanning {
-                            planning_context: &mut *planning.planning_context,
-                            planning_context_loaded: &mut *planning.planning_context_loaded,
-                        },
-                        &mut operation,
-                        &feedback,
-                    )
-                    .await
-                {
-                    Ok((next_snapshot, next_draft)) => {
-                        snapshot = next_snapshot;
-                        draft_plan_text = next_draft;
-                    }
-                    Err(error) => {
-                        tracing::warn!(
-                            operation_key = %operation.operation_key,
-                            attempt,
-                            error = %error,
-                            "plan quality replan failed validation; shipping best draft so far"
-                        );
-                        break;
-                    }
+            emit_progress(
+                quality_progress_messages,
+                plan_quality_progress,
+                identity.user_id,
+                identity.workout_id,
+                plan_quality_attempt_message(
+                    attempt,
+                    max_loops,
+                    evaluation.score,
+                    &evaluation.critique,
+                ),
+            );
+
+            let is_better = best
+                .as_ref()
+                .is_none_or(|previous| evaluation.score >= previous.evaluation.score);
+            if is_better {
+                *best = Some(BestDraft {
+                    snapshot: snapshot.clone(),
+                    evaluation: evaluation.clone(),
+                });
+            }
+
+            *operation = self
+                .operations
+                .upsert(operation.with_quality_evaluation(
+                    evaluation.clone(),
+                    is_better.then(|| draft_plan_text.clone()),
+                    self.clock.now_epoch_seconds(),
+                ))
+                .await?;
+
+            if evaluation.score >= pass_score {
+                accepted = true;
+                break;
+            }
+            if attempt == max_loops {
+                break;
+            }
+
+            let feedback = format_quality_feedback(evaluation.score, &evaluation.critique);
+            match self
+                .regenerate_structurally_valid_snapshot(
+                    identity,
+                    GenerationPlanning {
+                        planning_context: &mut *planning.planning_context,
+                        planning_context_loaded: &mut *planning.planning_context_loaded,
+                    },
+                    operation,
+                    &feedback,
+                )
+                .await
+            {
+                Ok((next_snapshot, next_draft)) => {
+                    *snapshot = next_snapshot;
+                    *draft_plan_text = next_draft;
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        operation_key = %operation.operation_key,
+                        attempt,
+                        error = %error,
+                        "plan quality replan failed validation; shipping best draft so far"
+                    );
+                    break;
                 }
             }
         }
+        Ok(accepted)
+    }
 
-        let best = match best {
-            Some(best) => best,
-            None => {
-                // Evaluator never produced a score (outage / empty resume range). Ship the
-                // structurally valid draft without quality metadata rather than failing save.
-                return Ok(PlanQualityLoopResult {
-                    snapshot,
-                    quality_evaluations: operation.quality_evaluations.clone(),
-                    shipped_quality: None,
-                    quality_progress_messages,
-                    operation,
-                });
-            }
+    #[allow(clippy::too_many_arguments)]
+    fn finalize_plan_quality_loop(
+        &self,
+        identity: &GenerationIdentity<'_>,
+        snapshot: TrainingPlanSnapshot,
+        operation: TrainingPlanGenerationOperation,
+        best: Option<BestDraft>,
+        accepted: bool,
+        max_loops: u32,
+        mut quality_progress_messages: Vec<String>,
+        plan_quality_progress: Option<&Arc<dyn PlanQualityProgressPort>>,
+    ) -> Result<PlanQualityLoopResult, TrainingPlanError> {
+        let Some(best) = best else {
+            // Evaluator never produced a score (outage / empty resume range). Ship the
+            // structurally valid draft without quality metadata rather than failing save.
+            return Ok(PlanQualityLoopResult {
+                snapshot,
+                quality_evaluations: operation.quality_evaluations.clone(),
+                shipped_quality: None,
+                quality_progress_messages,
+                operation,
+            });
         };
         let finished = if accepted {
             plan_quality_finished_accepted_message(best.evaluation.score)
@@ -238,20 +293,8 @@ where
             operation.best_quality_evaluation.clone(),
             operation.best_quality_plan_response.clone(),
         ) else {
-            // Recover inconsistent stored state: evaluations without best draft fields.
-            let Some(evaluation) = operation.best_quality_evaluation.clone().or_else(|| {
-                operation
-                    .quality_evaluations
-                    .iter()
-                    .max_by_key(|evaluation| (evaluation.score, evaluation.attempt))
-                    .cloned()
-            }) else {
-                return Ok(None);
-            };
-            return Ok(Some(BestDraft {
-                snapshot: current_snapshot.clone(),
-                evaluation,
-            }));
+            // Incomplete stored state is not a verified BestDraft for the current draft.
+            return Ok(None);
         };
         if best_draft == current_draft {
             return Ok(Some(BestDraft {

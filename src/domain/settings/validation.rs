@@ -116,13 +116,20 @@ pub fn validate_plan_quality_pass_score(
 }
 
 pub fn effective_plan_quality_max_loops(max_loops: Option<u32>) -> u32 {
-    max_loops.unwrap_or(5)
+    max_loops
+        .filter(|value| {
+            (PLAN_QUALITY_BOUNDED_INT_MIN..=PLAN_QUALITY_BOUNDED_INT_MAX).contains(value)
+        })
+        .unwrap_or(5)
 }
 
 pub fn effective_plan_quality_pass_score(pass_score: Option<u32>) -> u8 {
-    pass_score.unwrap_or(u32::from(
-        crate::domain::training_plan::PLAN_QUALITY_PASS_SCORE,
-    )) as u8
+    pass_score
+        .filter(|score| {
+            (PLAN_QUALITY_BOUNDED_INT_MIN..=PLAN_QUALITY_BOUNDED_INT_MAX).contains(score)
+        })
+        .and_then(|score| u8::try_from(score).ok())
+        .unwrap_or(crate::domain::training_plan::PLAN_QUALITY_PASS_SCORE)
 }
 
 pub fn validate_ai_provider(
@@ -227,6 +234,8 @@ mod tests {
     fn plan_quality_max_loops_defaults_to_five_and_rejects_out_of_range() {
         assert_eq!(effective_plan_quality_max_loops(None), 5);
         assert_eq!(effective_plan_quality_max_loops(Some(3)), 3);
+        assert_eq!(effective_plan_quality_max_loops(Some(0)), 5);
+        assert_eq!(effective_plan_quality_max_loops(Some(11)), 5);
         assert_eq!(validate_plan_quality_max_loops(None).unwrap(), None);
         assert_eq!(validate_plan_quality_max_loops(Some(1)).unwrap(), Some(1));
         assert_eq!(validate_plan_quality_max_loops(Some(10)).unwrap(), Some(10));
@@ -244,6 +253,9 @@ mod tests {
     fn plan_quality_pass_score_defaults_to_seven_and_rejects_out_of_range() {
         assert_eq!(effective_plan_quality_pass_score(None), 7);
         assert_eq!(effective_plan_quality_pass_score(Some(9)), 9);
+        assert_eq!(effective_plan_quality_pass_score(Some(0)), 7);
+        assert_eq!(effective_plan_quality_pass_score(Some(11)), 7);
+        assert_eq!(effective_plan_quality_pass_score(Some(256)), 7);
         assert_eq!(validate_plan_quality_pass_score(None).unwrap(), None);
         assert_eq!(validate_plan_quality_pass_score(Some(1)).unwrap(), Some(1));
         assert_eq!(
