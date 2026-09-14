@@ -103,12 +103,7 @@ impl TrainingPlanGenerator for CheckpointingInitialPlanGenerator {
 
     fn evaluate_plan_quality(
         &self,
-        _user_id: &str,
-        _workout_id: &str,
-        _saved_at_epoch_seconds: i64,
-        _workout_recap: &WorkoutRecap,
-        _planning_context: Option<&TrainingPlanPlanningContext>,
-        _draft_plan_text: &str,
+        _input: aiwattcoach::domain::training_plan::PlanQualityEvaluationInput<'_>,
     ) -> BoxFuture<
         Result<aiwattcoach::domain::training_plan::PlanQualityEvaluation, TrainingPlanError>,
     > {
@@ -117,6 +112,7 @@ impl TrainingPlanGenerator for CheckpointingInitialPlanGenerator {
                 attempt: 0,
                 score: 10,
                 critique: String::new(),
+                raise_to_next: String::new(),
             })
         })
     }
@@ -217,12 +213,7 @@ impl TrainingPlanGenerator for CompletedResponseCrashGenerator {
 
     fn evaluate_plan_quality(
         &self,
-        _user_id: &str,
-        _workout_id: &str,
-        _saved_at_epoch_seconds: i64,
-        _workout_recap: &WorkoutRecap,
-        _planning_context: Option<&TrainingPlanPlanningContext>,
-        _draft_plan_text: &str,
+        _input: aiwattcoach::domain::training_plan::PlanQualityEvaluationInput<'_>,
     ) -> BoxFuture<
         Result<aiwattcoach::domain::training_plan::PlanQualityEvaluation, TrainingPlanError>,
     > {
@@ -231,6 +222,7 @@ impl TrainingPlanGenerator for CompletedResponseCrashGenerator {
                 attempt: 0,
                 score: 10,
                 critique: String::new(),
+                raise_to_next: String::new(),
             })
         })
     }

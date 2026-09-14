@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use super::super::{
     format_quality_feedback, plan_quality_attempt_message, plan_quality_finished_accepted_message,
-    plan_quality_finished_best_message, PlanQualityEvaluation, PlanQualityEvaluatorLlmConfigPort,
-    PlanQualityProgressPort, TrainingPlanError, TrainingPlanGenerationOperation,
-    TrainingPlanSnapshot,
+    plan_quality_finished_best_message, PlanQualityEvaluation, PlanQualityEvaluationInput,
+    PlanQualityEvaluatorLlmConfigPort, PlanQualityProgressPort, TrainingPlanError,
+    TrainingPlanGenerationOperation, TrainingPlanSnapshot,
 };
 use super::ctx::{GenerationIdentity, GenerationPlanning};
+use super::quality_evidence::extract_plan_quality_evidence;
 use super::structural::CorrectionRoundInput;
 use super::{TrainingPlanGenerationService, MAX_CORRECTION_ATTEMPTS};
 use crate::domain::{
@@ -141,16 +142,18 @@ where
     ) -> Result<bool, TrainingPlanError> {
         let mut accepted = false;
         for attempt in start_attempt..=max_loops {
+            let evidence = extract_plan_quality_evidence(operation);
             let mut evaluation = match self
                 .generator
-                .evaluate_plan_quality(
-                    identity.user_id,
-                    identity.workout_id,
-                    identity.saved_at_epoch_seconds,
-                    identity.recap,
-                    planning.planning_context.as_ref(),
+                .evaluate_plan_quality(PlanQualityEvaluationInput {
+                    user_id: identity.user_id,
+                    workout_id: identity.workout_id,
+                    saved_at_epoch_seconds: identity.saved_at_epoch_seconds,
+                    workout_recap: identity.recap,
+                    planning_context: planning.planning_context.as_ref(),
                     draft_plan_text,
-                )
+                    evidence: evidence.as_ref(),
+                })
                 .await
             {
                 Ok(evaluation) => evaluation,
@@ -176,6 +179,7 @@ where
                     max_loops,
                     evaluation.score,
                     &evaluation.critique,
+                    &evaluation.raise_to_next,
                 ),
             );
 
@@ -206,7 +210,11 @@ where
                 break;
             }
 
-            let feedback = format_quality_feedback(evaluation.score, &evaluation.critique);
+            let feedback = format_quality_feedback(
+                evaluation.score,
+                &evaluation.critique,
+                &evaluation.raise_to_next,
+            );
             match self
                 .regenerate_structurally_valid_snapshot(
                     identity,

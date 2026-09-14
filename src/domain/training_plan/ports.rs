@@ -4,9 +4,10 @@ use crate::domain::workout_summary::WorkoutRecap;
 use crate::domain::{ai_workflow::ValidationIssue, llm_tools::LlmToolLoopState};
 
 use super::{
-    PlanQualityEvaluation, TrainingPlanError, TrainingPlanGenerationClaimResult,
-    TrainingPlanGenerationOperation, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
-    TrainingPlanProjectedDay, TrainingPlanReplacementResult, TrainingPlanSnapshot,
+    PlanQualityEvaluation, PlanQualityEvaluationInput, TrainingPlanError,
+    TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation, TrainingPlanPhaseOutput,
+    TrainingPlanPlanningContext, TrainingPlanProjectedDay, TrainingPlanReplacementResult,
+    TrainingPlanSnapshot,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -180,12 +181,7 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
 
     fn evaluate_plan_quality(
         &self,
-        user_id: &str,
-        workout_id: &str,
-        saved_at_epoch_seconds: i64,
-        workout_recap: &WorkoutRecap,
-        planning_context: Option<&TrainingPlanPlanningContext>,
-        draft_plan_text: &str,
+        input: PlanQualityEvaluationInput<'_>,
     ) -> BoxFuture<Result<PlanQualityEvaluation, TrainingPlanError>>;
 }
 

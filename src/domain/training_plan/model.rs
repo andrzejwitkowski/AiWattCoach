@@ -53,6 +53,8 @@ pub struct PlanQualityEvaluation {
     pub attempt: u32,
     pub score: u8,
     pub critique: String,
+    #[serde(default)]
+    pub raise_to_next: String,
 }
 
 impl std::fmt::Display for TrainingPlanError {
@@ -460,11 +462,13 @@ mod operation_transition_tests {
             attempt: 1,
             score: 6,
             critique: "tempo heavy".to_string(),
+            raise_to_next: "Cut midweek tempo.".to_string(),
         }];
         op.best_quality_evaluation = Some(PlanQualityEvaluation {
             attempt: 1,
             score: 6,
             critique: "tempo heavy".to_string(),
+            raise_to_next: "Cut midweek tempo.".to_string(),
         });
         op.best_quality_plan_response = Some("best-plan".to_string());
         op.attempt_count = 3;
