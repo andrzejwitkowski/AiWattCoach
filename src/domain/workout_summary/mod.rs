@@ -33,10 +33,10 @@ pub use prompt::{
 pub use save_completion_port::{NoopSaveWorkflowCompletionPort, SaveWorkflowCompletionPort};
 pub use service::{
     workout_summary_coach_reply_task_handler, CompletedWorkoutAliasScope,
-    CompletedWorkoutTargetUseCases, LatestCompletedActivityUseCases,
-    ResolvedCompletedWorkoutTarget, SaveSummaryResult, SaveWorkflowResult, SaveWorkflowStatus,
-    SchedulerBackedWorkoutSummaryService, WorkoutSummaryGetOptions, WorkoutSummaryListOptions,
-    WorkoutSummaryService, WorkoutSummaryUseCases,
+    CompletedWorkoutTargetUseCases, ResolvedCompletedWorkoutTarget, SaveSummaryResult,
+    SaveWorkflowResult, SaveWorkflowStatus, SchedulerBackedWorkoutSummaryService,
+    WorkoutSummaryGetOptions, WorkoutSummaryListOptions, WorkoutSummaryService,
+    WorkoutSummaryUseCases,
 };
 pub(crate) use service::{
     COACH_REPLY_HEARTBEAT_INTERVAL_SECONDS, COACH_REPLY_LEASE_DURATION_SECONDS,

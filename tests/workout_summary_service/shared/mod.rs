@@ -35,10 +35,8 @@ pub(crate) use services::{
     default_dev_coach, existing_summary, existing_summary_with_finished_conversation, test_service,
     test_service_with_coach, test_service_with_coach_and_athlete_summary,
     test_service_with_settings, test_service_with_training_plan,
-    test_service_with_training_plan_and_latest_activity,
-    test_service_with_training_plan_latest_activity_and_completed_target,
-    PersistCheckingTrainingPlanService, RecordingCompletedWorkoutTargetService,
-    RecordingLatestCompletedActivityService, RecordingTrainingPlanService,
+    test_service_with_training_plan_and_completed_target, PersistCheckingTrainingPlanService,
+    RecordingCompletedWorkoutTargetService, RecordingTrainingPlanService,
     RefreshingTrainingPlanService, StubAthleteSummaryService, TestAvailabilitySettingsService,
 };
 pub(crate) use summary_repository::InMemoryWorkoutSummaryRepository;

@@ -8,4 +8,3 @@ pub mod support;
 pub mod wahoo;
 pub mod wahoo_fit_parser;
 pub mod workout_summary_completed_target;
-pub mod workout_summary_latest_activity;

@@ -77,7 +77,6 @@ use aiwattcoach::{
         },
         wahoo_fit_parser::WahooFitParser,
         workout_summary_completed_target::CompletedWorkoutTargetAdapter,
-        workout_summary_latest_activity::LatestCompletedActivityAdapter,
     },
     build_app,
     config::{
@@ -660,10 +659,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )
         .with_athlete_summary_service(athlete_summary_direct_service.clone())
         .with_settings_service(settings_service.clone())
-        .with_completed_workout_target_service(completed_workout_target_service)
-        .with_latest_completed_activity_service(Arc::new(
-            LatestCompletedActivityAdapter::new(authoritative_completed_workout_repository.clone()),
-        )),
+        .with_completed_workout_target_service(completed_workout_target_service),
     );
     let coach_conversation_direct_service = Arc::new(
         SharedCoachConversationService::new(

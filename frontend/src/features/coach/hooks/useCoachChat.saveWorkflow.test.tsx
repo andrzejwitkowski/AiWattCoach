@@ -40,9 +40,9 @@ describe('useCoachChat save workflow', () => {
     vi.mocked(saveWorkoutSummary).mockResolvedValue({
       summary: { ...summaryFixture, rpe: 9, savedAtEpochSeconds: 3 },
       workflow: {
-        recapStatus: 'generated',
+        recapStatus: 'skipped',
         planStatus: 'skipped',
-        messages: ['Workout recap generated.', '14-day schedule skipped because this is not the latest completed activity.'],
+        messages: ['Workout recap skipped.', '14-day schedule skipped.'],
       },
     });
 
@@ -64,9 +64,9 @@ describe('useCoachChat save workflow', () => {
     expect(saveWorkoutSummary).toHaveBeenCalledWith('', '101');
     expect(result.current.isSaved).toBe(true);
     expect(result.current.messages.at(-2)?.role).toBe('system');
-    expect(result.current.messages.at(-2)?.content).toBe('Workout recap generated.');
+    expect(result.current.messages.at(-2)?.content).toBe('Workout recap skipped.');
     expect(result.current.messages.at(-1)?.role).toBe('system');
-    expect(result.current.messages.at(-1)?.content).toBe('14-day schedule skipped because this is not the latest completed activity.');
+    expect(result.current.messages.at(-1)?.content).toBe('14-day schedule skipped.');
   });
 
   it('shows saving summary progress for the whole save workflow request', async () => {

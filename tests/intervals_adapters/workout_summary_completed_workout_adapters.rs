@@ -1,11 +1,7 @@
 use aiwattcoach::{
-    adapters::{
-        workout_summary_completed_target::CompletedWorkoutTargetAdapter,
-        workout_summary_latest_activity::LatestCompletedActivityAdapter,
-    },
+    adapters::workout_summary_completed_target::CompletedWorkoutTargetAdapter,
     domain::{
-        completed_workouts::CompletedWorkout,
-        workout_summary::{CompletedWorkoutTargetUseCases, LatestCompletedActivityUseCases},
+        completed_workouts::CompletedWorkout, workout_summary::CompletedWorkoutTargetUseCases,
     },
 };
 
@@ -89,22 +85,6 @@ async fn completed_workout_target_adapter_returns_cross_source_equivalent_ids_fo
             "wahoo-workout:459893292".to_string(),
         ]
     );
-}
-
-#[tokio::test]
-async fn latest_completed_activity_adapter_falls_back_to_legacy_completed_workout_id() {
-    let repository = completed_workout_repository(vec![legacy_completed_workout(
-        "intervals-activity:latest-77",
-        "2026-03-22T08:00:00",
-    )]);
-    let adapter = LatestCompletedActivityAdapter::new(repository);
-
-    let latest_activity_id = adapter
-        .latest_completed_activity_id("user-1")
-        .await
-        .expect("latest lookup should succeed");
-
-    assert_eq!(latest_activity_id.as_deref(), Some("latest-77"));
 }
 
 fn completed_workout_repository(
