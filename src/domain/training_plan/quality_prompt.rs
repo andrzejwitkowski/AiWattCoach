@@ -21,6 +21,7 @@ In raise_to_next, state the single highest-leverage gap as one imperative senten
 
 const EVIDENCE_SECTION_MAX_CHARS: usize = 700;
 const EVIDENCE_BLOCK_MAX_CHARS: usize = 2000;
+const EVIDENCE_BLOCK_LABEL_OVERHEAD: usize = 120;
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PlanQualityEvidence {
@@ -65,17 +66,23 @@ pub fn format_plan_quality_evidence(evidence: Option<&PlanQualityEvidence>) -> S
         missing.join(", ")
     };
 
-    let block = format!(
-        "Evidence (tool-verified facts; treat as authoritative):\n\
-forward_load: {}\n\
-power_curve: {}\n\
-w_prime: {}\n\
-missing: {missing_line}",
-        field_or_missing(evidence.load.as_deref()),
+    // Budget fields so labels + missing + three sections always fit the block cap.
+    let overhead = EVIDENCE_BLOCK_LABEL_OVERHEAD + missing_line.chars().count();
+    let field_budget = EVIDENCE_BLOCK_MAX_CHARS.saturating_sub(overhead).max(3) / 3;
+    let load = truncate_snippet(field_or_missing(evidence.load.as_deref()), field_budget);
+    let power_curve = truncate_snippet(
         field_or_missing(evidence.power_curve.as_deref()),
-        field_or_missing(evidence.w_prime.as_deref()),
+        field_budget,
     );
-    truncate_snippet(&block, EVIDENCE_BLOCK_MAX_CHARS)
+    let w_prime = truncate_snippet(field_or_missing(evidence.w_prime.as_deref()), field_budget);
+
+    format!(
+        "Evidence (tool-verified facts; treat as authoritative):\n\
+forward_load: {load}\n\
+power_curve: {power_curve}\n\
+w_prime: {w_prime}\n\
+missing: {missing_line}"
+    )
 }
 
 fn field_or_missing(value: Option<&str>) -> &str {
@@ -212,7 +219,7 @@ mod tests {
         assemble_plan_quality_evaluation_request, format_plan_quality_evidence,
         format_quality_feedback, plan_quality_attempt_message,
         plan_quality_finished_accepted_message, plan_quality_finished_best_message,
-        PlanQualityEvidence,
+        PlanQualityEvidence, EVIDENCE_BLOCK_MAX_CHARS, EVIDENCE_SECTION_MAX_CHARS,
     };
 
     fn sample_recap() -> WorkoutRecap {
@@ -301,6 +308,25 @@ mod tests {
         assert!(rendered.contains("forward_load: tsb_min=-12@2026-05-10"));
         assert!(rendered.contains("missing: selected_workout_power_curve, get_w_prime_balance"));
         assert!(rendered.starts_with("Evidence (tool-verified facts"));
+    }
+
+    #[test]
+    fn evidence_block_keeps_all_sections_under_cap() {
+        let long = "x".repeat(EVIDENCE_SECTION_MAX_CHARS);
+        let evidence = PlanQualityEvidence {
+            load: Some(long.clone()),
+            power_curve: Some(long.clone()),
+            w_prime: Some(long),
+        };
+        let rendered = format_plan_quality_evidence(Some(&evidence));
+        assert!(rendered.chars().count() <= EVIDENCE_BLOCK_MAX_CHARS);
+        assert!(rendered.contains("forward_load:"));
+        assert!(rendered.contains("power_curve:"));
+        assert!(rendered.contains("w_prime:"));
+        assert!(rendered.contains("missing: none"));
+        let w_prime_at = rendered.find("w_prime:").unwrap();
+        let missing_at = rendered.find("missing: none").unwrap();
+        assert!(w_prime_at < missing_at);
     }
 
     #[test]

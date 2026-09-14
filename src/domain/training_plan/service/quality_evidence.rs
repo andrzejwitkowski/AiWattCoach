@@ -299,6 +299,40 @@ mod tests {
     }
 
     #[test]
+    fn extract_uses_initial_after_replan_clears_stale_correction() {
+        let mut operation = sample_operation();
+        let (stale_assistant, stale_tool) = tool_pair(
+            "stale",
+            "simulate_forward_load",
+            r#"{"baseline":{"ctl":1,"atl":1,"tsb":1},"days":[{"date":"2026-01-01","ctl":1,"atl":1,"tsb":-99,"source":"future_event"}]}"#,
+        );
+        operation.correction_tool_loop_state = Some(LlmToolLoopState {
+            provider_transcript: vec![stale_assistant, stale_tool],
+            ..Default::default()
+        });
+        let (fresh_assistant, fresh_tool) = tool_pair(
+            "fresh",
+            "simulate_forward_load",
+            r#"{"baseline":{"ctl":10,"atl":5,"tsb":5},"days":[{"date":"2026-02-01","ctl":11,"atl":6,"tsb":5,"source":"input"}]}"#,
+        );
+        operation = operation.with_raw_plan_payload(
+            "new-draft".to_string(),
+            None,
+            LlmToolLoopState {
+                provider_transcript: vec![fresh_assistant, fresh_tool],
+                ..Default::default()
+            },
+            300,
+        );
+
+        let evidence = extract_plan_quality_evidence(&operation).unwrap();
+        let load = evidence.load.as_deref().unwrap();
+        assert!(load.contains("tsb_min=5@2026-02-01"));
+        assert!(!load.contains("tsb_min=-99"));
+        assert!(operation.correction_tool_loop_state.is_none());
+    }
+
+    #[test]
     fn evidence_from_transcript_accepts_raw_non_json_payload() {
         let (assistant, tool) = tool_pair("x", "simulate_forward_load", "not-json-but-useful");
         let evidence = evidence_from_transcript(&[assistant, tool]);

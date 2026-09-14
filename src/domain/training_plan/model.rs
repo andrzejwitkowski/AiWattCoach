@@ -275,6 +275,10 @@ impl TrainingPlanGenerationOperation {
         updated.raw_plan_response = Some(raw_plan_response);
         updated.raw_plan_description = raw_plan_description;
         updated.initial_plan_tool_loop_state = Some(tool_loop_state);
+        // A new initial draft supersedes any prior correction transcript for this operation.
+        updated.raw_correction_response = None;
+        updated.raw_correction_description = None;
+        updated.correction_tool_loop_state = None;
         updated.attempts = attempts;
         updated
     }
@@ -538,5 +542,27 @@ mod operation_transition_tests {
         assert_eq!(failed.validation_issues.len(), 1);
         assert_eq!(failed.updated_at_epoch_seconds, 700);
         assert_eq!(failed.raw_plan_response.as_deref(), Some("plan"));
+    }
+
+    #[test]
+    fn with_raw_plan_payload_clears_stale_correction_state() {
+        use crate::domain::llm_tools::LlmToolLoopState;
+
+        let mut op = sample_operation();
+        op.correction_tool_loop_state = Some(LlmToolLoopState::default());
+        op.raw_correction_response = Some("old-correction".to_string());
+        op.raw_correction_description = Some("old-desc".to_string());
+
+        let updated = op.with_raw_plan_payload(
+            "new-plan".to_string(),
+            Some("new-desc".to_string()),
+            LlmToolLoopState::default(),
+            700,
+        );
+        assert_eq!(updated.raw_plan_response.as_deref(), Some("new-plan"));
+        assert!(updated.initial_plan_tool_loop_state.is_some());
+        assert!(updated.correction_tool_loop_state.is_none());
+        assert!(updated.raw_correction_response.is_none());
+        assert!(updated.raw_correction_description.is_none());
     }
 }
