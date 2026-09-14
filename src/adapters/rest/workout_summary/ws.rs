@@ -90,6 +90,7 @@ async fn handle_socket(
             let workout_id = workout_id.clone();
             tokio::spawn(async move {
                 let mut rx = rx;
+                let mut delivered_progress = Vec::new();
                 loop {
                     tokio::select! {
                         changed = rx.changed() => {
@@ -97,7 +98,10 @@ async fn handle_socket(
                                 break;
                             }
                             let payload_opt = rx.borrow().clone();
-                            if let Some(payload) = payload_opt {
+                            if let Some(mut payload) = payload_opt {
+                                payload.messages.retain(|message| {
+                                    !delivered_progress.iter().any(|seen| seen == message)
+                                });
                                 let _ = send_ws_json(&sender, save_workflow_message(payload)).await;
                                 notifier.unregister(&user_id, &workout_id);
                                 break;
@@ -106,10 +110,24 @@ async fn handle_socket(
                         progress = progress_rx.recv() => {
                             match progress {
                                 Ok(message) => {
+                                    delivered_progress.push(message.clone());
                                     let _ = send_ws_json(&sender, system_message(message)).await;
                                 }
                                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
-                                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                                    let payload_opt = rx.borrow().clone();
+                                    if let Some(mut payload) = payload_opt {
+                                        payload.messages.retain(|message| {
+                                            !delivered_progress.iter().any(|seen| seen == message)
+                                        });
+                                        let _ = send_ws_json(
+                                            &sender,
+                                            save_workflow_message(payload),
+                                        )
+                                        .await;
+                                    }
+                                    break;
+                                }
                             }
                         }
                     }

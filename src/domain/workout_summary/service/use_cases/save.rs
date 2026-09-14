@@ -117,6 +117,14 @@ async fn run_background_save_workflow(workflow: BackgroundSaveWorkflow) {
         "Starting background recap and training plan generation"
     );
 
+    if let Some(port) = &workflow.save_completion_port {
+        port.bind_progress_alias(
+            &workflow.user_id,
+            &workflow.storage_workout_id,
+            &workflow.completion_workout_id,
+        );
+    }
+
     let recap_ok = workflow
         .training_plan_service
         .generate_recap_for_saved_workout(
@@ -166,6 +174,7 @@ async fn run_background_save_workflow(workflow: BackgroundSaveWorkflow) {
             plan_status,
             messages,
         );
+        port.clear_progress_alias(&workflow.user_id, &workflow.storage_workout_id);
     }
 }
 

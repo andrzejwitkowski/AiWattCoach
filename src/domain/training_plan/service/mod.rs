@@ -239,12 +239,20 @@ where
             .into_iter()
             .filter(|day| day.is_active_on(&today))
             .collect();
+        let (quality_evaluations, shipped_quality) =
+            match self.operations.find_by_operation_key(operation_key).await? {
+                Some(operation) => (
+                    operation.quality_evaluations,
+                    operation.best_quality_evaluation,
+                ),
+                None => (Vec::new(), None),
+            };
         Ok(Some(GeneratedTrainingPlan {
             snapshot,
             active_projected_days,
             was_generated: false,
-            quality_evaluations: Vec::new(),
-            shipped_quality: None,
+            quality_evaluations,
+            shipped_quality,
             quality_progress_messages: Vec::new(),
         }))
     }

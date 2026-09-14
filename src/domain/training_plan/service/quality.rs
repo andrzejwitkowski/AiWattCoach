@@ -10,7 +10,6 @@ use super::ctx::{GenerationIdentity, GenerationPlanning};
 use super::structural::CorrectionRoundInput;
 use super::{TrainingPlanGenerationService, MAX_CORRECTION_ATTEMPTS};
 use crate::domain::{
-    ai_workflow::WorkflowPhase,
     calendar_view::CalendarEntryViewRefreshPort,
     identity::Clock,
     training_plan::{
@@ -108,14 +107,13 @@ where
                 {
                     Ok(evaluation) => evaluation,
                     Err(error) => {
-                        return Err(self
-                            .fail_operation(
-                                &operation,
-                                WorkflowPhase::QualityEvaluation,
-                                error,
-                                operation.validation_issues.clone(),
-                            )
-                            .await?);
+                        tracing::warn!(
+                            operation_key = %operation.operation_key,
+                            attempt,
+                            error = %error,
+                            "plan quality evaluator failed; shipping best available draft"
+                        );
+                        break;
                     }
                 };
                 evaluation.attempt = attempt;
@@ -190,9 +188,20 @@ where
             }
         }
 
-        let best = best.ok_or_else(|| {
-            TrainingPlanError::Unavailable("plan quality loop produced no evaluations".to_string())
-        })?;
+        let best = match best {
+            Some(best) => best,
+            None => {
+                // Evaluator never produced a score (outage / empty resume range). Ship the
+                // structurally valid draft without quality metadata rather than failing save.
+                return Ok(PlanQualityLoopResult {
+                    snapshot,
+                    quality_evaluations: operation.quality_evaluations.clone(),
+                    shipped_quality: None,
+                    quality_progress_messages,
+                    operation,
+                });
+            }
+        };
         let finished = if accepted {
             plan_quality_finished_accepted_message(best.evaluation.score)
         } else {
@@ -226,7 +235,20 @@ where
             operation.best_quality_evaluation.clone(),
             operation.best_quality_plan_response.clone(),
         ) else {
-            return Ok(None);
+            // Recover inconsistent stored state: evaluations without best draft fields.
+            let Some(evaluation) = operation.best_quality_evaluation.clone().or_else(|| {
+                operation
+                    .quality_evaluations
+                    .iter()
+                    .max_by_key(|evaluation| (evaluation.score, evaluation.attempt))
+                    .cloned()
+            }) else {
+                return Ok(None);
+            };
+            return Ok(Some(BestDraft {
+                snapshot: current_snapshot.clone(),
+                evaluation,
+            }));
         };
         if best_draft == current_draft {
             return Ok(Some(BestDraft {

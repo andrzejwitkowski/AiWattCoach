@@ -9,6 +9,17 @@ pub trait SaveWorkflowCompletionPort: Send + Sync + 'static {
         plan_status: SaveWorkflowStatus,
         messages: Vec<String>,
     );
+
+    /// Map storage workout IDs onto the client-facing workout channel for live progress.
+    fn bind_progress_alias(
+        &self,
+        _user_id: &str,
+        _storage_workout_id: &str,
+        _completion_workout_id: &str,
+    ) {
+    }
+
+    fn clear_progress_alias(&self, _user_id: &str, _storage_workout_id: &str) {}
 }
 
 pub struct NoopSaveWorkflowCompletionPort;
