@@ -70,6 +70,12 @@ fn parse_evidence_json(content: &str) -> Option<serde_json::Value> {
     }
 }
 
+fn is_race_day_load_source(source: &str) -> bool {
+    source
+        .split('+')
+        .any(|part| part == "future_event" || part == "race")
+}
+
 fn compact_forward_load(content: &str) -> String {
     let Some(value) = parse_evidence_json(content) else {
         return truncate_evidence_section(content);
@@ -93,7 +99,7 @@ fn compact_forward_load(content: &str) -> String {
         .unwrap_or(&[]);
 
     let mut min_tsb: Option<(f64, &str)> = None;
-    let mut race_day: Option<(f64, &str, bool)> = None;
+    let mut race_day: Option<(f64, &str, &str)> = None;
     for day in days {
         let Some(date) = day.get("date").and_then(|d| d.as_str()) else {
             continue;
@@ -105,9 +111,12 @@ fn compact_forward_load(content: &str) -> String {
             min_tsb = Some((tsb, date));
         }
         let source = day.get("source").and_then(|s| s.as_str()).unwrap_or("");
-        if source.contains("future_event") {
-            let unavailable = day.get("tss_source").and_then(|s| s.as_str()) == Some("none");
-            race_day = Some((tsb, date, unavailable));
+        if is_race_day_load_source(source) {
+            let tss_source = day
+                .get("tss_source")
+                .and_then(|s| s.as_str())
+                .unwrap_or("none");
+            race_day = Some((tsb, date, tss_source));
         }
     }
 
@@ -115,8 +124,15 @@ fn compact_forward_load(content: &str) -> String {
         .map(|(tsb, date)| format!("tsb_min={tsb}@{date}"))
         .unwrap_or_else(|| "tsb_min=?".to_string());
     let race_bit = match race_day {
-        Some((_, date, true)) => format!("race_day_tsb=unavailable@{date} (tss_source=none)"),
-        Some((tsb, date, false)) => format!("race_day_tsb={tsb}@{date}"),
+        Some((_, date, "none")) => {
+            format!("race_day_tsb=unavailable@{date} (race_day_tsb_source=none)")
+        }
+        Some((tsb, date, "estimated")) => {
+            format!("race_day_tsb={tsb}@{date} (race_day_tsb_source=estimated)")
+        }
+        Some((tsb, date, _)) => {
+            format!("race_day_tsb={tsb}@{date} (race_day_tsb_source=event_tss)")
+        }
         None => "race_day_tsb=n/a".to_string(),
     };
     let trend_bit = match (days.first(), days.last()) {
@@ -289,7 +305,7 @@ mod tests {
         let (assistant, tool) = tool_pair(
             "c1",
             "simulate_forward_load",
-            r#"{"baseline":{"ctl":50,"atl":40,"tsb":10},"days":[{"date":"2026-05-10","ctl":51,"atl":45,"tsb":6,"source":"input"},{"date":"2026-05-12","ctl":52,"atl":48,"tsb":-2,"source":"future_event"}]}"#,
+            r#"{"baseline":{"ctl":50,"atl":40,"tsb":10},"days":[{"date":"2026-05-10","ctl":51,"atl":45,"tsb":6,"source":"input"},{"date":"2026-05-12","ctl":52,"atl":48,"tsb":-2,"source":"future_event","tss_source":"planned"}]}"#,
         );
         operation.correction_tool_loop_state = Some(LlmToolLoopState {
             provider_transcript: vec![assistant, tool],
@@ -303,7 +319,7 @@ mod tests {
         let evidence = extract_plan_quality_evidence(&operation).unwrap();
         let load = evidence.load.as_deref().unwrap();
         assert!(load.contains("tsb_min=-2@2026-05-12"));
-        assert!(load.contains("race_day_tsb=-2@2026-05-12"));
+        assert!(load.contains("race_day_tsb=-2@2026-05-12 (race_day_tsb_source=event_tss)"));
         assert!(evidence.power_curve.is_none());
         assert!(evidence.w_prime.is_none());
     }
@@ -389,8 +405,45 @@ mod tests {
         );
         let evidence = evidence_from_transcript(&[assistant, tool]);
         let load = evidence.load.as_deref().unwrap();
-        assert!(load.contains("race_day_tsb=unavailable@2026-05-12 (tss_source=none)"));
+        assert!(load.contains("race_day_tsb=unavailable@2026-05-12 (race_day_tsb_source=none)"));
         assert!(load.contains("race TSS unknown"));
+    }
+
+    #[test]
+    fn compact_labels_estimated_race_tss_source() {
+        let (assistant, tool) = tool_pair(
+            "1",
+            "simulate_forward_load",
+            r#"{"baseline":{"ctl":50,"atl":40,"tsb":10},"days":[{"date":"2026-05-12","ctl":52,"atl":48,"tsb":-2,"source":"future_event","tss_source":"estimated"}],"notes":["2026-05-12: race TSS estimated (tss=128.00, duration_s=7200); not measured"]}"#,
+        );
+        let evidence = evidence_from_transcript(&[assistant, tool]);
+        let load = evidence.load.as_deref().unwrap();
+        assert!(load.contains("race_day_tsb=-2@2026-05-12 (race_day_tsb_source=estimated)"));
+        assert!(load.contains("race TSS estimated"));
+    }
+
+    #[test]
+    fn compact_labels_estimated_tss_from_race_calendar_source() {
+        let (assistant, tool) = tool_pair(
+            "1",
+            "simulate_forward_load",
+            r#"{"baseline":{"ctl":50,"atl":40,"tsb":10},"days":[{"date":"2026-09-20","ctl":52,"atl":48,"tsb":3,"source":"race","tss_source":"estimated","planned_tss":128}],"notes":["2026-09-20: race TSS estimated (tss=128.00, duration_s=7200); not measured"]}"#,
+        );
+        let evidence = evidence_from_transcript(&[assistant, tool]);
+        let load = evidence.load.as_deref().unwrap();
+        assert!(load.contains("race_day_tsb=3@2026-09-20 (race_day_tsb_source=estimated)"));
+    }
+
+    #[test]
+    fn compact_labels_event_tss_race_source() {
+        let (assistant, tool) = tool_pair(
+            "1",
+            "simulate_forward_load",
+            r#"{"baseline":{"ctl":50,"atl":40,"tsb":10},"days":[{"date":"2026-05-12","ctl":52,"atl":48,"tsb":4,"source":"future_event","tss_source":"planned"}]}"#,
+        );
+        let evidence = evidence_from_transcript(&[assistant, tool]);
+        let load = evidence.load.as_deref().unwrap();
+        assert!(load.contains("race_day_tsb=4@2026-05-12 (race_day_tsb_source=event_tss)"));
     }
 
     #[test]

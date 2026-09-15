@@ -1,13 +1,14 @@
+mod attempt;
+
 use std::sync::Arc;
 
 use super::super::{
-    format_quality_feedback, plan_quality_attempt_message, plan_quality_finished_accepted_message,
-    plan_quality_finished_best_message, PlanQualityEvaluation, PlanQualityEvaluationInput,
-    PlanQualityEvaluatorLlmConfigPort, PlanQualityProgressPort, TrainingPlanError,
-    TrainingPlanGenerationOperation, TrainingPlanSnapshot,
+    draft_addresses_quality_checklist, plan_quality_finished_accepted_message,
+    plan_quality_finished_best_message, PlanQualityEvaluation, PlanQualityEvaluatorLlmConfigPort,
+    PlanQualityProgressPort, TrainingPlanError, TrainingPlanGenerationOperation,
+    TrainingPlanSnapshot,
 };
 use super::ctx::{GenerationIdentity, GenerationPlanning};
-use super::quality_evidence::extract_plan_quality_evidence;
 use super::structural::CorrectionRoundInput;
 use super::{TrainingPlanGenerationService, MAX_CORRECTION_ATTEMPTS};
 use crate::domain::{
@@ -42,15 +43,18 @@ pub(super) struct PlanQualityLoopResult {
     pub quality_progress_messages: Vec<String>,
 }
 
-struct BestDraft {
+pub(super) struct BestDraft {
     snapshot: TrainingPlanSnapshot,
     evaluation: PlanQualityEvaluation,
 }
 
-enum QualityAttemptAction {
+pub(super) enum QualityAttemptAction {
     Accepted,
     Stop,
-    Replan { feedback: String },
+    Replan {
+        feedback: String,
+        raise_to_next: String,
+    },
 }
 
 impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
@@ -129,200 +133,6 @@ where
             quality_progress_messages,
             plan_quality_progress,
         )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    async fn run_quality_evaluation_attempts(
-        &self,
-        identity: &GenerationIdentity<'_>,
-        planning: GenerationPlanning<'_>,
-        snapshot: &mut TrainingPlanSnapshot,
-        draft_plan_text: &mut String,
-        operation: &mut TrainingPlanGenerationOperation,
-        best: &mut Option<BestDraft>,
-        quality_progress_messages: &mut Vec<String>,
-        plan_quality_progress: Option<&Arc<dyn PlanQualityProgressPort>>,
-        start_attempt: u32,
-        max_loops: u32,
-        pass_score: u8,
-    ) -> Result<bool, TrainingPlanError> {
-        let Some(availability_summary) = self
-            .load_plan_quality_availability(identity, operation)
-            .await?
-        else {
-            return Ok(false);
-        };
-
-        let mut accepted = false;
-        for attempt in start_attempt..=max_loops {
-            match self
-                .run_one_quality_evaluation_attempt(
-                    identity,
-                    planning.planning_context.as_ref(),
-                    snapshot,
-                    draft_plan_text,
-                    operation,
-                    best,
-                    quality_progress_messages,
-                    plan_quality_progress,
-                    attempt,
-                    max_loops,
-                    pass_score,
-                    &availability_summary,
-                )
-                .await?
-            {
-                QualityAttemptAction::Accepted => {
-                    accepted = true;
-                    break;
-                }
-                QualityAttemptAction::Stop => break,
-                QualityAttemptAction::Replan { feedback } => {
-                    match self
-                        .regenerate_structurally_valid_snapshot(
-                            identity,
-                            GenerationPlanning {
-                                planning_context: &mut *planning.planning_context,
-                                planning_context_loaded: &mut *planning.planning_context_loaded,
-                            },
-                            operation,
-                            &feedback,
-                        )
-                        .await
-                    {
-                        Ok((next_snapshot, next_draft)) => {
-                            *snapshot = next_snapshot;
-                            *draft_plan_text = next_draft;
-                        }
-                        Err(error) => {
-                            tracing::warn!(
-                                operation_key = %operation.operation_key,
-                                attempt,
-                                error = %error,
-                                "plan quality replan failed validation; shipping best draft so far"
-                            );
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        Ok(accepted)
-    }
-
-    async fn load_plan_quality_availability(
-        &self,
-        identity: &GenerationIdentity<'_>,
-        operation: &TrainingPlanGenerationOperation,
-    ) -> Result<Option<String>, TrainingPlanError> {
-        match self
-            .generator
-            .plan_quality_availability_summary(identity.user_id, identity.workout_id)
-            .await
-        {
-            Ok(summary) => Ok(Some(summary)),
-            Err(error) => {
-                tracing::warn!(
-                    operation_key = %operation.operation_key,
-                    error = %error,
-                    "plan quality availability summary failed; shipping best available draft"
-                );
-                Ok(None)
-            }
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    async fn run_one_quality_evaluation_attempt(
-        &self,
-        identity: &GenerationIdentity<'_>,
-        planning_context: Option<&crate::domain::training_plan::TrainingPlanPlanningContext>,
-        snapshot: &TrainingPlanSnapshot,
-        draft_plan_text: &str,
-        operation: &mut TrainingPlanGenerationOperation,
-        best: &mut Option<BestDraft>,
-        quality_progress_messages: &mut Vec<String>,
-        plan_quality_progress: Option<&Arc<dyn PlanQualityProgressPort>>,
-        attempt: u32,
-        max_loops: u32,
-        pass_score: u8,
-        availability_summary: &str,
-    ) -> Result<QualityAttemptAction, TrainingPlanError> {
-        let evidence = extract_plan_quality_evidence(operation);
-        let mut evaluation = match self
-            .generator
-            .evaluate_plan_quality(PlanQualityEvaluationInput {
-                user_id: identity.user_id,
-                workout_id: identity.workout_id,
-                saved_at_epoch_seconds: identity.saved_at_epoch_seconds,
-                workout_recap: identity.recap,
-                planning_context,
-                draft_plan_text,
-                evidence: evidence.as_ref(),
-                availability_summary: Some(availability_summary),
-            })
-            .await
-        {
-            Ok(evaluation) => evaluation,
-            Err(error) => {
-                tracing::warn!(
-                    operation_key = %operation.operation_key,
-                    attempt,
-                    error = %error,
-                    "plan quality evaluator failed; shipping best available draft"
-                );
-                return Ok(QualityAttemptAction::Stop);
-            }
-        };
-        evaluation.attempt = attempt;
-
-        emit_progress(
-            quality_progress_messages,
-            plan_quality_progress,
-            identity.user_id,
-            identity.workout_id,
-            plan_quality_attempt_message(
-                attempt,
-                max_loops,
-                evaluation.score,
-                &evaluation.critique,
-                &evaluation.raise_to_next,
-            ),
-        );
-
-        let is_better = best
-            .as_ref()
-            .is_none_or(|previous| evaluation.score >= previous.evaluation.score);
-        if is_better {
-            *best = Some(BestDraft {
-                snapshot: snapshot.clone(),
-                evaluation: evaluation.clone(),
-            });
-        }
-
-        *operation = self
-            .operations
-            .upsert(operation.with_quality_evaluation(
-                evaluation.clone(),
-                is_better.then(|| draft_plan_text.to_string()),
-                self.clock.now_epoch_seconds(),
-            ))
-            .await?;
-
-        if evaluation.score >= pass_score {
-            return Ok(QualityAttemptAction::Accepted);
-        }
-        if attempt == max_loops {
-            return Ok(QualityAttemptAction::Stop);
-        }
-
-        Ok(QualityAttemptAction::Replan {
-            feedback: format_quality_feedback(
-                evaluation.score,
-                &evaluation.critique,
-                &evaluation.raise_to_next,
-            ),
-        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -411,10 +221,54 @@ where
         planning: GenerationPlanning<'_>,
         operation: &mut TrainingPlanGenerationOperation,
         quality_feedback: &str,
+        raise_to_next: &str,
+    ) -> Result<(TrainingPlanSnapshot, String), TrainingPlanError> {
+        let GenerationPlanning {
+            planning_context,
+            planning_context_loaded,
+        } = planning;
+        let (snapshot, draft) = self
+            .generate_quality_replan_draft(
+                identity,
+                planning_context,
+                planning_context_loaded,
+                operation,
+                quality_feedback,
+            )
+            .await?;
+        if draft_addresses_quality_checklist(&draft, raise_to_next) {
+            return Ok((snapshot, draft));
+        }
+
+        tracing::warn!(
+            operation_key = %operation.operation_key,
+            raise_to_next,
+            "plan quality replan omitted Adjustment rules; retrying once with sharper feedback"
+        );
+        let sharper = format!(
+            "CHECKLIST NOT MET: draft omitted required \"Adjustment rules\" section.\n{quality_feedback}"
+        );
+        self.generate_quality_replan_draft(
+            identity,
+            planning_context,
+            planning_context_loaded,
+            operation,
+            &sharper,
+        )
+        .await
+    }
+
+    async fn generate_quality_replan_draft(
+        &self,
+        identity: &GenerationIdentity<'_>,
+        planning_context: &mut Option<crate::domain::training_plan::TrainingPlanPlanningContext>,
+        planning_context_loaded: &mut bool,
+        operation: &mut TrainingPlanGenerationOperation,
+        quality_feedback: &str,
     ) -> Result<(TrainingPlanSnapshot, String), TrainingPlanError> {
         self.ensure_planning_context_loaded(
-            planning.planning_context,
-            planning.planning_context_loaded,
+            planning_context,
+            planning_context_loaded,
             identity.user_id,
             identity.workout_id,
         )
@@ -427,7 +281,7 @@ where
                 identity.workout_id,
                 identity.saved_at_epoch_seconds,
                 identity.recap,
-                planning.planning_context.as_ref(),
+                planning_context.as_ref(),
                 None,
                 Some(self.initial_plan_checkpoint(operation)),
                 Some(quality_feedback),
@@ -468,7 +322,10 @@ where
                     saved_at_epoch_seconds: identity.saved_at_epoch_seconds,
                     recap: identity.recap,
                 },
-                planning,
+                planning: GenerationPlanning {
+                    planning_context,
+                    planning_context_loaded,
+                },
                 days_by_date: &mut days_by_date,
                 issues: &mut issues,
                 invalid_day_sections: &mut invalid_day_sections,
@@ -497,7 +354,7 @@ where
     }
 }
 
-fn emit_progress(
+pub(super) fn emit_progress(
     messages: &mut Vec<String>,
     progress: Option<&Arc<dyn PlanQualityProgressPort>>,
     user_id: &str,

@@ -185,6 +185,131 @@ fn simulate_forward_load_adds_future_event_tss() {
 }
 
 #[test]
+fn simulate_forward_load_estimates_race_tss_from_duration() {
+    let mut ctx = sample_context();
+    ctx.training_context.future_events =
+        vec![crate::domain::training_context::FuturePlannedEventContext {
+            event_id: 1,
+            start_date_local: "2026-05-08T08:00:00".to_string(),
+            category: "RACE_C".to_string(),
+            event_type: Some("road".to_string()),
+            name: Some("Test Race".to_string()),
+            description: None,
+            estimated_duration_seconds: Some(7200),
+            estimated_training_stress_score: None,
+            estimated_intensity_factor: None,
+            estimated_normalized_power_watts: None,
+        }];
+
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(r#"{}"#, &ctx));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+
+    let race_day = parsed["days"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|day| day["date"] == "2026-05-08")
+        .expect("race day");
+    assert_eq!(race_day["source"], "future_event");
+    assert_eq!(race_day["tss_source"], "estimated");
+    // 7200s × 0.80² × 100 / 3600 = 128
+    assert_eq!(race_day["planned_tss"], 128.0);
+    assert!(race_day["tsb"].is_number());
+
+    let notes = parsed["notes"].as_array().expect("notes");
+    assert!(notes.iter().any(|note| {
+        note.as_str().is_some_and(|text| {
+            text.contains("race TSS estimated") && text.contains("not measured")
+        })
+    }));
+}
+
+#[test]
+fn simulate_forward_load_estimates_tss_from_race_context_distance() {
+    let mut ctx = sample_context();
+    // Hollow projected placeholder on race day (prod shape: rest_day=false, TSS 0).
+    ctx.training_context
+        .projected_days
+        .push(ProjectedDayContext {
+            date: "2026-05-08".to_string(),
+            workouts: vec![ProjectedWorkoutContext {
+                source_workout_id: "race-placeholder".to_string(),
+                start_date_local: "2026-05-08T08:00:00".to_string(),
+                name: Some("Szosomania".to_string()),
+                interval_blocks: Vec::new(),
+                raw_workout_doc: None,
+                rest_day: false,
+                rest_day_reason: None,
+            }],
+        });
+    ctx.training_context.races = vec![crate::domain::training_context::RaceContext {
+        race_id: "race-szosomania".to_string(),
+        date: "2026-05-08".to_string(),
+        name: "Szosomania".to_string(),
+        distance_meters: 60_000,
+        discipline: "road".to_string(),
+        priority: "C".to_string(),
+    }];
+
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(r#"{}"#, &ctx));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    let race_day = parsed["days"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|day| day["date"] == "2026-05-08")
+        .expect("race day");
+
+    assert_eq!(race_day["source"], "race");
+    assert_eq!(race_day["tss_source"], "estimated");
+    // 60000m @ 30km/h → 7200s; IF 0.80 → TSS 128
+    assert_eq!(race_day["planned_tss"], 128.0);
+    assert_eq!(race_day["rest_day"], false);
+    assert!(parsed["notes"].as_array().unwrap().iter().any(|note| {
+        note.as_str().is_some_and(|text| {
+            text.contains("race TSS estimated") && text.contains("not measured")
+        })
+    }));
+}
+
+#[test]
+fn simulate_forward_load_estimates_race_tss_from_distance_description() {
+    let mut ctx = sample_context();
+    ctx.training_context.future_events =
+        vec![crate::domain::training_context::FuturePlannedEventContext {
+            event_id: 1,
+            start_date_local: "2026-05-08T08:00:00".to_string(),
+            category: "RACE_C".to_string(),
+            event_type: Some("road".to_string()),
+            name: Some("Szosomania".to_string()),
+            description: Some(
+                "distance_meters=60000\ndiscipline=road\npriority=C\ncanonical_race_id=race-1"
+                    .to_string(),
+            ),
+            estimated_duration_seconds: None,
+            estimated_training_stress_score: None,
+            estimated_intensity_factor: None,
+            estimated_normalized_power_watts: None,
+        }];
+
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(r#"{}"#, &ctx));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    let race_day = parsed["days"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|day| day["date"] == "2026-05-08")
+        .expect("race day");
+    assert_eq!(race_day["tss_source"], "estimated");
+    // 60000m @ 30km/h → 7200s; IF 0.80 → TSS 128
+    assert_eq!(race_day["planned_tss"], 128.0);
+    assert_eq!(race_day["planned_duration_seconds"], 7200);
+}
+
+#[test]
 fn simulate_forward_load_marks_unknown_race_tss_as_none() {
     let mut ctx = sample_context();
     ctx.training_context.future_events =
@@ -195,7 +320,7 @@ fn simulate_forward_load_marks_unknown_race_tss_as_none() {
             event_type: Some("road".to_string()),
             name: Some("Test Race".to_string()),
             description: None,
-            estimated_duration_seconds: Some(7200),
+            estimated_duration_seconds: None,
             estimated_training_stress_score: None,
             estimated_intensity_factor: None,
             estimated_normalized_power_watts: None,
@@ -250,13 +375,13 @@ fn simulate_forward_load_input_overrides_upcoming() {
 }
 
 #[test]
-fn simulate_forward_load_keeps_none_when_workout_shares_unknown_race_day() {
+fn simulate_forward_load_keeps_estimated_when_workout_shares_race_day() {
     let mut ctx = sample_context();
     ctx.training_context.future_events =
         vec![crate::domain::training_context::FuturePlannedEventContext {
             event_id: 1,
             start_date_local: "2026-05-05T08:00:00".to_string(),
-            category: "race".to_string(),
+            category: "RACE_C".to_string(),
             event_type: Some("road".to_string()),
             name: Some("Test Race".to_string()),
             description: None,
@@ -279,14 +404,67 @@ fn simulate_forward_load_keeps_none_when_workout_shares_unknown_race_day() {
         .expect("shared day");
 
     assert_eq!(day["source"], "input+future_event");
-    assert_eq!(day["tss_source"], "none");
+    // Race-day estimated provenance must surface even when a workout shares the day.
+    assert_eq!(day["tss_source"], "estimated");
     assert!(parsed["notes"].as_array().unwrap().iter().any(|note| {
-        note.as_str() == Some("2026-05-05: race TSS unknown; TSB shown assumes zero race load")
+        note.as_str().is_some_and(|text| {
+            text.contains("race TSS estimated") && text.contains("not measured")
+        })
     }));
 }
 
 #[test]
-fn simulate_forward_load_keeps_none_when_same_day_events_mix_known_and_unknown_tss() {
+fn simulate_forward_load_marks_estimated_when_same_day_events_mix_known_and_estimated_tss() {
+    let mut ctx = sample_context();
+    ctx.training_context.future_events = vec![
+        crate::domain::training_context::FuturePlannedEventContext {
+            event_id: 1,
+            start_date_local: "2026-05-08T08:00:00".to_string(),
+            category: "race".to_string(),
+            event_type: Some("road".to_string()),
+            name: Some("Known TSS Race".to_string()),
+            description: None,
+            estimated_duration_seconds: Some(3600),
+            estimated_training_stress_score: Some(90.0),
+            estimated_intensity_factor: None,
+            estimated_normalized_power_watts: None,
+        },
+        crate::domain::training_context::FuturePlannedEventContext {
+            event_id: 2,
+            start_date_local: "2026-05-08T14:00:00".to_string(),
+            category: "RACE_C".to_string(),
+            event_type: Some("crit".to_string()),
+            name: Some("Estimated TSS Race".to_string()),
+            description: None,
+            estimated_duration_seconds: Some(2700),
+            estimated_training_stress_score: None,
+            estimated_intensity_factor: None,
+            estimated_normalized_power_watts: None,
+        },
+    ];
+
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(r#"{}"#, &ctx));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    let day = parsed["days"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|day| day["date"] == "2026-05-08")
+        .expect("mixed race day");
+
+    assert_eq!(day["source"], "future_event");
+    assert_eq!(day["tss_source"], "estimated");
+    // 90 + (2700/3600)*0.80²*100 = 90 + 48 = 138
+    assert_eq!(day["planned_tss"], 138.0);
+    assert!(parsed["notes"].as_array().unwrap().iter().any(|note| {
+        note.as_str()
+            .is_some_and(|text| text.contains("race TSS estimated"))
+    }));
+}
+
+#[test]
+fn simulate_forward_load_keeps_none_when_same_day_events_mix_known_and_unestimable_tss() {
     let mut ctx = sample_context();
     ctx.training_context.future_events = vec![
         crate::domain::training_context::FuturePlannedEventContext {
@@ -308,7 +486,7 @@ fn simulate_forward_load_keeps_none_when_same_day_events_mix_known_and_unknown_t
             event_type: Some("crit".to_string()),
             name: Some("Unknown TSS Race".to_string()),
             description: None,
-            estimated_duration_seconds: Some(2700),
+            estimated_duration_seconds: None,
             estimated_training_stress_score: None,
             estimated_intensity_factor: None,
             estimated_normalized_power_watts: None,
@@ -378,4 +556,21 @@ fn simulate_forward_load_rejects_invalid_dated_workout_text() {
     let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
     let error = parsed["error"].as_str().expect("error");
     assert!(error.contains("invalid dated_workout_text"));
+}
+
+#[test]
+fn simulate_forward_load_treats_empty_dated_workout_text_as_omitted() {
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(
+        tool.execute(r#"{"dated_workout_text":""}"#, &sample_context()),
+    );
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    assert!(
+        parsed.get("error").is_none(),
+        "unexpected error: {response}"
+    );
+    assert!(parsed["baseline"].is_object());
+    assert!(parsed["days"]
+        .as_array()
+        .is_some_and(|days| days.len() == 14));
 }
