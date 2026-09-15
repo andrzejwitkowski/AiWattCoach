@@ -176,3 +176,61 @@ async fn quality_loop_exhaustion_ships_highest_scoring_draft() {
     );
     assert_eq!(progress.messages(), result.quality_progress_messages);
 }
+
+#[tokio::test]
+async fn quality_loop_retries_once_when_replan_omits_adjustment_rules() {
+    let call_log = new_call_log();
+    let replan_without_rules = valid_plan_window("2026-04-20");
+    let replan_with_rules = format!(
+        "{}\n\nAdjustment rules\nFatigue correction when TSB is low",
+        valid_plan_window("2026-04-21")
+    );
+    let built = build_service(
+        call_log.clone(),
+        vec![Ok(workout_recap())],
+        vec![
+            Ok(valid_plan_window(FIRST_DAY)),
+            Ok(replan_without_rules),
+            Ok(replan_with_rules),
+        ],
+        vec![],
+        FIRST_DAY,
+    );
+    built.generator.set_quality_evaluations(vec![
+        Ok(PlanQualityEvaluation {
+            attempt: 0,
+            score: 5,
+            critique: "No fatigue correction.".to_string(),
+            raise_to_next: "Add explicit fatigue correction for 17.09 and 19.09.".to_string(),
+        }),
+        Ok(PlanQualityEvaluation {
+            attempt: 0,
+            score: 8,
+            critique: "Adjustment rules present.".to_string(),
+            raise_to_next: String::new(),
+        }),
+    ]);
+    let service =
+        built
+            .service
+            .with_plan_quality_evaluator_config(Arc::new(FixedPlanQualityConfig {
+                max_loops: 5,
+                pass_score: 7,
+            }));
+
+    let result = service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    // initial + failed checklist replan + sharper retry
+    assert_eq!(built.generator.initial_plan_call_count(), 3);
+    let feedbacks = built.generator.quality_feedbacks();
+    assert!(feedbacks[1]
+        .as_ref()
+        .is_some_and(|feedback| feedback.contains("Unresolved raise_to_next checklist")));
+    assert!(feedbacks[2].as_ref().is_some_and(|feedback| {
+        feedback.contains("CHECKLIST NOT MET") && feedback.contains("Adjustment rules")
+    }));
+    assert_eq!(result.shipped_quality.as_ref().map(|e| e.score), Some(8));
+}
