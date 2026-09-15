@@ -114,7 +114,7 @@ pub(super) fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedL
         sources.join("+")
     };
 
-    let tss_source = if event_tss_source == Some(TssSource::None) {
+    let tss_source = if emit_race_tss_unknown_note || event_tss_source == Some(TssSource::None) {
         TssSource::None
     } else {
         non_event_tss_source
@@ -292,7 +292,6 @@ fn future_event_estimate(
     let mut total_tss = 0.0;
     let mut total_duration: i32 = 0;
     let mut has_any = false;
-    let mut any_known_tss = false;
     let mut any_unknown_tss = false;
 
     for event in future_events {
@@ -300,7 +299,6 @@ fn future_event_estimate(
             has_any = true;
             match event.estimated_training_stress_score {
                 Some(tss) => {
-                    any_known_tss = true;
                     total_tss += tss;
                 }
                 None => {
@@ -317,7 +315,9 @@ fn future_event_estimate(
         return None;
     }
 
-    let tss_source = if any_unknown_tss && !any_known_tss {
+    // Any unknown same-day event TSS keeps provenance none even when other
+    // events on that date have quantified load (unknown portion modelled as 0).
+    let tss_source = if any_unknown_tss {
         TssSource::None
     } else {
         TssSource::Planned

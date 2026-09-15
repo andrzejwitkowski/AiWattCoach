@@ -286,6 +286,54 @@ fn simulate_forward_load_keeps_none_when_workout_shares_unknown_race_day() {
 }
 
 #[test]
+fn simulate_forward_load_keeps_none_when_same_day_events_mix_known_and_unknown_tss() {
+    let mut ctx = sample_context();
+    ctx.training_context.future_events = vec![
+        crate::domain::training_context::FuturePlannedEventContext {
+            event_id: 1,
+            start_date_local: "2026-05-08T08:00:00".to_string(),
+            category: "race".to_string(),
+            event_type: Some("road".to_string()),
+            name: Some("Known TSS Race".to_string()),
+            description: None,
+            estimated_duration_seconds: Some(3600),
+            estimated_training_stress_score: Some(90.0),
+            estimated_intensity_factor: None,
+            estimated_normalized_power_watts: None,
+        },
+        crate::domain::training_context::FuturePlannedEventContext {
+            event_id: 2,
+            start_date_local: "2026-05-08T14:00:00".to_string(),
+            category: "race".to_string(),
+            event_type: Some("crit".to_string()),
+            name: Some("Unknown TSS Race".to_string()),
+            description: None,
+            estimated_duration_seconds: Some(2700),
+            estimated_training_stress_score: None,
+            estimated_intensity_factor: None,
+            estimated_normalized_power_watts: None,
+        },
+    ];
+
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(r#"{}"#, &ctx));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    let day = parsed["days"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|day| day["date"] == "2026-05-08")
+        .expect("mixed race day");
+
+    assert_eq!(day["source"], "future_event");
+    assert_eq!(day["tss_source"], "none");
+    assert_eq!(day["planned_tss"], 90.0);
+    assert!(parsed["notes"].as_array().unwrap().iter().any(|note| {
+        note.as_str() == Some("2026-05-08: race TSS unknown; TSB shown assumes zero race load")
+    }));
+}
+
+#[test]
 fn simulate_forward_load_clears_rest_reason_when_race_makes_day_non_rest() {
     let mut ctx = sample_context();
     ctx.training_context.future_events =
