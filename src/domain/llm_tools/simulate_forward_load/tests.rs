@@ -402,13 +402,12 @@ fn simulate_forward_load_keeps_estimated_when_workout_shares_race_day() {
         .expect("shared day");
 
     assert_eq!(day["source"], "input+future_event");
-    // Input planned wins combine provenance; race portion still contributes estimated load.
-    assert_eq!(day["tss_source"], "planned");
-    assert!(parsed.get("notes").is_none_or(|notes| {
-        notes
-            .as_array()
-            .map(|items| items.is_empty())
-            .unwrap_or(false)
+    // Race-day estimated provenance must surface even when a workout shares the day.
+    assert_eq!(day["tss_source"], "estimated");
+    assert!(parsed["notes"].as_array().unwrap().iter().any(|note| {
+        note.as_str().is_some_and(|text| {
+            text.contains("race TSS estimated") && text.contains("not measured")
+        })
     }));
 }
 

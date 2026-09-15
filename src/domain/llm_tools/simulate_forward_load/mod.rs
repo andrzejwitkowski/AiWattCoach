@@ -12,7 +12,7 @@ mod tests;
 
 use estimates::{
     combine_estimates, format_date, parse_date, round_to_2, select_estimates_for_day,
-    snapshot_baseline, update_load, TssSource,
+    snapshot_baseline, update_load, LoadSources, TssSource,
 };
 
 const SIMULATE_FORWARD_LOAD_TOOL_NAME: &str = "simulate_forward_load";
@@ -44,7 +44,7 @@ struct ForwardLoadDay {
     date: String,
     planned_tss: f64,
     planned_duration_seconds: Option<i32>,
-    source: String,
+    source: LoadSources,
     tss_source: TssSource,
     rest_day: bool,
     rest_day_reason: Option<String>,
@@ -188,7 +188,7 @@ fn simulate_forward_load(arguments_json: &str, context: &ToolExecutionContext) -
             date: date_key,
             planned_tss: round_to_2(combined.tss),
             planned_duration_seconds: combined.duration_seconds,
-            source: combined.source,
+            source: combined.sources,
             tss_source: combined.tss_source,
             rest_day: combined.is_rest,
             rest_day_reason: combined.rest_reason,

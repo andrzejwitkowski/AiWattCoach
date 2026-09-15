@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 use crate::domain::{
     intervals::{parse_workout_doc, serialize_planned_workout},
@@ -19,15 +19,93 @@ pub(super) enum TssSource {
     None,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum LoadSourceKind {
+    Empty,
+    Input,
+    Upcoming,
+    Projected,
+    FutureEvent,
+    Race,
+}
+
+impl LoadSourceKind {
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Empty => "empty",
+            Self::Input => "input",
+            Self::Upcoming => "upcoming",
+            Self::Projected => "projected",
+            Self::FutureEvent => "future_event",
+            Self::Race => "race",
+        }
+    }
+
+    pub(super) fn is_race_day(self) -> bool {
+        matches!(self, Self::FutureEvent | Self::Race)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct LoadSources(Vec<LoadSourceKind>);
+
+impl LoadSources {
+    pub(super) fn single(kind: LoadSourceKind) -> Self {
+        Self(vec![kind])
+    }
+
+    pub(super) fn from_kinds(kinds: Vec<LoadSourceKind>) -> Self {
+        Self(kinds)
+    }
+
+    pub(super) fn label(&self) -> String {
+        self.0
+            .iter()
+            .map(|kind| kind.as_str())
+            .collect::<Vec<_>>()
+            .join("+")
+    }
+
+    pub(super) fn kinds(&self) -> &[LoadSourceKind] {
+        &self.0
+    }
+}
+
+impl Serialize for LoadSources {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.label())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct PlannedLoadEstimate {
     pub(super) tss: f64,
     pub(super) duration_seconds: Option<i32>,
-    pub(super) source: String,
+    pub(super) sources: LoadSources,
     pub(super) tss_source: TssSource,
     pub(super) emit_race_tss_unknown_note: bool,
     pub(super) is_rest: bool,
     pub(super) rest_reason: Option<String>,
+}
+
+fn estimate(
+    tss: f64,
+    duration_seconds: Option<i32>,
+    source: LoadSourceKind,
+    tss_source: TssSource,
+    emit_race_tss_unknown_note: bool,
+    is_rest: bool,
+    rest_reason: Option<String>,
+) -> PlannedLoadEstimate {
+    PlannedLoadEstimate {
+        tss,
+        duration_seconds,
+        sources: LoadSources::single(source),
+        tss_source,
+        emit_race_tss_unknown_note,
+        is_rest,
+        rest_reason,
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -89,15 +167,15 @@ fn resolve_race_day_sources(
 
 pub(super) fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedLoadEstimate {
     if estimates.is_empty() {
-        return PlannedLoadEstimate {
-            tss: 0.0,
-            duration_seconds: None,
-            source: "empty".to_string(),
-            tss_source: TssSource::Default,
-            emit_race_tss_unknown_note: false,
-            is_rest: true,
-            rest_reason: Some("no planned load".to_string()),
-        };
+        return estimate(
+            0.0,
+            None,
+            LoadSourceKind::Empty,
+            TssSource::Default,
+            false,
+            true,
+            Some("no planned load".to_string()),
+        );
     }
 
     let mut total_tss = 0.0;
@@ -114,13 +192,13 @@ pub(super) fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedL
         if let Some(d) = estimate.duration_seconds {
             total_duration += d;
         }
-        if is_race_day_source(&estimate.source) {
+        if estimate.sources.kinds().iter().any(|kind| kind.is_race_day()) {
             event_tss_source = Some(estimate.tss_source);
         } else {
             non_event_tss_source.get_or_insert(estimate.tss_source);
         }
+        sources.extend(estimate.sources.kinds().iter().copied());
         emit_race_tss_unknown_note |= estimate.emit_race_tss_unknown_note;
-        sources.push(estimate.source);
         if !estimate.is_rest {
             is_rest_day = false;
         }
@@ -129,14 +207,11 @@ pub(super) fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedL
         }
     }
 
-    let source_label = if sources.len() == 1 {
-        sources.into_iter().next().unwrap()
-    } else {
-        sources.join("+")
-    };
-
+    // Race-day none/estimated must surface even when a workout shares the day.
     let tss_source = if emit_race_tss_unknown_note || event_tss_source == Some(TssSource::None) {
         TssSource::None
+    } else if event_tss_source == Some(TssSource::Estimated) {
+        TssSource::Estimated
     } else {
         non_event_tss_source
             .or(event_tss_source)
@@ -145,12 +220,8 @@ pub(super) fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedL
 
     PlannedLoadEstimate {
         tss: total_tss,
-        duration_seconds: if total_duration > 0 {
-            Some(total_duration)
-        } else {
-            None
-        },
-        source: source_label,
+        duration_seconds: (total_duration > 0).then_some(total_duration),
+        sources: LoadSources::from_kinds(sources),
         tss_source,
         emit_race_tss_unknown_note,
         is_rest: is_rest_day,
@@ -165,33 +236,33 @@ fn input_day_estimate(
 ) -> Option<PlannedLoadEstimate> {
     let day = days.iter().find(|day| day.date == date)?;
     if day.is_rest_day() {
-        return Some(PlannedLoadEstimate {
-            tss: 0.0,
-            duration_seconds: None,
-            source: "input".to_string(),
-            tss_source: TssSource::Planned,
-            emit_race_tss_unknown_note: false,
-            is_rest: true,
-            rest_reason: day.rest_day_reason().map(str::to_string),
-        });
+        return Some(estimate(
+            0.0,
+            None,
+            LoadSourceKind::Input,
+            TssSource::Planned,
+            false,
+            true,
+            day.rest_day_reason().map(str::to_string),
+        ));
     }
 
     let workout = day.planned_workout()?;
     let raw = serialize_planned_workout(workout);
     let parsed = parse_workout_doc(Some(raw.as_str()), ftp_watts);
 
-    Some(PlannedLoadEstimate {
-        tss: parsed
+    Some(estimate(
+        parsed
             .summary
             .estimated_training_stress_score
             .unwrap_or(0.0),
-        duration_seconds: Some(parsed.summary.total_duration_seconds),
-        source: "input".to_string(),
-        tss_source: TssSource::Planned,
-        emit_race_tss_unknown_note: false,
-        is_rest: false,
-        rest_reason: None,
-    })
+        Some(parsed.summary.total_duration_seconds),
+        LoadSourceKind::Input,
+        TssSource::Planned,
+        false,
+        false,
+        None,
+    ))
 }
 
 fn upcoming_day_estimate(
@@ -230,19 +301,15 @@ fn upcoming_day_estimate(
         return None;
     }
 
-    Some(PlannedLoadEstimate {
-        tss: total_tss,
-        duration_seconds: if total_duration > 0 {
-            Some(total_duration)
-        } else {
-            None
-        },
-        source: "upcoming".to_string(),
-        tss_source: TssSource::Planned,
-        emit_race_tss_unknown_note: false,
-        is_rest: false,
-        rest_reason: None,
-    })
+    Some(estimate(
+        total_tss,
+        (total_duration > 0).then_some(total_duration),
+        LoadSourceKind::Upcoming,
+        TssSource::Planned,
+        false,
+        false,
+        None,
+    ))
 }
 
 fn projected_day_estimate(
@@ -280,30 +347,26 @@ fn projected_day_estimate(
     }
 
     if !has_any {
-        return Some(PlannedLoadEstimate {
-            tss: 0.0,
-            duration_seconds: None,
-            source: "projected".to_string(),
-            tss_source: TssSource::Projected,
-            emit_race_tss_unknown_note: false,
-            is_rest: true,
+        return Some(estimate(
+            0.0,
+            None,
+            LoadSourceKind::Projected,
+            TssSource::Projected,
+            false,
+            true,
             rest_reason,
-        });
+        ));
     }
 
-    Some(PlannedLoadEstimate {
-        tss: total_tss,
-        duration_seconds: if total_duration > 0 {
-            Some(total_duration)
-        } else {
-            None
-        },
-        source: "projected".to_string(),
-        tss_source: TssSource::Projected,
-        emit_race_tss_unknown_note: false,
-        is_rest: false,
-        rest_reason: None,
-    })
+    Some(estimate(
+        total_tss,
+        (total_duration > 0).then_some(total_duration),
+        LoadSourceKind::Projected,
+        TssSource::Projected,
+        false,
+        false,
+        None,
+    ))
 }
 
 fn race_estimate(races: &[RaceContext], date: &str) -> Option<PlannedLoadEstimate> {
@@ -333,7 +396,7 @@ fn race_estimate(races: &[RaceContext], date: &str) -> Option<PlannedLoadEstimat
     }
 
     Some(event_load_estimate(
-        "race",
+        LoadSourceKind::Race,
         total_tss,
         total_duration,
         if any_unknown_tss {
@@ -395,7 +458,7 @@ fn future_event_estimate(
     }
 
     Some(event_load_estimate(
-        "future_event",
+        LoadSourceKind::FutureEvent,
         total_tss,
         total_duration,
         if any_unknown_tss {
@@ -412,25 +475,21 @@ fn future_event_estimate(
 }
 
 fn event_load_estimate(
-    source: &str,
+    source: LoadSourceKind,
     tss: f64,
     total_duration: i32,
     tss_source: TssSource,
     emit_race_tss_unknown_note: bool,
 ) -> PlannedLoadEstimate {
-    PlannedLoadEstimate {
+    estimate(
         tss,
-        duration_seconds: (total_duration > 0).then_some(total_duration),
-        source: source.to_string(),
+        (total_duration > 0).then_some(total_duration),
+        source,
         tss_source,
         emit_race_tss_unknown_note,
-        is_rest: false,
-        rest_reason: None,
-    }
-}
-
-fn is_race_day_source(source: &str) -> bool {
-    source == "future_event" || source == "race"
+        false,
+        None,
+    )
 }
 
 fn race_date_matches(race_date: &str, date: &str) -> bool {
