@@ -63,7 +63,7 @@ impl LlmTool for SimulateForwardLoad {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Simulate 14 days of forward training load from today. The tool automatically includes already-scheduled workouts (upcoming days), projected workouts, and future events (races). Only provide dated_workout_text for days you want to override or add new workouts.\n\nEach day includes tss_source (planned|projected|default|none). When a race/event has no quantified TSS, tss_source is none, modelled TSB still appears, and notes explain that race load was assumed zero.\n\nFormat: Each day starts with a YYYY-MM-DD header on its own line, followed by workout steps or 'Rest Day'. You can use section titles, ramps, repeat headers (Nx), and power targets in %FTP or watts.\n\nExample 1 - Simple:\n2026-05-05\n- 90m 65%\n2026-05-06\nRest Day: recovery\n\nExample 2 - Complex interval session:\n2026-05-07\nWarmup\n- 15m ramp 55-75%\n\nMain Set\n4x\n- 2m 105%\n- 1m 65%\n\n3x\n- 3m 95%\n- 2m 65%\n\nCooldown\n- 10m 55%".to_string(),
+            description: "Simulate 14 days of forward training load from today. The tool automatically includes already-scheduled workouts (upcoming days), projected workouts, and future events (races). Only provide dated_workout_text for days you want to override or add new workouts.\n\nEach day includes tss_source (planned|projected|default|estimated|none). Race/event load with measured TSS uses planned; when only duration/distance is known, TSS is estimated (hours×IF²×100) and labeled estimated; when neither exists, tss_source is none and notes explain zero race load.\n\nFormat: Each day starts with a YYYY-MM-DD header on its own line, followed by workout steps or 'Rest Day'. You can use section titles, ramps, repeat headers (Nx), and power targets in %FTP or watts.\n\nExample 1 - Simple:\n2026-05-05\n- 90m 65%\n2026-05-06\nRest Day: recovery\n\nExample 2 - Complex interval session:\n2026-05-07\nWarmup\n- 15m ramp 55-75%\n\nMain Set\n4x\n- 2m 105%\n- 1m 65%\n\n3x\n- 3m 95%\n- 2m 65%\n\nCooldown\n- 10m 55%".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,
@@ -119,6 +119,13 @@ fn simulate_forward_load(arguments_json: &str, context: &ToolExecutionContext) -
 
     let input_days = match args.dated_workout_text.as_deref() {
         None => Vec::new(),
+        Some(text) if text.trim().is_empty() => {
+            tracing::info!(
+                empty_dated_workout_text_normalized = true,
+                "simulate_forward_load normalized empty dated_workout_text"
+            );
+            Vec::new()
+        }
         Some(text) => match parse_planned_workout_days(text) {
             Ok(parsed) => parsed.days,
             Err(error) => {
@@ -160,6 +167,15 @@ fn simulate_forward_load(arguments_json: &str, context: &ToolExecutionContext) -
         if combined.emit_race_tss_unknown_note {
             notes.push(format!(
                 "{date_key}: race TSS unknown; TSB shown assumes zero race load"
+            ));
+        } else if combined.tss_source == TssSource::Estimated {
+            notes.push(format!(
+                "{date_key}: race TSS estimated (tss={:.2}, duration_s={}); not measured",
+                combined.tss,
+                combined
+                    .duration_seconds
+                    .map(|seconds| seconds.to_string())
+                    .unwrap_or_else(|| "n/a".to_string())
             ));
         }
 

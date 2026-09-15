@@ -14,7 +14,7 @@ Scoring rubric (use the full range; 7 is not a default):\n\
 - 1-3: major rule violations or an unsafe/implausible load progression.\n\
 - 4-5: usable but with structural gaps (race-week logic wrong, missing recovery, no specificity).\n\
 - 6-7: sound, directionally correct plan; load logic plausible but only asserted, not demonstrated.\n\
-- 8: sound AND every load/specificity claim is backed by the evidence block (verified TSB trajectory, race-day freshness, power-duration shape).\n\
+- 8: sound AND load claims are backed by the evidence block (verified TSB trajectory and race-day freshness, including labeled estimated race TSS). Require power-duration shape only when the evidence block captured power_curve/w_prime or the draft asserts that shape; missing power tools alone is not a reason to stay at 7.\n\
 - 9-10: reserved for plans where the evidence block shows both a defensible load trajectory and session-level specificity that matches the athlete's discipline and race priority, with no unaddressed gap.\n\
 \n\
 Anti-collapse: use the full 1-10 range. Reserve 8+ for drafts whose claims the evidence block confirms. If a draft satisfies every must-have and its load claims are verified, score it 8 or higher.\n\
@@ -265,12 +265,28 @@ fn append_raise_to_next(mut base: String, raise_to_next: &str) -> String {
 }
 
 pub fn format_quality_feedback(score: u8, critique: &str, raise_to_next: &str) -> String {
-    append_raise_to_next(
-        format!(
-            "Previous plan quality evaluation (must address):\nscore: {score}/10\ncritique: {critique}"
-        ),
-        raise_to_next,
-    )
+    let mut feedback = format!(
+        "Previous plan quality evaluation (must address):\nscore: {score}/10\ncritique: {critique}"
+    );
+    let raise = raise_to_next.trim();
+    if !raise.is_empty() {
+        feedback.push_str(
+            "\nUnresolved raise_to_next checklist (draft MUST include a section realizing each item; preferred heading \"Adjustment rules\"):\n1. ",
+        );
+        feedback.push_str(raise);
+        feedback.push_str("\nIf any checklist item is omitted, the draft is invalid for shipping.");
+    }
+    feedback
+}
+
+/// Binding gate for quality replan: empty raise always passes; otherwise the draft
+/// must contain an `Adjustment rules` section heading (case-insensitive).
+/// ponytail: substring only; escalate to keyword overlap if prod false-negatives.
+pub fn draft_addresses_quality_checklist(draft: &str, raise_to_next: &str) -> bool {
+    if raise_to_next.trim().is_empty() {
+        return true;
+    }
+    draft.to_ascii_lowercase().contains("adjustment rules")
 }
 
 pub fn plan_quality_attempt_message(
@@ -353,12 +369,35 @@ mod tests {
     fn format_quality_feedback_includes_raise_to_next_when_present() {
         assert_eq!(
             format_quality_feedback(6, "tempo heavy", "Cut midweek Z3."),
-            "Previous plan quality evaluation (must address):\nscore: 6/10\ncritique: tempo heavy\nraise_to_next: Cut midweek Z3."
+            "Previous plan quality evaluation (must address):\nscore: 6/10\ncritique: tempo heavy\nUnresolved raise_to_next checklist (draft MUST include a section realizing each item; preferred heading \"Adjustment rules\"):\n1. Cut midweek Z3.\nIf any checklist item is omitted, the draft is invalid for shipping."
         );
         assert_eq!(
             format_quality_feedback(6, "tempo heavy", ""),
             "Previous plan quality evaluation (must address):\nscore: 6/10\ncritique: tempo heavy"
         );
+    }
+
+    #[test]
+    fn draft_addresses_quality_checklist_requires_adjustment_rules_heading() {
+        use super::draft_addresses_quality_checklist;
+        assert!(draft_addresses_quality_checklist("any draft", ""));
+        assert!(!draft_addresses_quality_checklist(
+            "Plan with fatigue notes but no section",
+            "Add explicit fatigue correction for 17.09 and 19.09"
+        ));
+        assert!(draft_addresses_quality_checklist(
+            "## Adjustment rules\n- Cut load on 17.09 and 19.09 when TSB < -10",
+            "Add explicit fatigue correction for 17.09 and 19.09"
+        ));
+    }
+
+    #[test]
+    fn evaluator_rubric_does_not_require_uncaptured_power_duration_for_band_8() {
+        let rubric = super::plan_quality_evaluator_rubric();
+        assert!(rubric.contains(
+            "Require power-duration shape only when the evidence block captured power_curve/w_prime"
+        ));
+        assert!(rubric.contains("missing power tools alone is not a reason to stay at 7"));
     }
 
     #[test]

@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use super::super::{
-    format_quality_feedback, plan_quality_attempt_message, plan_quality_finished_accepted_message,
-    plan_quality_finished_best_message, PlanQualityEvaluation, PlanQualityEvaluationInput,
-    PlanQualityEvaluatorLlmConfigPort, PlanQualityProgressPort, TrainingPlanError,
-    TrainingPlanGenerationOperation, TrainingPlanSnapshot,
+    draft_addresses_quality_checklist, format_quality_feedback, plan_quality_attempt_message,
+    plan_quality_finished_accepted_message, plan_quality_finished_best_message,
+    PlanQualityEvaluation, PlanQualityEvaluationInput, PlanQualityEvaluatorLlmConfigPort,
+    PlanQualityProgressPort, TrainingPlanError, TrainingPlanGenerationOperation,
+    TrainingPlanSnapshot,
 };
 use super::ctx::{GenerationIdentity, GenerationPlanning};
 use super::quality_evidence::extract_plan_quality_evidence;
@@ -50,7 +51,10 @@ struct BestDraft {
 enum QualityAttemptAction {
     Accepted,
     Stop,
-    Replan { feedback: String },
+    Replan {
+        feedback: String,
+        raise_to_next: String,
+    },
 }
 
 impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
@@ -177,7 +181,10 @@ where
                     break;
                 }
                 QualityAttemptAction::Stop => break,
-                QualityAttemptAction::Replan { feedback } => {
+                QualityAttemptAction::Replan {
+                    feedback,
+                    raise_to_next,
+                } => {
                     match self
                         .regenerate_structurally_valid_snapshot(
                             identity,
@@ -187,6 +194,7 @@ where
                             },
                             operation,
                             &feedback,
+                            &raise_to_next,
                         )
                         .await
                     {
@@ -276,6 +284,14 @@ where
         };
         evaluation.attempt = attempt;
 
+        tracing::info!(
+            operation_key = %operation.operation_key,
+            attempt,
+            score = evaluation.score,
+            raise_to_next = %evaluation.raise_to_next,
+            "plan quality evaluation attempt"
+        );
+
         emit_progress(
             quality_progress_messages,
             plan_quality_progress,
@@ -322,6 +338,7 @@ where
                 &evaluation.critique,
                 &evaluation.raise_to_next,
             ),
+            raise_to_next: evaluation.raise_to_next.clone(),
         })
     }
 
@@ -411,10 +428,54 @@ where
         planning: GenerationPlanning<'_>,
         operation: &mut TrainingPlanGenerationOperation,
         quality_feedback: &str,
+        raise_to_next: &str,
+    ) -> Result<(TrainingPlanSnapshot, String), TrainingPlanError> {
+        let GenerationPlanning {
+            planning_context,
+            planning_context_loaded,
+        } = planning;
+        let (snapshot, draft) = self
+            .generate_quality_replan_draft(
+                identity,
+                planning_context,
+                planning_context_loaded,
+                operation,
+                quality_feedback,
+            )
+            .await?;
+        if draft_addresses_quality_checklist(&draft, raise_to_next) {
+            return Ok((snapshot, draft));
+        }
+
+        tracing::warn!(
+            operation_key = %operation.operation_key,
+            raise_to_next,
+            "plan quality replan omitted Adjustment rules; retrying once with sharper feedback"
+        );
+        let sharper = format!(
+            "CHECKLIST NOT MET: draft omitted required \"Adjustment rules\" section.\n{quality_feedback}"
+        );
+        self.generate_quality_replan_draft(
+            identity,
+            planning_context,
+            planning_context_loaded,
+            operation,
+            &sharper,
+        )
+        .await
+    }
+
+    async fn generate_quality_replan_draft(
+        &self,
+        identity: &GenerationIdentity<'_>,
+        planning_context: &mut Option<crate::domain::training_plan::TrainingPlanPlanningContext>,
+        planning_context_loaded: &mut bool,
+        operation: &mut TrainingPlanGenerationOperation,
+        quality_feedback: &str,
     ) -> Result<(TrainingPlanSnapshot, String), TrainingPlanError> {
         self.ensure_planning_context_loaded(
-            planning.planning_context,
-            planning.planning_context_loaded,
+            planning_context,
+            planning_context_loaded,
             identity.user_id,
             identity.workout_id,
         )
@@ -427,7 +488,7 @@ where
                 identity.workout_id,
                 identity.saved_at_epoch_seconds,
                 identity.recap,
-                planning.planning_context.as_ref(),
+                planning_context.as_ref(),
                 None,
                 Some(self.initial_plan_checkpoint(operation)),
                 Some(quality_feedback),
@@ -468,7 +529,10 @@ where
                     saved_at_epoch_seconds: identity.saved_at_epoch_seconds,
                     recap: identity.recap,
                 },
-                planning,
+                planning: GenerationPlanning {
+                    planning_context,
+                    planning_context_loaded,
+                },
                 days_by_date: &mut days_by_date,
                 issues: &mut issues,
                 invalid_day_sections: &mut invalid_day_sections,

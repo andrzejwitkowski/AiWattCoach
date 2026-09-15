@@ -14,6 +14,7 @@ pub(super) enum TssSource {
     Planned,
     Projected,
     Default,
+    Estimated,
     None,
 }
 
@@ -293,21 +294,41 @@ fn future_event_estimate(
     let mut total_duration: i32 = 0;
     let mut has_any = false;
     let mut any_unknown_tss = false;
+    let mut any_estimated_tss = false;
+    let mut any_planned_tss = false;
 
     for event in future_events {
-        if event.start_date_local.get(..10) == Some(date) {
-            has_any = true;
-            match event.estimated_training_stress_score {
-                Some(tss) => {
-                    total_tss += tss;
+        if event.start_date_local.get(..10) != Some(date) {
+            continue;
+        }
+        has_any = true;
+        let duration = event
+            .estimated_duration_seconds
+            .filter(|seconds| *seconds > 0)
+            .or_else(|| duration_from_distance_description(event.description.as_deref()));
+        if let Some(d) = duration {
+            total_duration += d;
+        }
+
+        match event.estimated_training_stress_score {
+            Some(tss) => {
+                total_tss += tss;
+                any_planned_tss = true;
+            }
+            None => match duration {
+                Some(dur) => {
+                    let intensity = event
+                        .estimated_intensity_factor
+                        .filter(|value| *value > 0.0)
+                        .unwrap_or_else(|| default_race_intensity_factor(&event.category));
+                    // TSS = hours × IF² × 100 (same formula as workout/parser + training_load).
+                    total_tss += (dur as f64 / 3600.0) * intensity * intensity * 100.0;
+                    any_estimated_tss = true;
                 }
                 None => {
                     any_unknown_tss = true;
                 }
-            }
-            if let Some(d) = event.estimated_duration_seconds {
-                total_duration += d;
-            }
+            },
         }
     }
 
@@ -315,12 +336,15 @@ fn future_event_estimate(
         return None;
     }
 
-    // Any unknown same-day event TSS keeps provenance none even when other
-    // events on that date have quantified load (unknown portion modelled as 0).
+    // Unestimable same-day event TSS keeps provenance none (unknown modelled as 0).
     let tss_source = if any_unknown_tss {
         TssSource::None
-    } else {
+    } else if any_estimated_tss {
+        TssSource::Estimated
+    } else if any_planned_tss {
         TssSource::Planned
+    } else {
+        TssSource::None
     };
 
     Some(PlannedLoadEstimate {
@@ -336,6 +360,31 @@ fn future_event_estimate(
         is_rest: false,
         rest_reason: None,
     })
+}
+
+fn default_race_intensity_factor(category: &str) -> f64 {
+    match category {
+        "RACE_A" => 0.90,
+        "RACE_B" => 0.85,
+        _ => 0.80,
+    }
+}
+
+/// Race sync writes `distance_meters=N` into the Intervals event description.
+/// Assume 30 km/h road race speed → seconds = meters / 8.333… = meters × 0.12.
+fn duration_from_distance_description(description: Option<&str>) -> Option<i32> {
+    let description = description?;
+    let key = "distance_meters=";
+    let start = description.find(key)? + key.len();
+    let digits = description[start..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect::<String>();
+    let meters: f64 = digits.parse().ok()?;
+    if meters <= 0.0 {
+        return None;
+    }
+    Some((meters * 0.12).round() as i32)
 }
 
 fn ctl_from_context(training_context: &TrainingContext) -> f64 {
