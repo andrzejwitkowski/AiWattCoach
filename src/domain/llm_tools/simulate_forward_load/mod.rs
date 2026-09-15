@@ -159,6 +159,7 @@ fn simulate_forward_load(arguments_json: &str, context: &ToolExecutionContext) -
             &context.training_context.upcoming_days,
             &context.training_context.projected_days,
             &context.training_context.future_events,
+            &context.training_context.races,
             &date_key,
             ftp_watts,
         );

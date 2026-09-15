@@ -226,6 +226,53 @@ fn simulate_forward_load_estimates_race_tss_from_duration() {
 }
 
 #[test]
+fn simulate_forward_load_estimates_tss_from_race_context_distance() {
+    let mut ctx = sample_context();
+    // Hollow projected placeholder on race day (prod shape: rest_day=false, TSS 0).
+    ctx.training_context.projected_days.push(ProjectedDayContext {
+        date: "2026-05-08".to_string(),
+        workouts: vec![ProjectedWorkoutContext {
+            source_workout_id: "race-placeholder".to_string(),
+            start_date_local: "2026-05-08T08:00:00".to_string(),
+            name: Some("Szosomania".to_string()),
+            interval_blocks: Vec::new(),
+            raw_workout_doc: None,
+            rest_day: false,
+            rest_day_reason: None,
+        }],
+    });
+    ctx.training_context.races = vec![crate::domain::training_context::RaceContext {
+        race_id: "race-szosomania".to_string(),
+        date: "2026-05-08".to_string(),
+        name: "Szosomania".to_string(),
+        distance_meters: 60_000,
+        discipline: "road".to_string(),
+        priority: "C".to_string(),
+    }];
+
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(r#"{}"#, &ctx));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    let race_day = parsed["days"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|day| day["date"] == "2026-05-08")
+        .expect("race day");
+
+    assert_eq!(race_day["source"], "race");
+    assert_eq!(race_day["tss_source"], "estimated");
+    // 60000m @ 30km/h → 7200s; IF 0.80 → TSS 128
+    assert_eq!(race_day["planned_tss"], 128.0);
+    assert_eq!(race_day["rest_day"], false);
+    assert!(parsed["notes"].as_array().unwrap().iter().any(|note| {
+        note.as_str().is_some_and(|text| {
+            text.contains("race TSS estimated") && text.contains("not measured")
+        })
+    }));
+}
+
+#[test]
 fn simulate_forward_load_estimates_race_tss_from_distance_description() {
     let mut ctx = sample_context();
     ctx.training_context.future_events =

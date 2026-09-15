@@ -105,7 +105,10 @@ fn compact_forward_load(content: &str) -> String {
             min_tsb = Some((tsb, date));
         }
         let source = day.get("source").and_then(|s| s.as_str()).unwrap_or("");
-        if source.contains("future_event") {
+        if source
+            .split('+')
+            .any(|part| part == "future_event" || part == "race")
+        {
             let tss_source = day
                 .get("tss_source")
                 .and_then(|s| s.as_str())
@@ -414,6 +417,18 @@ mod tests {
         let load = evidence.load.as_deref().unwrap();
         assert!(load.contains("race_day_tsb=-2@2026-05-12 (race_day_tsb_source=estimated)"));
         assert!(load.contains("race TSS estimated"));
+    }
+
+    #[test]
+    fn compact_labels_estimated_tss_from_race_calendar_source() {
+        let (assistant, tool) = tool_pair(
+            "1",
+            "simulate_forward_load",
+            r#"{"baseline":{"ctl":50,"atl":40,"tsb":10},"days":[{"date":"2026-09-20","ctl":52,"atl":48,"tsb":3,"source":"race","tss_source":"estimated","planned_tss":128}],"notes":["2026-09-20: race TSS estimated (tss=128.00, duration_s=7200); not measured"]}"#,
+        );
+        let evidence = evidence_from_transcript(&[assistant, tool]);
+        let load = evidence.load.as_deref().unwrap();
+        assert!(load.contains("race_day_tsb=3@2026-09-20 (race_day_tsb_source=estimated)"));
     }
 
     #[test]

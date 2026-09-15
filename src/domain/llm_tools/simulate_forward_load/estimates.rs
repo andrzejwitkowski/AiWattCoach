@@ -4,7 +4,8 @@ use serde::Serialize;
 use crate::domain::{
     intervals::{parse_workout_doc, serialize_planned_workout},
     training_context::{
-        FuturePlannedEventContext, ProjectedDayContext, TrainingContext, UpcomingDayContext,
+        FuturePlannedEventContext, ProjectedDayContext, RaceContext, TrainingContext,
+        UpcomingDayContext,
     },
 };
 
@@ -48,22 +49,30 @@ pub(super) fn select_estimates_for_day(
     upcoming_days: &[UpcomingDayContext],
     projected_days: &[ProjectedDayContext],
     future_events: &[FuturePlannedEventContext],
+    races: &[RaceContext],
     date: &str,
     ftp_watts: Option<i32>,
 ) -> Vec<PlannedLoadEstimate> {
     let input = input_day_estimate(input_days, date, ftp_watts);
+    let race = race_estimate(races, date);
 
     if input.is_some() {
         let future = future_event_estimate(future_events, date);
-        [input, future].into_iter().flatten().collect()
+        [input, future, race].into_iter().flatten().collect()
     } else {
         let upcoming = upcoming_day_estimate(upcoming_days, date, ftp_watts);
-        let projected = projected_day_estimate(projected_days, date, ftp_watts);
         let future = future_event_estimate(future_events, date);
-        [upcoming, projected, future]
-            .into_iter()
-            .flatten()
-            .collect()
+        // Race calendar is authoritative for race-day load. Skip hollow projected
+        // placeholders (often rest_day=false with no workout doc → TSS 0).
+        if race.is_some() {
+            [upcoming, future, race].into_iter().flatten().collect()
+        } else {
+            let projected = projected_day_estimate(projected_days, date, ftp_watts);
+            [upcoming, projected, future]
+                .into_iter()
+                .flatten()
+                .collect()
+        }
     }
 }
 
@@ -94,7 +103,7 @@ pub(super) fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedL
         if let Some(d) = estimate.duration_seconds {
             total_duration += d;
         }
-        if estimate.source == "future_event" {
+        if estimate.source == "future_event" || estimate.source == "race" {
             event_tss_source = Some(estimate.tss_source);
         } else {
             non_event_tss_source.get_or_insert(estimate.tss_source);
@@ -286,6 +295,58 @@ fn projected_day_estimate(
     })
 }
 
+fn race_estimate(races: &[RaceContext], date: &str) -> Option<PlannedLoadEstimate> {
+    let mut total_tss = 0.0;
+    let mut total_duration: i32 = 0;
+    let mut has_any = false;
+    let mut any_unknown_tss = false;
+    let mut any_estimated_tss = false;
+
+    for race in races {
+        if race.date.get(..10).unwrap_or(race.date.as_str()) != date {
+            continue;
+        }
+        has_any = true;
+        match duration_from_distance_meters(race.distance_meters) {
+            Some(dur) => {
+                total_duration += dur;
+                let intensity = default_race_intensity_factor_from_priority(&race.priority);
+                total_tss += (dur as f64 / 3600.0) * intensity * intensity * 100.0;
+                any_estimated_tss = true;
+            }
+            None => {
+                any_unknown_tss = true;
+            }
+        }
+    }
+
+    if !has_any {
+        return None;
+    }
+
+    let tss_source = if any_unknown_tss {
+        TssSource::None
+    } else if any_estimated_tss {
+        TssSource::Estimated
+    } else {
+        TssSource::None
+    };
+
+    Some(PlannedLoadEstimate {
+        tss: total_tss,
+        duration_seconds: if total_duration > 0 {
+            Some(total_duration)
+        } else {
+            None
+        },
+        source: "race".to_string(),
+        tss_source,
+        emit_race_tss_unknown_note: any_unknown_tss,
+        is_rest: false,
+        rest_reason: None,
+    })
+}
+
 fn future_event_estimate(
     future_events: &[FuturePlannedEventContext],
     date: &str,
@@ -370,8 +431,23 @@ fn default_race_intensity_factor(category: &str) -> f64 {
     }
 }
 
+fn default_race_intensity_factor_from_priority(priority: &str) -> f64 {
+    match priority.trim().to_ascii_uppercase().as_str() {
+        "A" | "RACE_A" => 0.90,
+        "B" | "RACE_B" => 0.85,
+        _ => 0.80,
+    }
+}
+
+fn duration_from_distance_meters(meters: i32) -> Option<i32> {
+    if meters <= 0 {
+        return None;
+    }
+    // Assume 30 km/h road race speed → seconds = meters × 0.12.
+    Some((f64::from(meters) * 0.12).round() as i32)
+}
+
 /// Race sync writes `distance_meters=N` into the Intervals event description.
-/// Assume 30 km/h road race speed → seconds = meters / 8.333… = meters × 0.12.
 fn duration_from_distance_description(description: Option<&str>) -> Option<i32> {
     let description = description?;
     let key = "distance_meters=";
@@ -380,11 +456,8 @@ fn duration_from_distance_description(description: Option<&str>) -> Option<i32> 
         .chars()
         .take_while(|c| c.is_ascii_digit())
         .collect::<String>();
-    let meters: f64 = digits.parse().ok()?;
-    if meters <= 0.0 {
-        return None;
-    }
-    Some((meters * 0.12).round() as i32)
+    let meters: i32 = digits.parse().ok()?;
+    duration_from_distance_meters(meters)
 }
 
 fn ctl_from_context(training_context: &TrainingContext) -> f64 {
