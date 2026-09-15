@@ -83,11 +83,13 @@ async fn quality_loop_replans_until_score_passes_and_records_progress() {
             attempt: 0,
             score: 5,
             critique: "Too much tempo.".to_string(),
+            raise_to_next: String::new(),
         }),
         Ok(PlanQualityEvaluation {
             attempt: 0,
             score: 8,
             critique: "Polarized and race-aware.".to_string(),
+            raise_to_next: String::new(),
         }),
     ]);
     let progress = RecordingPlanQualityProgress::default();
@@ -111,8 +113,8 @@ async fn quality_loop_replans_until_score_passes_and_records_progress() {
     assert_eq!(
         result.quality_progress_messages,
         vec![
-            plan_quality_attempt_message(1, 5, 5, "Too much tempo."),
-            plan_quality_attempt_message(2, 5, 8, "Polarized and race-aware."),
+            plan_quality_attempt_message(1, 5, 5, "Too much tempo.", ""),
+            plan_quality_attempt_message(2, 5, 8, "Polarized and race-aware.", ""),
             plan_quality_finished_accepted_message(8),
         ]
     );
@@ -138,11 +140,13 @@ async fn quality_loop_exhaustion_ships_highest_scoring_draft() {
             attempt: 0,
             score: 4,
             critique: "Almost all sweet spot.".to_string(),
+            raise_to_next: String::new(),
         }),
         Ok(PlanQualityEvaluation {
             attempt: 0,
             score: 6,
             critique: "Still too much middle intensity.".to_string(),
+            raise_to_next: String::new(),
         }),
     ]);
     let progress = RecordingPlanQualityProgress::default();
@@ -165,8 +169,8 @@ async fn quality_loop_exhaustion_ships_highest_scoring_draft() {
     assert_eq!(
         result.quality_progress_messages,
         vec![
-            plan_quality_attempt_message(1, 2, 4, "Almost all sweet spot."),
-            plan_quality_attempt_message(2, 2, 6, "Still too much middle intensity."),
+            plan_quality_attempt_message(1, 2, 4, "Almost all sweet spot.", ""),
+            plan_quality_attempt_message(2, 2, 6, "Still too much middle intensity.", ""),
             plan_quality_finished_best_message(6, 2),
         ]
     );

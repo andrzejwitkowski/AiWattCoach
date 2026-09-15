@@ -2,6 +2,7 @@ mod correction;
 mod ctx;
 pub(crate) mod parsing;
 mod quality;
+mod quality_evidence;
 mod scheduler;
 mod snapshot;
 mod structural;

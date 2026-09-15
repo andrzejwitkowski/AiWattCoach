@@ -279,8 +279,9 @@ async fn returns_error_for_details_unavailable_workout() {
         .execute(r#"{"date":"2026-05-05"}"#, &sample_context(port))
         .await;
     let parsed = parse_response(&result);
-    assert_eq!(parsed["error"], "power curve unavailable");
+    assert_eq!(parsed["status"], "insufficient_data");
     assert!(parsed["reason"].as_str().unwrap().contains("unavailable"));
+    assert!(parsed.get("error").is_none());
 }
 
 #[tokio::test]
@@ -322,8 +323,9 @@ async fn returns_error_for_missing_watts_stream() {
         .execute(r#"{"date":"2026-05-05"}"#, &sample_context(port))
         .await;
     let parsed = parse_response(&result);
-    assert_eq!(parsed["error"], "power curve unavailable");
+    assert_eq!(parsed["status"], "insufficient_data");
     assert!(parsed["reason"].as_str().unwrap().contains("watts"));
+    assert!(parsed.get("error").is_none());
 }
 
 #[tokio::test]
@@ -465,11 +467,12 @@ async fn returns_error_for_resolution_larger_than_data() {
         )
         .await;
     let parsed = parse_response(&result);
-    assert_eq!(parsed["error"], "power curve unavailable");
+    assert_eq!(parsed["status"], "insufficient_data");
     assert!(parsed["reason"]
         .as_str()
         .unwrap()
         .contains("not enough data"));
+    assert!(parsed.get("error").is_none());
 }
 
 #[test]

@@ -45,7 +45,7 @@ impl LlmTool for SelectedWorkoutPowerCurve {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Get the power curve (mean-max average watts) for a selected completed workout. Returns average power for successive durations. Only available for completed workouts with power data.".to_string(),
+            description: "Get the power curve (mean-max average watts) for a selected completed workout. Returns average power for successive durations. Only available for completed workouts with power data. When power data is missing, returns status=insufficient_data with a reason instead of inventing a curve.".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,
@@ -282,9 +282,9 @@ fn build_unavailable_response(
     details_reason: Option<&str>,
 ) -> String {
     let mut resp = json!({
+        "status": "insufficient_data",
         "date": date,
         "workout_id": workout_id,
-        "error": "power curve unavailable",
         "reason": reason,
     });
     if let Some(name) = workout_name {

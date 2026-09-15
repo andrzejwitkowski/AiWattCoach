@@ -17,14 +17,15 @@ use crate::domain::{
     training_context::TrainingContextBuilder,
     training_plan::{
         assemble_plan_quality_evaluation_request, assemble_training_plan_initial_window_request,
-        latest_training_plan_user_message_epoch_seconds, parse_training_plan_llm_envelope,
-        planning_conversation_messages, should_retry_training_plan_llm_envelope_repair,
-        training_plan_correction_system_prompt, training_plan_llm_envelope_json_schema,
-        training_plan_output_grammar, training_plan_stable_context,
-        training_plan_tool_context_today, PlanQualityEvaluation, PlanQualityEvaluatorLlmConfigPort,
-        TrainingPlanError, TrainingPlanGenerator, TrainingPlanInitialWindowPromptInput,
-        TrainingPlanPhaseOutput, TrainingPlanPlanningContext, TrainingPlanToolLoopCheckpoint,
-        WorkoutPlanningLlmConfigPort,
+        format_plan_quality_availability, latest_training_plan_user_message_epoch_seconds,
+        parse_training_plan_llm_envelope, planning_conversation_messages,
+        should_retry_training_plan_llm_envelope_repair, training_plan_correction_system_prompt,
+        training_plan_llm_envelope_json_schema, training_plan_output_grammar,
+        training_plan_stable_context, training_plan_tool_context_today, PlanQualityEvaluation,
+        PlanQualityEvaluationInput, PlanQualityEvaluatorLlmConfigPort, TrainingPlanError,
+        TrainingPlanGenerator, TrainingPlanInitialWindowPromptInput, TrainingPlanPhaseOutput,
+        TrainingPlanPlanningContext, TrainingPlanToolLoopCheckpoint, WorkoutPlanningLlmConfigPort,
+        TRAINING_PLAN_WINDOW_DAY_COUNT,
     },
     workout_summary::WorkoutRecap,
 };
@@ -200,19 +201,17 @@ where
 
     fn evaluate_plan_quality(
         &self,
-        user_id: &str,
-        _workout_id: &str,
-        saved_at_epoch_seconds: i64,
-        workout_recap: &WorkoutRecap,
-        planning_context: Option<&TrainingPlanPlanningContext>,
-        draft_plan_text: &str,
+        input: PlanQualityEvaluationInput<'_>,
     ) -> BoxFuture<Result<PlanQualityEvaluation, TrainingPlanError>> {
         let llm_chat_port = self.llm_chat_port.clone();
         let plan_quality_config_provider = self.plan_quality_config_provider.clone();
-        let user_id = user_id.to_string();
-        let workout_recap = workout_recap.clone();
-        let planning_context = planning_context.cloned();
-        let draft_plan_text = draft_plan_text.to_string();
+        let user_id = input.user_id.to_string();
+        let saved_at_epoch_seconds = input.saved_at_epoch_seconds;
+        let workout_recap = input.workout_recap.clone();
+        let planning_context = input.planning_context.cloned();
+        let draft_plan_text = input.draft_plan_text.to_string();
+        let evidence = input.evidence.cloned();
+        let availability_summary = input.availability_summary.map(str::to_string);
 
         Box::pin(async move {
             let config_provider = plan_quality_config_provider.ok_or_else(|| {
@@ -229,6 +228,8 @@ where
                 &workout_recap,
                 planning_context.as_ref(),
                 &draft_plan_text,
+                evidence.as_ref(),
+                availability_summary.as_deref(),
             );
             let response = llm_chat_port
                 .chat(config, request)
@@ -236,6 +237,31 @@ where
                 .map_err(map_llm_error)?;
             let text = require_assistant_text(&response)?;
             parse_plan_quality_evaluation_json(&text)
+        })
+    }
+
+    fn plan_quality_availability_summary(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> BoxFuture<Result<String, TrainingPlanError>> {
+        let training_context_builder = self.training_context_builder.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+
+        Box::pin(async move {
+            let context = training_context_builder
+                .build(&user_id, &workout_id)
+                .await
+                .map_err(map_llm_error)?;
+            // Same today anchor as generation tools (history.window_end).
+            let today = training_plan_tool_context_today(&context.context);
+            Ok(format_plan_quality_availability(
+                &today,
+                context.context.profile.availability_configured,
+                &context.context.profile.weekly_availability,
+                TRAINING_PLAN_WINDOW_DAY_COUNT as i64,
+            ))
         })
     }
 }
@@ -484,6 +510,8 @@ fn parse_plan_quality_evaluation_json(
         score: f64,
         #[serde(default)]
         critique: String,
+        #[serde(default)]
+        raise_to_next: String,
     }
 
     let trimmed = text
@@ -500,6 +528,7 @@ fn parse_plan_quality_evaluation_json(
         attempt: 0,
         score,
         critique: parsed.critique.trim().to_string(),
+        raise_to_next: parsed.raise_to_next.trim().to_string(),
     })
 }
 
@@ -625,10 +654,20 @@ mod plan_quality_parse_tests {
         .unwrap();
         assert_eq!(evaluation.score, 10);
         assert_eq!(evaluation.critique, "Too easy.");
+        assert_eq!(evaluation.raise_to_next, "");
 
         let low =
             parse_plan_quality_evaluation_json(r#"{"score": 0.2, "critique": "Bad"}"#).unwrap();
         assert_eq!(low.score, 1);
+    }
+
+    #[test]
+    fn parses_raise_to_next_when_present() {
+        let evaluation = parse_plan_quality_evaluation_json(
+            r#"{"score": 6, "critique": "tempo", "raise_to_next": "  Cut Z3.  "}"#,
+        )
+        .unwrap();
+        assert_eq!(evaluation.raise_to_next, "Cut Z3.");
     }
 
     #[test]

@@ -40,9 +40,10 @@ pub use prompt_guidance::{
     training_plan_output_grammar, training_plan_planning_guidelines, TRAINING_PLAN_WINDOW_DAY_COUNT,
 };
 pub use quality_prompt::{
-    assemble_plan_quality_evaluation_request, format_quality_feedback,
-    plan_quality_attempt_message, plan_quality_finished_accepted_message,
-    plan_quality_finished_best_message, PLAN_QUALITY_PASS_SCORE,
+    assemble_plan_quality_evaluation_request, format_plan_quality_availability,
+    format_quality_feedback, plan_quality_attempt_message, plan_quality_finished_accepted_message,
+    plan_quality_finished_best_message, PlanQualityEvaluationInput, PlanQualityEvidence,
+    PLAN_QUALITY_PASS_SCORE,
 };
 pub use race_projection_cleanup::{
     dates_to_supersede_for_race_date, is_race_placeholder_name, is_race_prep_name,

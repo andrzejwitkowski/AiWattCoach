@@ -83,6 +83,8 @@ struct PlanQualityEvaluationDocument {
     attempt: i64,
     score: i64,
     critique: String,
+    #[serde(default)]
+    raise_to_next: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -419,6 +421,7 @@ fn map_quality_evaluation_to_document(
         attempt: i64::from(evaluation.attempt),
         score: i64::from(evaluation.score),
         critique: evaluation.critique.clone(),
+        raise_to_next: evaluation.raise_to_next.clone(),
     })
 }
 
@@ -432,6 +435,7 @@ fn map_document_to_quality_evaluation(
         score: u8::try_from(document.score)
             .map_err(|_| TrainingPlanError::Repository("invalid plan quality score".to_string()))?,
         critique: document.critique,
+        raise_to_next: document.raise_to_next,
     })
 }
 
