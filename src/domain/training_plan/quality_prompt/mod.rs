@@ -10,11 +10,13 @@ pub use feedback::{
 };
 pub(crate) use rubric::truncate_evidence_section;
 pub use rubric::{
-    assemble_plan_quality_evaluation_request, format_plan_quality_evidence,
-    plan_quality_evaluator_rubric, PlanQualityEvaluationInput, PlanQualityEvidence,
+    assemble_plan_quality_evaluation_request, PlanQualityEvaluationInput, PlanQualityEvidence,
 };
 #[cfg(test)]
-pub(crate) use rubric::{EVIDENCE_BLOCK_MAX_CHARS, EVIDENCE_SECTION_MAX_CHARS};
+pub(crate) use rubric::{
+    format_plan_quality_evidence, plan_quality_evaluator_rubric, EVIDENCE_BLOCK_MAX_CHARS,
+    EVIDENCE_SECTION_MAX_CHARS,
+};
 
 #[cfg(test)]
 mod tests {
