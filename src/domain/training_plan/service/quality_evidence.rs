@@ -70,6 +70,12 @@ fn parse_evidence_json(content: &str) -> Option<serde_json::Value> {
     }
 }
 
+fn is_race_day_load_source(source: &str) -> bool {
+    source
+        .split('+')
+        .any(|part| part == "future_event" || part == "race")
+}
+
 fn compact_forward_load(content: &str) -> String {
     let Some(value) = parse_evidence_json(content) else {
         return truncate_evidence_section(content);
@@ -105,10 +111,7 @@ fn compact_forward_load(content: &str) -> String {
             min_tsb = Some((tsb, date));
         }
         let source = day.get("source").and_then(|s| s.as_str()).unwrap_or("");
-        if source
-            .split('+')
-            .any(|part| part == "future_event" || part == "race")
-        {
+        if is_race_day_load_source(source) {
             let tss_source = day
                 .get("tss_source")
                 .and_then(|s| s.as_str())

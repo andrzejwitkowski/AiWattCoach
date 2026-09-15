@@ -54,25 +54,36 @@ pub(super) fn select_estimates_for_day(
     ftp_watts: Option<i32>,
 ) -> Vec<PlannedLoadEstimate> {
     let input = input_day_estimate(input_days, date, ftp_watts);
-    let race = race_estimate(races, date);
+    let upcoming = input
+        .is_none()
+        .then(|| upcoming_day_estimate(upcoming_days, date, ftp_watts))
+        .flatten();
+    let race_calendar = race_estimate(races, date);
+    let skip_projected = race_calendar.is_some();
+    let (future, race) =
+        resolve_race_day_sources(future_event_estimate(future_events, date), race_calendar);
+    let projected = (input.is_none() && !skip_projected)
+        .then(|| projected_day_estimate(projected_days, date, ftp_watts))
+        .flatten();
 
-    if input.is_some() {
-        let future = future_event_estimate(future_events, date);
-        [input, future, race].into_iter().flatten().collect()
-    } else {
-        let upcoming = upcoming_day_estimate(upcoming_days, date, ftp_watts);
-        let future = future_event_estimate(future_events, date);
-        // Race calendar is authoritative for race-day load. Skip hollow projected
-        // placeholders (often rest_day=false with no workout doc → TSS 0).
-        if race.is_some() {
-            [upcoming, future, race].into_iter().flatten().collect()
-        } else {
-            let projected = projected_day_estimate(projected_days, date, ftp_watts);
-            [upcoming, projected, future]
-                .into_iter()
-                .flatten()
-                .collect()
-        }
+    [input, upcoming, projected, future, race]
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+/// Prefer Intervals event load when it is planned/estimated; fall back to races calendar
+/// when the event is unestimable. Never sum both for the same day (double-count).
+fn resolve_race_day_sources(
+    future: Option<PlannedLoadEstimate>,
+    race: Option<PlannedLoadEstimate>,
+) -> (Option<PlannedLoadEstimate>, Option<PlannedLoadEstimate>) {
+    match (future, race) {
+        (Some(future), Some(race)) => match future.tss_source {
+            TssSource::None => (None, Some(race)),
+            _ => (Some(future), None),
+        },
+        pair => pair,
     }
 }
 
@@ -103,7 +114,7 @@ pub(super) fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedL
         if let Some(d) = estimate.duration_seconds {
             total_duration += d;
         }
-        if estimate.source == "future_event" || estimate.source == "race" {
+        if is_race_day_source(&estimate.source) {
             event_tss_source = Some(estimate.tss_source);
         } else {
             non_event_tss_source.get_or_insert(estimate.tss_source);
@@ -303,20 +314,17 @@ fn race_estimate(races: &[RaceContext], date: &str) -> Option<PlannedLoadEstimat
     let mut any_estimated_tss = false;
 
     for race in races {
-        if race.date.get(..10).unwrap_or(race.date.as_str()) != date {
+        if !race_date_matches(&race.date, date) {
             continue;
         }
         has_any = true;
         match duration_from_distance_meters(race.distance_meters) {
             Some(dur) => {
                 total_duration += dur;
-                let intensity = default_race_intensity_factor_from_priority(&race.priority);
-                total_tss += (dur as f64 / 3600.0) * intensity * intensity * 100.0;
+                total_tss += estimate_tss(dur, default_race_intensity_factor(&race.priority));
                 any_estimated_tss = true;
             }
-            None => {
-                any_unknown_tss = true;
-            }
+            None => any_unknown_tss = true,
         }
     }
 
@@ -324,27 +332,19 @@ fn race_estimate(races: &[RaceContext], date: &str) -> Option<PlannedLoadEstimat
         return None;
     }
 
-    let tss_source = if any_unknown_tss {
-        TssSource::None
-    } else if any_estimated_tss {
-        TssSource::Estimated
-    } else {
-        TssSource::None
-    };
-
-    Some(PlannedLoadEstimate {
-        tss: total_tss,
-        duration_seconds: if total_duration > 0 {
-            Some(total_duration)
+    Some(event_load_estimate(
+        "race",
+        total_tss,
+        total_duration,
+        if any_unknown_tss {
+            TssSource::None
+        } else if any_estimated_tss {
+            TssSource::Estimated
         } else {
-            None
+            TssSource::None
         },
-        source: "race".to_string(),
-        tss_source,
-        emit_race_tss_unknown_note: any_unknown_tss,
-        is_rest: false,
-        rest_reason: None,
-    })
+        any_unknown_tss,
+    ))
 }
 
 fn future_event_estimate(
@@ -382,13 +382,10 @@ fn future_event_estimate(
                         .estimated_intensity_factor
                         .filter(|value| *value > 0.0)
                         .unwrap_or_else(|| default_race_intensity_factor(&event.category));
-                    // TSS = hours × IF² × 100 (same formula as workout/parser + training_load).
-                    total_tss += (dur as f64 / 3600.0) * intensity * intensity * 100.0;
+                    total_tss += estimate_tss(dur, intensity);
                     any_estimated_tss = true;
                 }
-                None => {
-                    any_unknown_tss = true;
-                }
+                None => any_unknown_tss = true,
             },
         }
     }
@@ -397,54 +394,70 @@ fn future_event_estimate(
         return None;
     }
 
-    // Unestimable same-day event TSS keeps provenance none (unknown modelled as 0).
-    let tss_source = if any_unknown_tss {
-        TssSource::None
-    } else if any_estimated_tss {
-        TssSource::Estimated
-    } else if any_planned_tss {
-        TssSource::Planned
-    } else {
-        TssSource::None
-    };
-
-    Some(PlannedLoadEstimate {
-        tss: total_tss,
-        duration_seconds: if total_duration > 0 {
-            Some(total_duration)
+    Some(event_load_estimate(
+        "future_event",
+        total_tss,
+        total_duration,
+        if any_unknown_tss {
+            TssSource::None
+        } else if any_estimated_tss {
+            TssSource::Estimated
+        } else if any_planned_tss {
+            TssSource::Planned
         } else {
-            None
+            TssSource::None
         },
-        source: "future_event".to_string(),
+        any_unknown_tss,
+    ))
+}
+
+fn event_load_estimate(
+    source: &str,
+    tss: f64,
+    total_duration: i32,
+    tss_source: TssSource,
+    emit_race_tss_unknown_note: bool,
+) -> PlannedLoadEstimate {
+    PlannedLoadEstimate {
+        tss,
+        duration_seconds: (total_duration > 0).then_some(total_duration),
+        source: source.to_string(),
         tss_source,
-        emit_race_tss_unknown_note: any_unknown_tss,
+        emit_race_tss_unknown_note,
         is_rest: false,
         rest_reason: None,
-    })
+    }
 }
 
-fn default_race_intensity_factor(category: &str) -> f64 {
-    match category {
-        "RACE_A" => 0.90,
-        "RACE_B" => 0.85,
+fn is_race_day_source(source: &str) -> bool {
+    source == "future_event" || source == "race"
+}
+
+fn race_date_matches(race_date: &str, date: &str) -> bool {
+    race_date.get(..10).unwrap_or(race_date) == date
+}
+
+/// Accepts Intervals categories (`RACE_A`) and race-calendar priorities (`A` / `a`).
+fn default_race_intensity_factor(label: &str) -> f64 {
+    let trimmed = label.trim();
+    let normalized = trimmed
+        .strip_prefix("RACE_")
+        .or_else(|| trimmed.strip_prefix("race_"))
+        .unwrap_or(trimmed)
+        .to_ascii_uppercase();
+    match normalized.as_str() {
+        "A" => 0.90,
+        "B" => 0.85,
         _ => 0.80,
     }
 }
 
-fn default_race_intensity_factor_from_priority(priority: &str) -> f64 {
-    match priority.trim().to_ascii_uppercase().as_str() {
-        "A" | "RACE_A" => 0.90,
-        "B" | "RACE_B" => 0.85,
-        _ => 0.80,
-    }
+fn estimate_tss(duration_seconds: i32, intensity_factor: f64) -> f64 {
+    (duration_seconds as f64 / 3600.0) * intensity_factor * intensity_factor * 100.0
 }
 
 fn duration_from_distance_meters(meters: i32) -> Option<i32> {
-    if meters <= 0 {
-        return None;
-    }
-    // Assume 30 km/h road race speed → seconds = meters × 0.12.
-    Some((f64::from(meters) * 0.12).round() as i32)
+    (meters > 0).then(|| (f64::from(meters) * 0.12).round() as i32)
 }
 
 /// Race sync writes `distance_meters=N` into the Intervals event description.
