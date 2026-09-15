@@ -8,11 +8,11 @@ pub use feedback::{
     plan_quality_finished_accepted_message, plan_quality_finished_best_message,
     PLAN_QUALITY_PASS_SCORE,
 };
+pub(crate) use rubric::truncate_evidence_section;
 pub use rubric::{
     assemble_plan_quality_evaluation_request, format_plan_quality_evidence,
     plan_quality_evaluator_rubric, PlanQualityEvaluationInput, PlanQualityEvidence,
 };
-pub(crate) use rubric::truncate_evidence_section;
 #[cfg(test)]
 pub(crate) use rubric::{EVIDENCE_BLOCK_MAX_CHARS, EVIDENCE_SECTION_MAX_CHARS};
 

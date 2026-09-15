@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use super::super::{
     draft_addresses_quality_checklist, plan_quality_finished_accepted_message,
-    plan_quality_finished_best_message, PlanQualityEvaluation,
-    PlanQualityEvaluatorLlmConfigPort, PlanQualityProgressPort, TrainingPlanError,
-    TrainingPlanGenerationOperation, TrainingPlanSnapshot,
+    plan_quality_finished_best_message, PlanQualityEvaluation, PlanQualityEvaluatorLlmConfigPort,
+    PlanQualityProgressPort, TrainingPlanError, TrainingPlanGenerationOperation,
+    TrainingPlanSnapshot,
 };
 use super::ctx::{GenerationIdentity, GenerationPlanning};
 use super::structural::CorrectionRoundInput;

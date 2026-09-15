@@ -7,8 +7,8 @@ use super::super::super::{
 };
 use super::super::ctx::{GenerationIdentity, GenerationPlanning};
 use super::super::quality_evidence::extract_plan_quality_evidence;
-use super::{BestDraft, QualityAttemptAction};
 use super::super::TrainingPlanGenerationService;
+use super::{BestDraft, QualityAttemptAction};
 use crate::domain::{
     calendar_view::CalendarEntryViewRefreshPort,
     identity::Clock,
@@ -244,5 +244,4 @@ where
             raise_to_next: evaluation.raise_to_next.clone(),
         })
     }
-
 }

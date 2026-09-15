@@ -187,4 +187,3 @@ pub(crate) fn truncate_snippet(text: &str, max_chars: usize) -> String {
     let truncated: String = trimmed.chars().take(max_chars).collect();
     format!("{truncated}...")
 }
-

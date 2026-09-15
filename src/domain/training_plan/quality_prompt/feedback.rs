@@ -54,4 +54,3 @@ pub fn plan_quality_finished_best_message(score: u8, max_loops: u32) -> String {
 }
 
 pub const PLAN_QUALITY_PASS_SCORE: u8 = 7;
-

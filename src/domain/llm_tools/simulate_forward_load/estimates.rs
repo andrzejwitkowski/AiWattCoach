@@ -192,7 +192,12 @@ pub(super) fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedL
         if let Some(d) = estimate.duration_seconds {
             total_duration += d;
         }
-        if estimate.sources.kinds().iter().any(|kind| kind.is_race_day()) {
+        if estimate
+            .sources
+            .kinds()
+            .iter()
+            .any(|kind| kind.is_race_day())
+        {
             event_tss_source = Some(estimate.tss_source);
         } else {
             non_event_tss_source.get_or_insert(estimate.tss_source);

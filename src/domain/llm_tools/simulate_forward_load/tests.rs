@@ -229,18 +229,20 @@ fn simulate_forward_load_estimates_race_tss_from_duration() {
 fn simulate_forward_load_estimates_tss_from_race_context_distance() {
     let mut ctx = sample_context();
     // Hollow projected placeholder on race day (prod shape: rest_day=false, TSS 0).
-    ctx.training_context.projected_days.push(ProjectedDayContext {
-        date: "2026-05-08".to_string(),
-        workouts: vec![ProjectedWorkoutContext {
-            source_workout_id: "race-placeholder".to_string(),
-            start_date_local: "2026-05-08T08:00:00".to_string(),
-            name: Some("Szosomania".to_string()),
-            interval_blocks: Vec::new(),
-            raw_workout_doc: None,
-            rest_day: false,
-            rest_day_reason: None,
-        }],
-    });
+    ctx.training_context
+        .projected_days
+        .push(ProjectedDayContext {
+            date: "2026-05-08".to_string(),
+            workouts: vec![ProjectedWorkoutContext {
+                source_workout_id: "race-placeholder".to_string(),
+                start_date_local: "2026-05-08T08:00:00".to_string(),
+                name: Some("Szosomania".to_string()),
+                interval_blocks: Vec::new(),
+                raw_workout_doc: None,
+                rest_day: false,
+                rest_day_reason: None,
+            }],
+        });
     ctx.training_context.races = vec![crate::domain::training_context::RaceContext {
         race_id: "race-szosomania".to_string(),
         date: "2026-05-08".to_string(),
