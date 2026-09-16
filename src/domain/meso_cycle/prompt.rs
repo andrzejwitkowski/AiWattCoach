@@ -140,6 +140,7 @@ mod tests {
                     volatile_context: r#"{"ctl":42}"#.to_string(),
                     approximate_tokens: 0,
                 },
+                pack_mode: crate::domain::training_context::PackMode::Full,
             },
             conversation_epoch_seconds: 1_700_000_000,
             today: "2026-06-05".to_string(),

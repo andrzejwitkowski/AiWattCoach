@@ -488,3 +488,156 @@ fn mixed_workout_activity_types_keep_per_row_ty_column() {
     assert!(rendered.stable_context.contains("\"Run\""));
     assert!(!rendered.stable_context.contains("\"def_ty\""));
 }
+
+#[test]
+fn lean_pack_trims_history_load_trend_sa_and_recent_streams() {
+    use crate::domain::workout_alignment::{AlignedInterval, CadenceRange, PlannedStep, StepType};
+
+    let mut context = TrainingContext {
+        focus_workout_id: Some("ride-focus".to_string()),
+        history: HistoricalTrainingContext {
+            load_trend: (1..=10)
+                .map(|day| HistoricalLoadTrendPoint {
+                    date: format!("2026-03-{day:02}"),
+                    sample_days: 1,
+                    period_tss: day * 10,
+                    rolling_tss_7d: None,
+                    rolling_tss_28d: None,
+                    ctl: None,
+                    atl: None,
+                    tsb: None,
+                })
+                .collect(),
+            workouts: (1..=12)
+                .map(|day| HistoricalWorkoutContext {
+                    date: format!("2026-03-{day:02}"),
+                    activity_id: format!("ride-{day}"),
+                    training_stress_score: Some(50 + day),
+                    normalized_power_watts: Some(200 + day),
+                    interval_blocks: vec![PlannedWorkoutBlockContext {
+                        duration_seconds: 60,
+                        min_percent_ftp: Some(90.0),
+                        max_percent_ftp: Some(95.0),
+                        min_target_watts: Some(270),
+                        max_target_watts: Some(285),
+                    }],
+                    ..HistoricalWorkoutContext::default()
+                })
+                .collect(),
+            ..HistoricalTrainingContext::default()
+        },
+        recent_days: (1..=6)
+            .map(|day| RecentDayContext {
+                date: format!("2026-04-{day:02}"),
+                workouts: vec![RecentWorkoutContext {
+                    activity_id: if day == 6 {
+                        "ride-focus".to_string()
+                    } else {
+                        format!("ride-day-{day}")
+                    },
+                    start_date_local: format!("2026-04-{day:02}T08:00:00"),
+                    power_segments: vec![[220, 220, 3]],
+                    cadence_segments: vec![[88, 88, 5]],
+                    aligned_intervals: Some(vec![AlignedInterval {
+                        interval_index: 0,
+                        planned_step: PlannedStep {
+                            name: "work".into(),
+                            step_type: StepType::Work,
+                            target_power_min: 270,
+                            target_power_max: 285,
+                            planned_duration_seconds: 480,
+                        },
+                        actual_duration_seconds: 480,
+                        avg_power: 275,
+                        normalized_power: 278,
+                        avg_cadence: 88,
+                        cadence_range: CadenceRange { min: 85, max: 92 },
+                        anomalies: Vec::new(),
+                    }]),
+                    ..RecentWorkoutContext::default()
+                }],
+                ..RecentDayContext::default()
+            })
+            .collect(),
+        ..TrainingContext::default()
+    };
+    // Oldest recent days first; lean keeps last 4.
+    context.recent_days.sort_by(|a, b| a.date.cmp(&b.date));
+
+    let rendered = render_training_context_with_mode(&context, PackMode::Lean);
+
+    assert!(!rendered.stable_context.contains("\"ride-1\""));
+    assert!(rendered.stable_context.contains("\"ride-12\""));
+    assert!(!rendered.stable_context.contains("480,90.0,95.0,270,285"));
+    assert!(!rendered.stable_context.contains("\"2026-03-01\""));
+    assert!(rendered.stable_context.contains("\"2026-03-10\""));
+    assert!(rendered.volatile_context.contains("\"sa\":{\"ride-focus\""));
+    assert!(!rendered.volatile_context.contains("\"ride-day-1\""));
+    assert!(!rendered.volatile_context.contains("\"2026-04-01\""));
+    assert!(rendered.volatile_context.contains("\"2026-04-06\""));
+    assert!(!rendered.volatile_context.contains("[[220,220,3]]"));
+}
+
+#[test]
+fn lean_pack_sa_falls_back_to_newest_when_focus_missing() {
+    use crate::domain::workout_alignment::{AlignedInterval, CadenceRange, PlannedStep, StepType};
+
+    let context = TrainingContext {
+        focus_workout_id: None,
+        recent_days: vec![
+            RecentDayContext {
+                date: "2026-04-01".to_string(),
+                workouts: vec![RecentWorkoutContext {
+                    activity_id: "older".to_string(),
+                    aligned_intervals: Some(vec![AlignedInterval {
+                        interval_index: 0,
+                        planned_step: PlannedStep {
+                            name: "work".into(),
+                            step_type: StepType::Work,
+                            target_power_min: 270,
+                            target_power_max: 285,
+                            planned_duration_seconds: 480,
+                        },
+                        actual_duration_seconds: 480,
+                        avg_power: 275,
+                        normalized_power: 278,
+                        avg_cadence: 88,
+                        cadence_range: CadenceRange { min: 85, max: 92 },
+                        anomalies: Vec::new(),
+                    }]),
+                    ..RecentWorkoutContext::default()
+                }],
+                ..RecentDayContext::default()
+            },
+            RecentDayContext {
+                date: "2026-04-02".to_string(),
+                workouts: vec![RecentWorkoutContext {
+                    activity_id: "newer".to_string(),
+                    aligned_intervals: Some(vec![AlignedInterval {
+                        interval_index: 0,
+                        planned_step: PlannedStep {
+                            name: "work".into(),
+                            step_type: StepType::Work,
+                            target_power_min: 270,
+                            target_power_max: 285,
+                            planned_duration_seconds: 480,
+                        },
+                        actual_duration_seconds: 480,
+                        avg_power: 275,
+                        normalized_power: 278,
+                        avg_cadence: 88,
+                        cadence_range: CadenceRange { min: 85, max: 92 },
+                        anomalies: Vec::new(),
+                    }]),
+                    ..RecentWorkoutContext::default()
+                }],
+                ..RecentDayContext::default()
+            },
+        ],
+        ..TrainingContext::default()
+    };
+
+    let rendered = render_training_context_with_mode(&context, PackMode::Lean);
+    assert!(rendered.volatile_context.contains("\"sa\":{\"newer\""));
+    assert!(!rendered.volatile_context.contains("\"sa\":{\"older\""));
+}

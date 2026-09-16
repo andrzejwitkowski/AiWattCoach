@@ -9,7 +9,9 @@ pub use model::{
     RecentWorkoutRecapContext, RenderedTrainingContext, SpecialDayContext, TrainingContext,
     TrainingContextBuildResult, UpcomingDayContext, WeeklyAvailabilityContext,
 };
-pub use packing::{approximate_token_count, render_training_context};
+pub use packing::{
+    approximate_token_count, render_training_context, render_training_context_with_mode, PackMode,
+};
 pub use service::{
     pick_representative_completed_workout_for_day, DayWorkoutPick, DayWorkoutPickMethod,
     DefaultTrainingContextBuilder, TrainingContextBuilder, ATHLETE_SUMMARY_FOCUS_ID,

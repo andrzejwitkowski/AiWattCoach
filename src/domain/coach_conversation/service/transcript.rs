@@ -57,6 +57,7 @@ pub fn build_calendar_conversation(
     messages: &[CoachConversationMessage],
     provider_transcript: &[LlmChatMessage],
     up_to_message_id: &str,
+    strip_reasoning: bool,
 ) -> Vec<LlmChatMessage> {
     let messages = match messages.iter().position(|msg| msg.id == up_to_message_id) {
         Some(pos) => &messages[..=pos],
@@ -92,7 +93,14 @@ pub fn build_calendar_conversation(
         })
         .collect::<Vec<_>>();
 
-    rebuild_conversation_with_provider_transcript(conversation, provider_transcript)
+    let mut rebuilt =
+        rebuild_conversation_with_provider_transcript(conversation, provider_transcript);
+    if strip_reasoning {
+        for message in &mut rebuilt {
+            message.reasoning_content = None;
+        }
+    }
+    rebuilt
 }
 
 #[cfg(test)]
@@ -155,6 +163,7 @@ mod tests {
             ],
             &[],
             "msg-2",
+            false,
         );
 
         assert_eq!(conversation[0].role, LlmMessageRole::User);
@@ -165,6 +174,48 @@ mod tests {
         assert!(conversation[1]
             .content
             .starts_with("[sent_at=2025-05-06T00:10:00+00:00]\n"));
+    }
+
+    #[test]
+    fn lean_pack_strips_reasoning_content_from_calendar_conversation() {
+        let conversation = build_calendar_conversation(
+            &[
+                CoachConversationMessage {
+                    id: "msg-1".to_string(),
+                    conversation_id: "conv-1".to_string(),
+                    user_id: "user-1".to_string(),
+                    role: CoachConversationMessageRole::User,
+                    content: "Plan next week".to_string(),
+                    tool_call: None,
+                    reasoning_content: None,
+                    created_at_epoch_seconds: 1_746_489_600,
+                },
+                CoachConversationMessage {
+                    id: "msg-2".to_string(),
+                    conversation_id: "conv-1".to_string(),
+                    user_id: "user-1".to_string(),
+                    role: CoachConversationMessageRole::Coach,
+                    content: "Keep easy volume".to_string(),
+                    tool_call: None,
+                    reasoning_content: Some("internal chain".to_string()),
+                    created_at_epoch_seconds: 1_746_490_200,
+                },
+            ],
+            &[crate::domain::llm::LlmChatMessage {
+                role: LlmMessageRole::Assistant,
+                content: "Keep easy volume".to_string(),
+                tool_calls: Vec::new(),
+                tool_call_id: None,
+                reasoning_content: Some("provider chain".to_string()),
+                image_base64: None,
+            }],
+            "msg-2",
+            true,
+        );
+
+        assert!(conversation
+            .iter()
+            .all(|message| message.reasoning_content.is_none()));
     }
 
     #[test]
