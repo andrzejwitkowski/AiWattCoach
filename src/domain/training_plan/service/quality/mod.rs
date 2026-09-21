@@ -308,14 +308,22 @@ where
         let sharper = format!(
             "CHECKLIST NOT MET: draft description omitted required \"Adjustment rules\" section.\n{quality_feedback}"
         );
-        self.generate_quality_replan_draft(
-            identity,
-            planning_context,
-            planning_context_loaded,
-            operation,
-            &sharper,
-        )
-        .await
+        let retry = self
+            .generate_quality_replan_draft(
+                identity,
+                planning_context,
+                planning_context_loaded,
+                operation,
+                &sharper,
+            )
+            .await?;
+        if draft_addresses_quality_checklist(retry.draft.description.as_deref(), raise_to_next) {
+            Ok(retry)
+        } else {
+            Err(TrainingPlanError::Validation(
+                "quality replan description omitted required Adjustment rules".to_string(),
+            ))
+        }
     }
 
     async fn generate_quality_replan_draft(

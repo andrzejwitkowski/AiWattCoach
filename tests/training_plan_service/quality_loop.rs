@@ -253,3 +253,54 @@ async fn quality_loop_retries_once_when_replan_omits_adjustment_rules() {
     assert_eq!(result.shipped_quality.as_ref().map(|e| e.score), Some(8));
     assert_eq!(result.snapshot.start_date, "2026-04-21");
 }
+
+#[tokio::test]
+async fn quality_loop_keeps_best_when_both_replans_omit_adjustment_rules() {
+    let call_log = new_call_log();
+    let built = build_service(
+        call_log.clone(),
+        vec![Ok(workout_recap())],
+        vec![
+            Ok(valid_plan_window(FIRST_DAY)),
+            Ok(valid_plan_window("2026-04-20")),
+            Ok(valid_plan_window("2026-04-21")),
+        ],
+        vec![],
+        FIRST_DAY,
+    );
+    built.generator.set_initial_plan_descriptions(vec![
+        Some("initial session notes".to_string()),
+        Some("session notes without checklist".to_string()),
+        Some("still no checklist section".to_string()),
+    ]);
+    built.generator.set_quality_evaluations(vec![Ok(PlanQualityEvaluation {
+        attempt: 0,
+        score: 5,
+        critique: "No fatigue correction.".to_string(),
+        raise_to_next: "Add explicit fatigue correction for 17.09 and 19.09.".to_string(),
+    })]);
+    let service =
+        built
+            .service
+            .with_plan_quality_evaluator_config(Arc::new(FixedPlanQualityConfig {
+                max_loops: 5,
+                pass_score: 7,
+            }));
+
+    let result = service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    assert_eq!(built.generator.initial_plan_call_count(), 3);
+    assert_eq!(result.shipped_quality.as_ref().map(|e| e.score), Some(5));
+    assert_eq!(result.snapshot.start_date, FIRST_DAY);
+    assert_eq!(
+        built
+            .operations
+            .stored_operation()
+            .raw_plan_description
+            .as_deref(),
+        Some("initial session notes")
+    );
+}
