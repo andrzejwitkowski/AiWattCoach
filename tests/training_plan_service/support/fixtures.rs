@@ -98,6 +98,7 @@ pub(crate) fn stale_pending_operation_with_checkpoints() -> TrainingPlanGenerati
         quality_evaluations: Vec::new(),
         best_quality_evaluation: None,
         best_quality_plan_response: None,
+        best_quality_plan_description: None,
         validation_issues: Vec::new(),
         attempts: Vec::new(),
         failure: None,
@@ -133,6 +134,7 @@ pub(crate) fn stale_pending_operation_with_recap_only() -> TrainingPlanGeneratio
         quality_evaluations: Vec::new(),
         best_quality_evaluation: None,
         best_quality_plan_response: None,
+        best_quality_plan_description: None,
         validation_issues: Vec::new(),
         attempts: vec![AttemptRecord {
             phase: WorkflowPhase::WorkoutRecap,
@@ -173,6 +175,7 @@ pub(crate) fn stale_pending_operation_with_invalid_correction_response(
         quality_evaluations: Vec::new(),
         best_quality_evaluation: None,
         best_quality_plan_response: None,
+        best_quality_plan_description: None,
         validation_issues: vec![ValidationIssue {
             scope: "2026-04-10".to_string(),
             message: "invalid planned workout step: - nope".to_string(),
@@ -211,6 +214,7 @@ pub(crate) fn stale_pending_operation_with_snapshot_mismatch() -> TrainingPlanGe
         quality_evaluations: Vec::new(),
         best_quality_evaluation: None,
         best_quality_plan_response: None,
+        best_quality_plan_description: None,
         validation_issues: Vec::new(),
         attempts: Vec::new(),
         failure: None,

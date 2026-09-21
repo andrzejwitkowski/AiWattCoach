@@ -206,12 +206,7 @@ where
         let llm_chat_port = self.llm_chat_port.clone();
         let plan_quality_config_provider = self.plan_quality_config_provider.clone();
         let user_id = input.user_id.to_string();
-        let saved_at_epoch_seconds = input.saved_at_epoch_seconds;
-        let workout_recap = input.workout_recap.clone();
-        let planning_context = input.planning_context.cloned();
-        let draft_plan_text = input.draft_plan_text.to_string();
-        let evidence = input.evidence.cloned();
-        let availability_summary = input.availability_summary.map(str::to_string);
+        let request = assemble_plan_quality_evaluation_request(&input);
 
         Box::pin(async move {
             let config_provider = plan_quality_config_provider.ok_or_else(|| {
@@ -222,15 +217,6 @@ where
             let config = config_provider
                 .get_plan_quality_evaluator_config(&user_id)
                 .await?;
-            let request = assemble_plan_quality_evaluation_request(
-                user_id,
-                saved_at_epoch_seconds,
-                &workout_recap,
-                planning_context.as_ref(),
-                &draft_plan_text,
-                evidence.as_ref(),
-                availability_summary.as_deref(),
-            );
             let response = llm_chat_port
                 .chat(config, request)
                 .await

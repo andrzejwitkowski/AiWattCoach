@@ -8,6 +8,7 @@ const TRAINING_PLAN_CONVERSATION_GUIDANCE: &str = "If earlier conversation messa
 const TRAINING_PLAN_FORWARD_LOAD_GUIDANCE: &str = "Forecast load sequentially before choosing each next day. Start from the current historical CTL, ATL, and TSB in the packed training context. Treat previously projected planned days (`pd`) as already planned/completed inputs when they exist, then simulate the effect of each newly planned workout before choosing the following day. Do not plan all 14 days from one static CTL/ATL/TSB snapshot. If the conversation or context says rest week, easy week, or recovery block, keep the forward simulation aligned with that low-load intent and avoid hard sessions unless they are truly necessary.";
 const TRAINING_PLAN_AVAILABILITY_CONFIGURED_GUIDANCE: &str = "Weekly availability is mandatory and must be respected: only schedule workouts on weekdays marked available, keep unavailable days as Rest Day with a reason when full rest is intentional, and never exceed the configured max duration minutes for each available weekday.";
 const TRAINING_PLAN_AVAILABILITY_UNCONFIGURED_GUIDANCE: &str = "Weekly availability is not configured in this context. Do not infer unavailable days or extra rest constraints from missing availability data. Plan a sensible 14-day cycling window from the training context alone, and avoid claiming that weekly availability is configured.";
+const TRAINING_PLAN_DESCRIPTION_GUIDANCE: &str = "Description field (coach commentary): For every quality session in `plan`, `description` MUST contain one line per session in this form: `<YYYY-MM-DD> <session name> — demand: <which target-race or target-capability demand it develops>; execution: <pacing/intensity discipline, position or cadence intent, recovery between efforts>; progression: <what it builds toward>`. When the planning context names a target event with a known duration or distance, `description` MUST name that event and state which session rehearses it. Keep all session purpose, execution, pacing, fueling, and cadence intent in `description` only. Do not move blocks, cues, cadence, or prose into `plan` — the plan output grammar forbids them. When addressing quality feedback or raise_to_next, put an `Adjustment rules` section in `description` only; never append Adjustment rules to `plan`. Stay within a concise description size budget.";
 
 fn with_planning_horizon(text: &str, window_day_count: usize) -> String {
     text.replace("14-day", &format!("{window_day_count}-day"))
@@ -27,7 +28,7 @@ pub fn training_plan_planning_guidelines(
         )
     };
     format!(
-        "{} {} {} {} {availability_guidance}",
+        "{} {} {} {} {availability_guidance} {TRAINING_PLAN_DESCRIPTION_GUIDANCE}",
         with_planning_horizon(TRAINING_PLAN_PLANNING_GUIDELINES_BASE, window_day_count),
         TRAINING_PLAN_CONVERSATION_GUIDANCE,
         with_planning_horizon(TRAINING_PLAN_FORWARD_LOAD_GUIDANCE, window_day_count),
@@ -71,5 +72,14 @@ mod tests {
         let training_plan = training_plan_planning_guidelines(false, 14);
         assert!(training_plan.contains("shape the 14-day window"));
         assert!(training_plan.contains("Do not plan all 14 days"));
+    }
+
+    #[test]
+    fn planning_guidelines_require_per_session_purpose_in_description() {
+        let guidelines = training_plan_planning_guidelines(false, 14);
+        assert!(guidelines.contains("<YYYY-MM-DD> <session name> — demand:"));
+        assert!(guidelines.contains("Do not move blocks, cues, cadence, or prose into `plan`"));
+        assert!(guidelines.contains("put an `Adjustment rules` section in `description` only"));
+        assert!(!training_plan_output_grammar().contains("demand: <which target-race"));
     }
 }

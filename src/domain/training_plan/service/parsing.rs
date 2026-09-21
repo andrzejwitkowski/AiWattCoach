@@ -4,7 +4,10 @@ use crate::domain::{
     ai_workflow::ValidationIssue,
     calendar_view::CalendarEntryViewRefreshPort,
     identity::Clock,
-    intervals::{ensure_planned_workout_title, parse_planned_workout_days, PlannedWorkoutDay},
+    intervals::{
+        ensure_planned_workout_title, parse_planned_workout_days, serialize_planned_workout,
+        PlannedWorkoutDay,
+    },
 };
 
 use super::{ParsedPlanWindow, TrainingPlanGenerationService};
@@ -72,6 +75,39 @@ pub(crate) fn split_into_day_blocks(
     }
 
     Ok(blocks)
+}
+
+/// Rebuild workout-builder window text from parsed/corrected days (date-sorted).
+pub(crate) fn render_plan_window(days_by_date: &BTreeMap<String, TrainingPlanDay>) -> String {
+    days_by_date
+        .values()
+        .map(render_plan_day)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn render_plan_day(day: &TrainingPlanDay) -> String {
+    if day.rest_day {
+        return match day
+            .rest_day_reason
+            .as_deref()
+            .map(str::trim)
+            .filter(|r| !r.is_empty())
+        {
+            Some(reason) => format!("{}\nRest Day: {reason}", day.date),
+            None => format!("{}\nRest Day", day.date),
+        };
+    }
+
+    match day
+        .workout
+        .as_ref()
+        .map(serialize_planned_workout)
+        .filter(|body| !body.is_empty())
+    {
+        Some(body) => format!("{}\n{body}", day.date),
+        None => format!("{}\nPlanned workout", day.date),
+    }
 }
 
 impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
@@ -152,6 +188,13 @@ where
         })
     }
 
+    pub(super) fn render_plan_window(
+        &self,
+        days_by_date: &BTreeMap<String, TrainingPlanDay>,
+    ) -> String {
+        render_plan_window(days_by_date)
+    }
+
     pub(super) fn merge_corrections(
         &self,
         base_days: &mut BTreeMap<String, TrainingPlanDay>,
@@ -168,8 +211,25 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::split_into_day_blocks;
-    use crate::domain::training_plan::TrainingPlanError;
+    use super::{render_plan_window, split_into_day_blocks};
+    use crate::domain::{
+        intervals::{ensure_planned_workout_title, parse_planned_workout_days, PlannedWorkoutDay},
+        training_plan::{TrainingPlanDay, TrainingPlanError},
+    };
+    use std::collections::BTreeMap;
+
+    fn map_parsed_day(day: PlannedWorkoutDay) -> TrainingPlanDay {
+        let date = day.date.clone();
+        let rest_day = day.is_rest_day();
+        let rest_day_reason = day.rest_day_reason().map(ToString::to_string);
+        let workout = day.into_workout().map(ensure_planned_workout_title);
+        TrainingPlanDay {
+            date,
+            rest_day,
+            rest_day_reason,
+            workout,
+        }
+    }
 
     #[test]
     fn split_into_day_blocks_skips_preamble_before_first_date_header() {
@@ -199,5 +259,44 @@ mod tests {
             error,
             TrainingPlanError::Validation("content before first date header".to_string())
         );
+    }
+
+    #[test]
+    fn render_plan_window_round_trips_rest_and_workout_days() {
+        let raw = "2026-04-06\nRest Day: accumulated fatigue\n2026-04-07\nEndurance\n- 45m 65%";
+        let blocks = split_into_day_blocks(raw).expect("blocks");
+        let mut days_by_date = BTreeMap::new();
+        for (date, block) in blocks {
+            let day = parse_planned_workout_days(&block)
+                .expect("parse")
+                .days
+                .into_iter()
+                .next()
+                .expect("day");
+            days_by_date.insert(date, map_parsed_day(day));
+        }
+
+        let rendered = render_plan_window(&days_by_date);
+        let again = split_into_day_blocks(&rendered).expect("re-split");
+        let mut round_trip = BTreeMap::new();
+        for (date, block) in again {
+            let day = parse_planned_workout_days(&block)
+                .expect("re-parse")
+                .days
+                .into_iter()
+                .next()
+                .expect("day");
+            round_trip.insert(date, map_parsed_day(day));
+        }
+
+        assert_eq!(round_trip.len(), 2);
+        let rest = round_trip.get("2026-04-06").expect("rest");
+        assert!(rest.rest_day);
+        assert_eq!(rest.rest_day_reason.as_deref(), Some("accumulated fatigue"));
+        let workout = round_trip.get("2026-04-07").expect("workout");
+        assert!(!workout.rest_day);
+        assert!(workout.workout.is_some());
+        assert!(rendered.contains("Endurance"));
+        assert!(rendered.contains("- 45m 65%"));
     }
 }

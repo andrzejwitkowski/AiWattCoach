@@ -129,6 +129,9 @@
 - After implementing a non-trivial change, verify: relevant test suite, `cargo fmt --all --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `bun run verify:arch`, `./scripts/rebuild_graphify.sh`.
 - **This Linux dev box is RAM-limited:** use `CARGO_BUILD_JOBS=1` / `cargo -j 1`, run only one `cargo` process at a time, and prefer narrow `cargo test <filter> -- --test-threads=1` instead of full-workspace `cargo test`. Parallel `rustc` can OOM the host and kill the IDE.
 - Do not run multiple heavy verification commands in parallel on this machine.
+- **Plan quality 9–10 plumbing:** session purpose/execution lives in `description`, not `plan` (grammar bans cues). Always pass `draft_plan_description` with the draft text into the evaluator, keep them in lockstep on replan, and judge specificity from the commentary section with a claim-vs-artifact guard.
+- **Quality-loop residual debt:** nest attempt/finalize into ctx structs so helpers stay under clippy’s arg limit (pass `&mut QualityAttemptLoopCtx`, do not re-explode); put raise_to_next “Adjustment rules” only in `description`; ship best via `with_shipped_best_raw` so `updated_at` moves.
+- **Post-deploy plan-quality acceptance:** after shipping commentary plumbing, run one real generation then `db.training_plan_generation_operations.aggregate([{$unwind:"$quality_evaluations"},{$group:{_id:"$quality_evaluations.score",n:{$sum:1}}},{$sort:{_id:1}}])`. Expect ≥1 score ≥9. If not, specificity critiques must quote the commentary section. Compare score sequences on the newest 3 operations vs pre-fix (`6,7` / `7,7,8,7,...`).
 
 ### Git and PR workflow
 - Before committing or pushing, verify the current branch name against the requested target.

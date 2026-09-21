@@ -14,22 +14,29 @@ pub fn format_quality_feedback(score: u8, critique: &str, raise_to_next: &str) -
     let raise = raise_to_next.trim();
     if !raise.is_empty() {
         feedback.push_str(
-            "\nUnresolved raise_to_next checklist (draft MUST include a section realizing each item; preferred heading \"Adjustment rules\"):\n1. ",
+            "\nUnresolved raise_to_next checklist (JSON `description` MUST include a section realizing each item; preferred heading \"Adjustment rules\"):\n1. ",
         );
         feedback.push_str(raise);
-        feedback.push_str("\nIf any checklist item is omitted, the draft is invalid for shipping.");
+        feedback.push_str(
+            "\nPut Adjustment rules only in `description`, never in `plan`. If any checklist item is omitted from description, the draft is invalid for shipping.",
+        );
     }
     feedback
 }
 
 /// Binding gate for quality replan: empty raise always passes; otherwise the draft
-/// must contain an `Adjustment rules` section heading (case-insensitive).
-/// ponytail: substring only; escalate to keyword overlap if prod false-negatives.
-pub fn draft_addresses_quality_checklist(draft: &str, raise_to_next: &str) -> bool {
+/// `description` must contain an `Adjustment rules` section heading (case-insensitive).
+pub fn draft_addresses_quality_checklist(
+    draft_description: Option<&str>,
+    raise_to_next: &str,
+) -> bool {
     if raise_to_next.trim().is_empty() {
         return true;
     }
-    draft.to_ascii_lowercase().contains("adjustment rules")
+    draft_description
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .contains("adjustment rules")
 }
 
 pub fn plan_quality_attempt_message(

@@ -135,6 +135,10 @@ async fn quality_loop_exhaustion_ships_highest_scoring_draft() {
         vec![],
         FIRST_DAY,
     );
+    built.generator.set_initial_plan_descriptions(vec![
+        Some("desc-attempt-1".to_string()),
+        Some("desc-attempt-2".to_string()),
+    ]);
     built.generator.set_quality_evaluations(vec![
         Ok(PlanQualityEvaluation {
             attempt: 0,
@@ -166,6 +170,15 @@ async fn quality_loop_exhaustion_ships_highest_scoring_draft() {
     assert_eq!(built.generator.initial_plan_call_count(), 2);
     assert_eq!(result.shipped_quality.as_ref().map(|e| e.score), Some(6));
     assert_eq!(result.snapshot.start_date, "2026-04-20");
+    let stored = built.operations.stored_operation();
+    assert_eq!(
+        stored.best_quality_plan_description.as_deref(),
+        Some("desc-attempt-2")
+    );
+    assert_eq!(
+        stored.raw_plan_description.as_deref(),
+        Some("desc-attempt-2")
+    );
     assert_eq!(
         result.quality_progress_messages,
         vec![
@@ -181,10 +194,7 @@ async fn quality_loop_exhaustion_ships_highest_scoring_draft() {
 async fn quality_loop_retries_once_when_replan_omits_adjustment_rules() {
     let call_log = new_call_log();
     let replan_without_rules = valid_plan_window("2026-04-20");
-    let replan_with_rules = format!(
-        "{}\n\nAdjustment rules\nFatigue correction when TSB is low",
-        valid_plan_window("2026-04-21")
-    );
+    let replan_with_rules = valid_plan_window("2026-04-21");
     let built = build_service(
         call_log.clone(),
         vec![Ok(workout_recap())],
@@ -196,6 +206,14 @@ async fn quality_loop_retries_once_when_replan_omits_adjustment_rules() {
         vec![],
         FIRST_DAY,
     );
+    built.generator.set_initial_plan_descriptions(vec![
+        None,
+        Some("session notes without checklist".to_string()),
+        Some(
+            "Adjustment rules\nFatigue correction when TSB is low\n2026-04-21 Endurance — demand: base; execution: steady; progression: race"
+                .to_string(),
+        ),
+    ]);
     built.generator.set_quality_evaluations(vec![
         Ok(PlanQualityEvaluation {
             attempt: 0,
@@ -233,4 +251,5 @@ async fn quality_loop_retries_once_when_replan_omits_adjustment_rules() {
         feedback.contains("CHECKLIST NOT MET") && feedback.contains("Adjustment rules")
     }));
     assert_eq!(result.shipped_quality.as_ref().map(|e| e.score), Some(8));
+    assert_eq!(result.snapshot.start_date, "2026-04-21");
 }

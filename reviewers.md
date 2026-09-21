@@ -11,6 +11,11 @@ Scan newest entries first. Focus on entries matching the current task area or fa
 
 ## Entries
 
+### 2026-09-21 | user (thermonuclear residual) | quality-loop attempt args, checklist home, finalize timestamps
+- **Attempt arg sprawl**: `run_one_quality_evaluation_attempt` still exceeded clippy `too_many_arguments` after a partial nest. *Fix*: pass `&mut QualityAttemptLoopCtx` plus `attempt` / `availability_summary`; drop all quality allows. *Prevention*: after nesting a loop ctx, confirm every helper takes the ctx (not a re-exploded arg list) under `clippy -D warnings`.
+- **Adjustment rules hitchhiked on plan text**: checklist scanned rendered plan days, so heading landed on the last day. *Fix*: gate `draft_addresses_quality_checklist` on `description` only; guidance + feedback copy say so; quality_loop retry uses `set_initial_plan_descriptions`. *Prevention*: coach commentary gates belong on the envelope field the OUTPUT_GRAMMAR keeps free for prose.
+- **Finalize raw align skipped timestamps**: bare field writes left `updated_at` stale. *Fix*: `with_shipped_best_raw` via `clone_pending_update`. *Prevention*: any operation field mutation that should count as progress goes through a transition helper.
+
 ### 2026-05-31 | user | LLM coach prompts lack authoritative conversation timing
 - Outbound LLM prompts carried only weak date context; transcripts omitted per-message timestamps. Model could guess a same-day reply was sent the next day.
 - Added RFC3339 timing helpers + `conversation_timing` block in `volatile_context` across all four LLM surfaces. Prefixed transcript messages with `sent_at=...`. Added `created_at_epoch_seconds` to `TrainingPlanConversationMessage`. Refactored `AthleteSummaryLlmGenerator` to use injected `Clock`.
