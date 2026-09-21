@@ -50,8 +50,8 @@ where
             .load_plan_target_event_requirement(ctx.identity, ctx.operation)
             .await?;
         demote_gated_best_to_fallback(
-            &mut ctx.best,
-            &mut ctx.fallback,
+            ctx.best,
+            ctx.fallback,
             target_event.as_ref(),
             &ctx.operation.operation_key,
         );
