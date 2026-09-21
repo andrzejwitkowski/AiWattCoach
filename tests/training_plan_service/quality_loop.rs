@@ -273,12 +273,14 @@ async fn quality_loop_keeps_best_when_both_replans_omit_adjustment_rules() {
         Some("session notes without checklist".to_string()),
         Some("still no checklist section".to_string()),
     ]);
-    built.generator.set_quality_evaluations(vec![Ok(PlanQualityEvaluation {
-        attempt: 0,
-        score: 5,
-        critique: "No fatigue correction.".to_string(),
-        raise_to_next: "Add explicit fatigue correction for 17.09 and 19.09.".to_string(),
-    })]);
+    built
+        .generator
+        .set_quality_evaluations(vec![Ok(PlanQualityEvaluation {
+            attempt: 0,
+            score: 5,
+            critique: "No fatigue correction.".to_string(),
+            raise_to_next: "Add explicit fatigue correction for 17.09 and 19.09.".to_string(),
+        })]);
     let service =
         built
             .service
