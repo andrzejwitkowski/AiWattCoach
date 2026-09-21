@@ -1,11 +1,16 @@
 mod correction;
 mod ctx;
+mod discipline_requirement;
 pub(crate) mod parsing;
 mod quality;
 mod quality_evidence;
 mod scheduler;
 mod snapshot;
 mod structural;
+
+pub use discipline_requirement::{
+    missing_discipline_requirement, select_target_event_requirement, TargetEventRequirement,
+};
 
 use chrono::{TimeZone, Utc};
 

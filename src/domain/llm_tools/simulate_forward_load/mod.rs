@@ -14,6 +14,8 @@ mod estimates;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use estimates::duration_from_distance_meters;
+
 use estimates::{
     combine_estimates, format_date, input_day_estimate, parse_date, round_to_2,
     select_estimates_for_day, snapshot_baseline, update_load, Baseline, LoadSources, TssSource,
@@ -27,6 +29,21 @@ const MAX_FORECAST_DAYS: u32 = 45;
 struct SimulateForwardLoadArgs {
     dated_workout_text: Option<String>,
     horizon_days: Option<u32>,
+    completed_race: Option<CompletedRaceArg>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum CompletedRaceSource {
+    Measured,
+    Estimated,
+}
+
+#[derive(Deserialize)]
+struct CompletedRaceArg {
+    date: String,
+    tss: f64,
+    source: CompletedRaceSource,
 }
 
 #[derive(Serialize)]
@@ -53,6 +70,8 @@ struct BaselineAppliedLoad {
     date: String,
     tss: f64,
     tss_source: TssSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<CompletedRaceSource>,
 }
 
 #[derive(Serialize)]
@@ -80,7 +99,7 @@ impl LlmTool for SimulateForwardLoad {
         LlmToolDefinition {
             name: self.name().to_string(),
             description: format!(
-                "Simulate forward training load from today for a configurable horizon (default {DEFAULT_FORECAST_DAYS} days, max {MAX_FORECAST_DAYS}). Set horizon_days to reach the athlete's next A-priority event. The tool automatically includes already-scheduled workouts (upcoming days), projected workouts, and future events (races). Only provide dated_workout_text for days you want to override or add new workouts. Dated load on today or earlier that names a race is applied to the baseline (completed race load); other out-of-window dated entries are noted, not silently dropped.\n\nEach day includes tss_source (planned|projected|default|estimated|none). Race/event load with measured TSS uses planned; when only duration/distance is known, TSS is estimated (hours×IF²×100) and labeled estimated; when neither exists, tss_source is none and notes explain zero race load.\n\nFormat: Each day starts with a YYYY-MM-DD header on its own line, followed by workout steps or 'Rest Day'. You can use section titles, ramps, repeat headers (Nx), and power targets in %FTP or watts.\n\nExample 1 - Simple:\n2026-05-05\n- 90m 65%\n2026-05-06\nRest Day: recovery\n\nExample 2 - Complex interval session:\n2026-05-07\nWarmup\n- 15m ramp 55-75%\n\nMain Set\n4x\n- 2m 105%\n- 1m 65%\n\n3x\n- 3m 95%\n- 2m 65%\n\nCooldown\n- 10m 55%"
+                "Simulate forward training load from today for a configurable horizon (default {DEFAULT_FORECAST_DAYS} days, max {MAX_FORECAST_DAYS}). Set horizon_days to reach the athlete's next A-priority event. The tool automatically includes already-scheduled workouts (upcoming days), projected workouts, and future events (races). Only provide dated_workout_text for days you want to override or add new workouts inside the projection window.\n\nPass a finished race as completed_race with the recap TSS (measured or estimated). Do not encode completed races in dated_workout_text — that path is for draft overrides only and rejects invalid workout syntax.\n\nEach day includes tss_source (planned|projected|default|estimated|none). Race/event load with measured TSS uses planned; when only duration/distance is known, TSS is estimated (hours×IF²×100) and labeled estimated; when neither exists, tss_source is none and notes explain zero race load.\n\nFormat: Each day starts with a YYYY-MM-DD header on its own line, followed by workout steps or 'Rest Day'. You can use section titles, ramps, repeat headers (Nx), and power targets in %FTP or watts.\n\nExample 1 - Simple:\n2026-05-05\n- 90m 65%\n2026-05-06\nRest Day: recovery\n\nExample 2 - Complex interval session:\n2026-05-07\nWarmup\n- 15m ramp 55-75%\n\nMain Set\n4x\n- 2m 105%\n- 1m 65%\n\n3x\n- 3m 95%\n- 2m 65%\n\nCooldown\n- 10m 55%"
             ),
             input_schema_json: json!({
                 "type": "object",
@@ -88,13 +107,34 @@ impl LlmTool for SimulateForwardLoad {
                 "properties": {
                     "dated_workout_text": {
                         "type": "string",
-                        "description": "Optional. Dated workout text for days you want to override or add, in YYYY-MM-DD plus workout-builder format. If omitted, the simulation uses only existing scheduled workouts, projections, and events from context. A today/past race-named day updates baseline load; other dates outside 1..horizon are noted as ignored."
+                        "description": "Optional. Dated workout text for in-window draft overrides or additions, in YYYY-MM-DD plus workout-builder format. If omitted, the simulation uses only existing scheduled workouts, projections, and events from context. Dates outside 1..horizon are noted as ignored. Do not use this for completed races — use completed_race."
                     },
                     "horizon_days": {
                         "type": "integer",
                         "minimum": 1,
                         "maximum": MAX_FORECAST_DAYS,
                         "description": "Days of forward projection; set this to reach the athlete's next A-priority event. Defaults to 14; clamped to 1..=45."
+                    },
+                    "completed_race": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "description": "Optional. Finished race load applied to the baseline regardless of whether its date falls in 1..horizon. Use the recap TSS; source is measured when the file reports TSS, otherwise estimated.",
+                        "required": ["date", "tss", "source"],
+                        "properties": {
+                            "date": {
+                                "type": "string",
+                                "description": "Race date YYYY-MM-DD (today, past, or the day before the window)."
+                            },
+                            "tss": {
+                                "type": "number",
+                                "description": "Training stress score from the workout recap."
+                            },
+                            "source": {
+                                "type": "string",
+                                "enum": ["measured", "estimated"],
+                                "description": "measured when TSS comes from the completed file; estimated when derived."
+                            }
+                        }
                     }
                 }
             })
@@ -120,19 +160,34 @@ impl LlmTool for SimulateForwardLoad {
 
     fn preview_arguments(&self, arguments_json: &str) -> Option<String> {
         let args: SimulateForwardLoadArgs = serde_json::from_str(arguments_json).ok()?;
-        let text = args.dated_workout_text.as_deref()?;
-        let parsed = parse_planned_workout_days(text).ok()?;
-        let first = parsed.days.first()?.date.clone();
-        let last = parsed.days.last()?.date.clone();
-        let count = parsed.days.len();
-        let day_word = if count == 1 { "day" } else { "days" };
-        let horizon = args
-            .horizon_days
-            .map(|days| format!(", horizon_days={days}"))
-            .unwrap_or_default();
-        Some(format!(
-            "{count} dated {day_word} from {first} to {last}{horizon}"
-        ))
+        let mut parts = Vec::new();
+        if let Some(race) = args.completed_race.as_ref() {
+            parts.push(format!(
+                "completed_race {} tss={}",
+                race.date,
+                round_to_2(race.tss)
+            ));
+        }
+        if let Some(text) = args.dated_workout_text.as_deref() {
+            if let Ok(parsed) = parse_planned_workout_days(text) {
+                if let (Some(first), Some(last)) = (parsed.days.first(), parsed.days.last()) {
+                    let count = parsed.days.len();
+                    let day_word = if count == 1 { "day" } else { "days" };
+                    parts.push(format!(
+                        "{count} dated {day_word} from {} to {}",
+                        first.date, last.date
+                    ));
+                }
+            }
+        }
+        if let Some(days) = args.horizon_days {
+            parts.push(format!("horizon_days={days}"));
+        }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join(", "))
+        }
     }
 }
 
@@ -147,6 +202,8 @@ fn simulate_forward_load(arguments_json: &str, context: &ToolExecutionContext) -
         }
     };
 
+    let has_completed_race = args.completed_race.is_some();
+    let mut notes = Vec::new();
     let input_days = match args.dated_workout_text.as_deref() {
         None => Vec::new(),
         Some(text) if text.trim().is_empty() => {
@@ -158,6 +215,12 @@ fn simulate_forward_load(arguments_json: &str, context: &ToolExecutionContext) -
         }
         Some(text) => match parse_planned_workout_days(text) {
             Ok(parsed) => parsed.days,
+            Err(error) if has_completed_race => {
+                notes.push(format!(
+                    "dated_workout_text ignored (invalid syntax with completed_race present): {error}"
+                ));
+                Vec::new()
+            }
             Err(error) => {
                 return json!({
                     "error": format!("invalid dated_workout_text: {error}")
@@ -180,19 +243,34 @@ fn simulate_forward_load(arguments_json: &str, context: &ToolExecutionContext) -
         .clamp(1, MAX_FORECAST_DAYS);
     let ftp_watts = context.training_context.history.ftp_current;
     let baseline = snapshot_baseline(&context.training_context);
-    let mut notes = Vec::new();
+    let (starting, completed_applied) = match args.completed_race.as_ref() {
+        Some(race) => {
+            let applied = apply_completed_race_load(race, baseline);
+            (
+                Baseline {
+                    ctl: applied.ctl,
+                    atl: applied.atl,
+                    tsb: applied.ctl - applied.atl,
+                },
+                applied.applied,
+            )
+        }
+        None => (baseline, None),
+    };
     let OutOfWindowLoad {
         mut ctl,
         mut atl,
-        applied: baseline_applied_load,
+        applied: dated_applied,
     } = apply_out_of_window_input_load(
         &input_days,
         today,
         horizon,
         ftp_watts,
-        baseline,
+        starting,
         &mut notes,
+        completed_applied.is_some(),
     );
+    let baseline_applied_load = completed_applied.or(dated_applied);
 
     let baseline_out = ForwardLoadBaseline {
         today: context.today.clone(),
@@ -278,6 +356,25 @@ struct OutOfWindowLoad {
     applied: Option<BaselineAppliedLoad>,
 }
 
+fn apply_completed_race_load(race: &CompletedRaceArg, baseline: Baseline) -> OutOfWindowLoad {
+    let ctl = update_load(baseline.ctl, race.tss, 42.0);
+    let atl = update_load(baseline.atl, race.tss, 7.0);
+    let tss_source = match race.source {
+        CompletedRaceSource::Measured => TssSource::Planned,
+        CompletedRaceSource::Estimated => TssSource::Estimated,
+    };
+    OutOfWindowLoad {
+        ctl,
+        atl,
+        applied: Some(BaselineAppliedLoad {
+            date: race.date.clone(),
+            tss: round_to_2(race.tss),
+            tss_source,
+            source: Some(race.source),
+        }),
+    }
+}
+
 fn apply_out_of_window_input_load(
     input_days: &[PlannedWorkoutDay],
     today: NaiveDate,
@@ -285,6 +382,7 @@ fn apply_out_of_window_input_load(
     ftp_watts: Option<i32>,
     baseline: Baseline,
     notes: &mut Vec<String>,
+    skip_dated_race_apply: bool,
 ) -> OutOfWindowLoad {
     let last_projected = today + Duration::days(i64::from(horizon));
     let mut ctl = baseline.ctl;
@@ -304,7 +402,8 @@ fn apply_out_of_window_input_load(
         }
 
         let title = input_day_title(day);
-        if applied.is_none()
+        if !skip_dated_race_apply
+            && applied.is_none()
             && day_date <= today
             && !day.is_rest_day()
             && is_baseline_race_override_name(&title)
@@ -323,6 +422,7 @@ fn apply_out_of_window_input_load(
                     date: day.date.clone(),
                     tss: round_to_2(estimate.tss),
                     tss_source,
+                    source: None,
                 });
                 continue;
             }

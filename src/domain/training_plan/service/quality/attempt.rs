@@ -10,7 +10,7 @@ use crate::domain::{
     calendar_view::CalendarEntryViewRefreshPort,
     identity::Clock,
     training_plan::{
-        TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
+        TargetEventRequirement, TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
         TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
         TrainingPlanWorkoutSummaryPort,
     },
@@ -45,6 +45,9 @@ where
         else {
             return Ok(false);
         };
+        let target_event = self
+            .load_plan_target_event_requirement(ctx.identity, ctx.operation)
+            .await?;
 
         let mut accepted = false;
         let start_attempt = ctx.limits.start_attempt;
@@ -74,6 +77,7 @@ where
                             ctx.operation,
                             &feedback,
                             &raise_to_next,
+                            target_event.as_ref(),
                         )
                         .await
                     {
@@ -113,6 +117,28 @@ where
                     operation_key = %operation.operation_key,
                     error = %error,
                     "plan quality availability summary failed; shipping best available draft"
+                );
+                Ok(None)
+            }
+        }
+    }
+
+    async fn load_plan_target_event_requirement(
+        &self,
+        identity: &super::super::ctx::GenerationIdentity<'_>,
+        operation: &crate::domain::training_plan::TrainingPlanGenerationOperation,
+    ) -> Result<Option<TargetEventRequirement>, TrainingPlanError> {
+        match self
+            .generator
+            .plan_target_event_requirement(identity.user_id, identity.workout_id)
+            .await
+        {
+            Ok(target) => Ok(target),
+            Err(error) => {
+                tracing::warn!(
+                    operation_key = %operation.operation_key,
+                    error = %error,
+                    "plan target event requirement lookup failed; skipping discipline gate"
                 );
                 Ok(None)
             }

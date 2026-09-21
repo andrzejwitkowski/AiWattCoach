@@ -29,6 +29,33 @@ pub(crate) fn valid_plan_window(start_date: &str) -> String {
         .join("\n\n")
 }
 
+pub(crate) fn plan_window_with_short_tt_blocks(start_date: &str) -> String {
+    plan_window_with_quality_day(
+        start_date,
+        "Time-Trial Durability\nMain Set 2x\n- 2m 105-110%\n- 3m 88-92%",
+    )
+}
+
+pub(crate) fn plan_window_with_continuous_tt(start_date: &str) -> String {
+    plan_window_with_quality_day(start_date, "Time-Trial Threshold\n- 15m 92%")
+}
+
+fn plan_window_with_quality_day(start_date: &str, quality_body: &str) -> String {
+    (0..14)
+        .map(|offset| {
+            let date = add_days(start_date, offset);
+            if offset == 1 {
+                format!("{date}\n{quality_body}")
+            } else if offset % 4 == 0 {
+                format!("{date}\nRest Day")
+            } else {
+                format!("{date}\nEndurance\n- 45m 65%")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
 /// Compact workout-builder text matching `render_plan_window` (single newlines between days).
 pub(crate) fn rendered_valid_plan_window(start_date: &str) -> String {
     valid_plan_window(start_date).replace("\n\n", "\n")

@@ -662,6 +662,7 @@ fn simulate_forward_load_applies_today_race_load_to_baseline() {
         .unwrap_or_else(|| panic!("missing baseline_applied_load in {response}"));
     assert_eq!(applied["date"], "2026-05-04");
     assert_eq!(applied["tss_source"], "estimated");
+    assert!(applied.get("source").is_none());
     let applied_tss =
         json_f64(&applied["tss"]).unwrap_or_else(|| panic!("tss not numeric in {response}"));
     assert!(applied_tss > 0.0);
@@ -677,6 +678,68 @@ fn simulate_forward_load_applies_today_race_load_to_baseline() {
         note.as_str()
             .is_some_and(|text| text.contains("2026-05-04: dated workout ignored"))
     }));
+}
+
+#[test]
+fn simulate_forward_load_applies_completed_race_on_yesterday() {
+    let ctx = sample_context();
+    let raw_ctl = ctx.training_context.history.ctl.unwrap();
+    let raw_atl = ctx.training_context.history.atl.unwrap();
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(
+        r#"{"completed_race":{"date":"2026-05-03","tss":107,"source":"measured"}}"#,
+        &ctx,
+    ));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    assert!(
+        parsed.get("error").is_none(),
+        "unexpected error response: {response}"
+    );
+    let applied = parsed
+        .get("baseline_applied_load")
+        .and_then(|v| v.as_object())
+        .unwrap_or_else(|| panic!("missing baseline_applied_load in {response}"));
+    assert_eq!(applied["date"], "2026-05-03");
+    assert_eq!(applied["tss"], 107.0);
+    assert_eq!(applied["source"], "measured");
+    assert_eq!(applied["tss_source"], "planned");
+    let baseline = &parsed["baseline"];
+    let num = |key: &str| {
+        json_f64(&baseline[key]).unwrap_or_else(|| panic!("{key} not numeric in {response}"))
+    };
+    assert_ne!(num("ctl"), raw_ctl);
+    assert_ne!(num("atl"), raw_atl);
+    assert!((num("tsb") - (num("ctl") - num("atl"))).abs() < 0.01);
+    assert!(parsed["days"]
+        .as_array()
+        .is_some_and(|days| !days.is_empty()));
+}
+
+#[test]
+fn simulate_forward_load_completed_race_survives_invalid_dated_workout_text() {
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(
+        r#"{"dated_workout_text":"not-a-date\n- 60m 65%","completed_race":{"date":"2026-05-03","tss":107,"source":"measured"}}"#,
+        &sample_context(),
+    ));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    assert!(
+        parsed.get("error").is_none(),
+        "unexpected error response: {response}"
+    );
+    let applied = parsed
+        .get("baseline_applied_load")
+        .expect("baseline_applied_load");
+    assert_eq!(applied["tss"], 107.0);
+    assert_eq!(applied["source"], "measured");
+    let notes = parsed["notes"].as_array().expect("notes");
+    assert!(notes.iter().any(|note| {
+        note.as_str()
+            .is_some_and(|text| text.contains("dated_workout_text ignored"))
+    }));
+    assert!(parsed["days"]
+        .as_array()
+        .is_some_and(|days| days.len() == 14));
 }
 
 #[test]

@@ -11,6 +11,11 @@ Scan newest entries first. Focus on entries matching the current task area or fa
 
 ## Entries
 
+### 2026-09-21 | user | Fix 10 completed-race load + discipline gate
+- Continuous TT drafts scored 7 because race load only entered the audit when the model lucked into valid dated race syntax; short-repeat drafts scored 8 and shipped. Checklist gate only inspected description prose, never plan steps.
+- *Fix:* first-class `completed_race {date,tss,source}` on `simulate_forward_load` (Banister baseline apply; soft-fail invalid dated when present); evidence `baseline_with_completed_race_load` + `source=`; pure `missing_discipline_requirement` gate on parsed plan steps with one REQUIREMENT NOT MET retry, non-shippable on second fail.
+- **Prevention:** finished race TSS is a tool arg, not dated workout syntax. Discipline gates inspect `TrainingPlanDay` steps, not commentary. Post-deploy: SEQUENCE vs `7,8,7,7,7,8,7,8,7,8` and continuous ≥13m @88–96% on shipped plan.
+
 ### 2026-09-21 | user | Fix 9 timetrial must not inherit repeatability-first
 - App knew `rc.disc=timetrial` and event duration (~22 min / IF 0.90) but still shipped 2–4m stochastic intervals because ops only said “Match session type to disc” and BASE prioritized repeatability over steady-state.
 - *Fix:* five-way disc→session map in `RACING_STRATEGIST_OPERATIONAL_GUIDELINES` (TT progression `2x10→3x8→1x15-20` / `Time-Trial Threshold`, ±25% of `simulate_forward_load` race duration / IF from pri — no estimator formulas in prose); BASE precedence: when `rc.disc` or `def_disc` is `timetrial` or estimated duration under ~30 min, sustained near-threshold wins. Ops block is generator-only — do not assume evaluator loads literature.

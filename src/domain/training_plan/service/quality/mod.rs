@@ -15,6 +15,7 @@ use crate::domain::{
     calendar_view::CalendarEntryViewRefreshPort,
     identity::Clock,
     training_plan::{
+        missing_discipline_requirement, TargetEventRequirement,
         TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
         TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
         TrainingPlanWorkoutSummaryPort,
@@ -282,6 +283,7 @@ where
         operation: &mut TrainingPlanGenerationOperation,
         quality_feedback: &str,
         raise_to_next: &str,
+        target_event: Option<&TargetEventRequirement>,
     ) -> Result<QualityReplanDraft, TrainingPlanError> {
         let GenerationPlanning {
             planning_context,
@@ -296,34 +298,28 @@ where
                 quality_feedback,
             )
             .await?;
-        if draft_addresses_quality_checklist(replan.draft.description.as_deref(), raise_to_next) {
-            return Ok(replan);
+        if let Some(gap) = replan_gate_gap(&replan, raise_to_next, target_event) {
+            tracing::warn!(
+                operation_key = %operation.operation_key,
+                gap = %gap,
+                "plan quality replan failed structural gate; retrying once with sharper feedback"
+            );
+            let sharper = format!("{gap}\n{quality_feedback}");
+            let retry = self
+                .generate_quality_replan_draft(
+                    identity,
+                    planning_context,
+                    planning_context_loaded,
+                    operation,
+                    &sharper,
+                )
+                .await?;
+            if let Some(retry_gap) = replan_gate_gap(&retry, raise_to_next, target_event) {
+                return Err(TrainingPlanError::Validation(retry_gap));
+            }
+            return Ok(retry);
         }
-
-        tracing::warn!(
-            operation_key = %operation.operation_key,
-            raise_to_next,
-            "plan quality replan omitted Adjustment rules in description; retrying once with sharper feedback"
-        );
-        let sharper = format!(
-            "CHECKLIST NOT MET: draft description omitted required \"Adjustment rules\" section.\n{quality_feedback}"
-        );
-        let retry = self
-            .generate_quality_replan_draft(
-                identity,
-                planning_context,
-                planning_context_loaded,
-                operation,
-                &sharper,
-            )
-            .await?;
-        if draft_addresses_quality_checklist(retry.draft.description.as_deref(), raise_to_next) {
-            Ok(retry)
-        } else {
-            Err(TrainingPlanError::Validation(
-                "quality replan description omitted required Adjustment rules".to_string(),
-            ))
-        }
+        Ok(replan)
     }
 
     async fn generate_quality_replan_draft(
@@ -447,4 +443,20 @@ pub(super) fn emit_progress(
         progress.on_quality_progress(user_id, workout_id, message.clone());
     }
     messages.push(message);
+}
+
+fn replan_gate_gap(
+    replan: &QualityReplanDraft,
+    raise_to_next: &str,
+    target_event: Option<&TargetEventRequirement>,
+) -> Option<String> {
+    if !draft_addresses_quality_checklist(replan.draft.description.as_deref(), raise_to_next) {
+        return Some(
+            "CHECKLIST NOT MET: draft description omitted required \"Adjustment rules\" section."
+                .to_string(),
+        );
+    }
+    let target = target_event?;
+    missing_discipline_requirement(&replan.snapshot.days, target)
+        .map(|gap| format!("REQUIREMENT NOT MET: {gap}"))
 }

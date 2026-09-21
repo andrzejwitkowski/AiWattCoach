@@ -240,6 +240,11 @@ fn format_forward_load_race_bit(
         let date = applied.get("date").and_then(|d| d.as_str()).unwrap_or("?");
         let tss = json_num(applied.get("tss"));
         let tsb = json_num(baseline.and_then(|b| b.get("tsb")));
+        if let Some(source) = applied.get("source").and_then(|s| s.as_str()) {
+            return format!(
+                "race_day_tsb={tsb}@{date} (race_day_tsb_source=baseline_with_completed_race_load, race_tss={tss}, source={source})"
+            );
+        }
         return format!(
             "race_day_tsb={tsb}@{date} (race_day_tsb_source=baseline_with_estimated_race_load, race_tss={tss})"
         );
@@ -676,6 +681,34 @@ mod tests {
         ));
         assert!(!load.contains("baseline_pre_window"));
         assert!(!load.contains("race load not included"));
+    }
+
+    #[test]
+    fn compact_uses_completed_race_source_measured() {
+        let (assistant, tool) = tool_pair(
+            "1",
+            "simulate_forward_load",
+            r#"{"baseline":{"today":"2026-09-20","ctl":32.1,"atl":39.0,"tsb":-6.9},"baseline_applied_load":{"date":"2026-09-20","tss":107,"tss_source":"planned","source":"measured"},"days":[{"date":"2026-09-21","ctl":31.0,"atl":35.0,"tsb":-4.0,"source":"input","planned_tss":40,"tss_source":"planned"}]}"#,
+        );
+        let evidence = evidence_from_transcript(&[assistant, tool]);
+        let load = evidence.load.as_deref().unwrap();
+        assert!(load.contains(
+            "race_day_tsb=-6.9@2026-09-20 (race_day_tsb_source=baseline_with_completed_race_load, race_tss=107, source=measured)"
+        ));
+    }
+
+    #[test]
+    fn compact_uses_completed_race_source_estimated() {
+        let (assistant, tool) = tool_pair(
+            "1",
+            "simulate_forward_load",
+            r#"{"baseline":{"today":"2026-09-20","ctl":32.1,"atl":39.0,"tsb":-6.9},"baseline_applied_load":{"date":"2026-09-20","tss":98.4,"tss_source":"estimated","source":"estimated"},"days":[{"date":"2026-09-21","ctl":31.0,"atl":35.0,"tsb":-4.0,"source":"input","planned_tss":40,"tss_source":"planned"}]}"#,
+        );
+        let evidence = evidence_from_transcript(&[assistant, tool]);
+        let load = evidence.load.as_deref().unwrap();
+        assert!(load.contains(
+            "race_day_tsb=-6.9@2026-09-20 (race_day_tsb_source=baseline_with_completed_race_load, race_tss=98.4, source=estimated)"
+        ));
     }
 
     #[test]

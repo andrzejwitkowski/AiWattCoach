@@ -51,6 +51,7 @@ pub use race_projection_cleanup::{
     RaceProjectionCleanupService,
 };
 pub use service::{
+    missing_discipline_requirement, select_target_event_requirement,
     training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
-    TrainingPlanGenerationService, TrainingPlanUseCases,
+    TargetEventRequirement, TrainingPlanGenerationService, TrainingPlanUseCases,
 };

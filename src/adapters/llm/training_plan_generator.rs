@@ -250,6 +250,32 @@ where
             ))
         })
     }
+
+    fn plan_target_event_requirement(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> BoxFuture<
+        Result<Option<crate::domain::training_plan::TargetEventRequirement>, TrainingPlanError>,
+    > {
+        let training_context_builder = self.training_context_builder.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+
+        Box::pin(async move {
+            let context = training_context_builder
+                .build(&user_id, &workout_id)
+                .await
+                .map_err(map_llm_error)?;
+            let today = training_plan_tool_context_today(&context.context);
+            Ok(
+                crate::domain::training_plan::select_target_event_requirement(
+                    &context.context.races,
+                    &today,
+                ),
+            )
+        })
+    }
 }
 
 impl<Time> TrainingPlanLlmGenerator<Time>

@@ -306,3 +306,79 @@ async fn quality_loop_keeps_best_when_both_replans_omit_adjustment_rules() {
         Some("initial session notes")
     );
 }
+
+#[tokio::test]
+async fn quality_loop_keeps_best_when_replan_fails_discipline_requirement() {
+    let call_log = new_call_log();
+    let built = build_service(
+        call_log.clone(),
+        vec![Ok(workout_recap())],
+        vec![
+            Ok(plan_window_with_continuous_tt(FIRST_DAY)),
+            Ok(plan_window_with_short_tt_blocks("2026-04-20")),
+            Ok(plan_window_with_short_tt_blocks("2026-04-21")),
+        ],
+        vec![],
+        FIRST_DAY,
+    );
+    built.generator.set_target_event_requirement(Some(
+        aiwattcoach::domain::training_plan::TargetEventRequirement {
+            discipline: "timetrial".to_string(),
+            date: "2026-10-25".to_string(),
+            estimated_duration_seconds: 1_320,
+            priority: "A".to_string(),
+        },
+    ));
+    built.generator.set_initial_plan_descriptions(vec![
+        Some(
+            "2026-04-07 Time-Trial Threshold — demand: TT; execution: sustained; progression: race"
+                .to_string(),
+        ),
+        Some(
+            "Adjustment rules\nKeep short repeats\n2026-04-21 Durability — demand: TT; execution: short; progression: race"
+                .to_string(),
+        ),
+        Some(
+            "Adjustment rules\nStill short repeats\n2026-04-22 Durability — demand: TT; execution: short; progression: race"
+                .to_string(),
+        ),
+    ]);
+    built
+        .generator
+        .set_quality_evaluations(vec![Ok(PlanQualityEvaluation {
+            attempt: 0,
+            score: 5,
+            critique: "Needs sharper TT specificity.".to_string(),
+            raise_to_next: "Prefer continuous near-threshold work.".to_string(),
+        })]);
+    let service =
+        built
+            .service
+            .with_plan_quality_evaluator_config(Arc::new(FixedPlanQualityConfig {
+                max_loops: 5,
+                pass_score: 7,
+            }));
+
+    let result = service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    assert_eq!(built.generator.initial_plan_call_count(), 3);
+    let feedbacks = built.generator.quality_feedbacks();
+    assert!(feedbacks.iter().any(|feedback| {
+        feedback
+            .as_ref()
+            .is_some_and(|text| text.contains("REQUIREMENT NOT MET"))
+    }));
+    assert_eq!(result.shipped_quality.as_ref().map(|e| e.score), Some(5));
+    assert_eq!(result.snapshot.start_date, FIRST_DAY);
+    assert!(result.snapshot.days.iter().any(|day| {
+        day.workout.as_ref().is_some_and(|workout| {
+            workout
+                .lines
+                .iter()
+                .any(|line| line.step().is_some_and(|step| step.duration_seconds >= 900))
+        })
+    }));
+}

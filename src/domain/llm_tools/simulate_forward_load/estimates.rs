@@ -523,7 +523,7 @@ fn estimate_tss(duration_seconds: i32, intensity_factor: f64) -> f64 {
     (duration_seconds as f64 / 3600.0) * intensity_factor * intensity_factor * 100.0
 }
 
-fn duration_from_distance_meters(meters: i32) -> Option<i32> {
+pub(crate) fn duration_from_distance_meters(meters: i32) -> Option<i32> {
     (meters > 0).then(|| (f64::from(meters) * 0.12).round() as i32)
 }
 
