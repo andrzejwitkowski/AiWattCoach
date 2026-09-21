@@ -240,6 +240,9 @@ mod tests {
             assert!(prompt.contains("Treat previously projected planned days (`pd`) as already planned/completed inputs"));
             assert!(prompt.contains("Weekly availability is mandatory and must be respected"));
             assert!(prompt.contains("Seiler 2010"));
+            assert!(prompt.contains(
+                "When rc.disc or def_disc is timetrial, or the target event's estimated duration is under ~30 minutes, the repeatability-first rule does NOT apply"
+            ));
         }
     }
 

@@ -11,6 +11,11 @@ Scan newest entries first. Focus on entries matching the current task area or fa
 
 ## Entries
 
+### 2026-09-21 | user | Fix 9 timetrial must not inherit repeatability-first
+- App knew `rc.disc=timetrial` and event duration (~22 min / IF 0.90) but still shipped 2–4m stochastic intervals because ops only said “Match session type to disc” and BASE prioritized repeatability over steady-state.
+- *Fix:* five-way disc→session map in `RACING_STRATEGIST_OPERATIONAL_GUIDELINES` (TT progression `2x10→3x8→1x15-20` / `Time-Trial Threshold`, ±25% of `simulate_forward_load` race duration / IF from pri — no estimator formulas in prose); BASE precedence: when `rc.disc` or `def_disc` is `timetrial` or estimated duration under ~30 min, sustained near-threshold wins. Ops block is generator-only — do not assume evaluator loads literature.
+- **Prevention:** when a race discipline needs a different session shape, put the map in ops and an override next to any conflicting “prioritize X over Y” BASE sentence; assert all five `RaceDiscipline::as_str()` keys in unit tests; post-deploy replay `i188477359` for ≥15m continuous @90–95% in `best_quality_plan_response`.
+
 ### 2026-09-21 | user | Fix 8 event-aware forward-load horizon + dated-load feedback
 - Planner needed projection through the next A-event and honest notes when dated load sat outside the window; today-dated race text was dropped at offset 0 so evidence could not cite race TSS on baseline.
 - *Fix:* `horizon_days` (default 14, max 45); beyond-horizon A-event / future_event notes; out-of-window ignore notes; today/past race-named input → `baseline_applied_load` + recomputed baseline; evidence prefers `baseline_with_estimated_race_load`.
