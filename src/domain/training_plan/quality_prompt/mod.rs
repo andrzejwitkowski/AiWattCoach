@@ -9,13 +9,14 @@ pub use feedback::{
     PLAN_QUALITY_PASS_SCORE,
 };
 pub(crate) use rubric::truncate_evidence_section;
+pub(crate) use rubric::EVIDENCE_SECTION_MAX_CHARS;
 pub use rubric::{
     assemble_plan_quality_evaluation_request, PlanQualityEvaluationInput, PlanQualityEvidence,
 };
 #[cfg(test)]
 pub(crate) use rubric::{
     format_plan_quality_evidence, plan_quality_evaluator_rubric, COMMENTARY_SECTION_MAX_CHARS,
-    EVIDENCE_BLOCK_MAX_CHARS, EVIDENCE_SECTION_MAX_CHARS,
+    EVIDENCE_BLOCK_MAX_CHARS,
 };
 
 #[cfg(test)]

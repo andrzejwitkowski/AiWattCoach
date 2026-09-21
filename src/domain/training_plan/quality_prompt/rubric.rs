@@ -27,10 +27,10 @@ The commentary is a claim, not evidence. Credit specificity only where a session
 \n\
 In raise_to_next, state the single highest-leverage gap as one imperative sentence naming the concrete change that would move the draft up one band (actionable; do not restate the critique).";
 
-pub(crate) const EVIDENCE_SECTION_MAX_CHARS: usize = 700;
-pub(crate) const EVIDENCE_BLOCK_MAX_CHARS: usize = 2000;
+pub(crate) const EVIDENCE_SECTION_MAX_CHARS: usize = 1400;
+pub(crate) const EVIDENCE_BLOCK_MAX_CHARS: usize = 3200;
 pub(crate) const COMMENTARY_SECTION_MAX_CHARS: usize = 1200;
-const EVIDENCE_BLOCK_LABEL_OVERHEAD: usize = 120;
+const EVIDENCE_BLOCK_LABEL_OVERHEAD: usize = 160;
 const COMMENTARY_TRUNCATION_MARKER: &str = "…[truncated]";
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

@@ -131,6 +131,7 @@
 - Do not run multiple heavy verification commands in parallel on this machine.
 - **Plan quality 9–10 plumbing:** session purpose/execution lives in `description`, not `plan` (grammar bans cues). Always pass `draft_plan_description` with the draft text into the evaluator, keep them in lockstep on replan, and judge specificity from the commentary section with a claim-vs-artifact guard.
 - **Quality-loop residual debt:** nest attempt/finalize into ctx structs so helpers stay under clippy’s arg limit (pass `&mut QualityAttemptLoopCtx`, do not re-explode); put raise_to_next “Adjustment rules” only in `description`; ship best via `with_shipped_best_raw` so `updated_at` moves.
+- **Forward-load evidence must carry what the tool returned:** `compact_forward_load` needs `baseline(today)`, day-by-day TSB (middle-trim only), and race TSS provenance. Race on `baseline.today` never appears in `days[]` (tool simulates today+1..+14) — emit `race_day_tsb_source=baseline_pre_window` when today is outside the series. Raise evidence caps when the compact string grows.
 - **Post-deploy plan-quality acceptance:** after shipping commentary plumbing, run one real generation then `db.training_plan_generation_operations.aggregate([{$unwind:"$quality_evaluations"},{$group:{_id:"$quality_evaluations.score",n:{$sum:1}}},{$sort:{_id:1}}])`. Expect ≥1 score ≥9. If not, specificity critiques must quote the commentary section. Compare score sequences on the newest 3 operations vs pre-fix (`6,7` / `7,7,8,7,...`).
 
 ### Git and PR workflow

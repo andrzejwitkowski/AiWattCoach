@@ -11,6 +11,11 @@ Scan newest entries first. Focus on entries matching the current task area or fa
 
 ## Entries
 
+### 2026-09-21 | user | forward-load evidence dropped race-day TSB / day series / race TSS
+- Compactor printed `race_day_tsb=n/a` when the race sat on `baseline.today` (outside `days[]`), dropped the day-by-day TSB table the commentary was forced to invent, and omitted `race_tss` provenance — so the evaluator deducted “unverified” for numbers the tool already returned.
+- *Fix:* `baseline(today)` labeling; `baseline_pre_window` when today ∉ days; `days=[date:tsb…]` with middle-only trim; in-window `race_tss=` + per-day `@tss=:src=`; caps 1400/3200.
+- **Prevention:** when adding evaluator evidence, grep the tool response schema and assert every field the rubric can demand is compacted (or explicitly marked unavailable).
+
 ### 2026-09-21 | user (thermonuclear residual) | quality-loop attempt args, checklist home, finalize timestamps
 - **Attempt arg sprawl**: `run_one_quality_evaluation_attempt` still exceeded clippy `too_many_arguments` after a partial nest. *Fix*: pass `&mut QualityAttemptLoopCtx` plus `attempt` / `availability_summary`; drop all quality allows. *Prevention*: after nesting a loop ctx, confirm every helper takes the ctx (not a re-exploded arg list) under `clippy -D warnings`.
 - **Adjustment rules hitchhiked on plan text**: checklist scanned rendered plan days, so heading landed on the last day. *Fix*: gate `draft_addresses_quality_checklist` on `description` only; guidance + feedback copy say so; quality_loop retry uses `set_initial_plan_descriptions`. *Prevention*: coach commentary gates belong on the envelope field the OUTPUT_GRAMMAR keeps free for prose.
