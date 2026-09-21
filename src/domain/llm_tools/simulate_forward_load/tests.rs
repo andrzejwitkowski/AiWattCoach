@@ -6,6 +6,13 @@ use crate::domain::training_context::{
     UpcomingDayContext,
 };
 
+fn json_f64(value: &serde_json::Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_i64().map(|n| n as f64))
+        .or_else(|| value.as_u64().map(|n| n as f64))
+}
+
 fn sample_context() -> ToolExecutionContext {
     let mut training_context = TrainingContext {
         generated_at_epoch_seconds: 1_700_000_000,
@@ -573,4 +580,125 @@ fn simulate_forward_load_treats_empty_dated_workout_text_as_omitted() {
     assert!(parsed["days"]
         .as_array()
         .is_some_and(|days| days.len() == 14));
+}
+
+#[test]
+fn simulate_forward_load_respects_horizon_days_and_includes_distant_race() {
+    let mut ctx = sample_context();
+    ctx.training_context.future_events =
+        vec![crate::domain::training_context::FuturePlannedEventContext {
+            event_id: 99,
+            start_date_local: "2026-06-08T08:00:00".to_string(),
+            category: "RACE_A".to_string(),
+            event_type: Some("road".to_string()),
+            name: Some("Distant A Race".to_string()),
+            description: None,
+            estimated_duration_seconds: Some(7200),
+            estimated_training_stress_score: None,
+            estimated_intensity_factor: None,
+            estimated_normalized_power_watts: None,
+        }];
+
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(r#"{"horizon_days":45}"#, &ctx));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    let days = parsed["days"].as_array().expect("days");
+    assert_eq!(days.len(), 45);
+    assert_eq!(days[0]["date"], "2026-05-05");
+    assert_eq!(days[44]["date"], "2026-06-18");
+    let race_day = days
+        .iter()
+        .find(|day| day["date"] == "2026-06-08")
+        .expect("race on day 35");
+    assert_eq!(race_day["source"], "future_event");
+    assert_eq!(race_day["tss_source"], "estimated");
+    assert!(json_f64(&race_day["planned_tss"]).unwrap_or(0.0) > 0.0);
+}
+
+#[test]
+fn simulate_forward_load_notes_out_of_window_dated_workout() {
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(
+        r#"{"dated_workout_text":"2026-05-04\nEndurance\n- 60m 65%\n2026-06-20\nTempo\n- 45m 80%"}"#,
+        &sample_context(),
+    ));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    let notes = parsed["notes"].as_array().expect("notes");
+    assert!(notes.iter().any(|note| {
+        note.as_str().is_some_and(|text| {
+            text.contains(
+                "2026-05-04: dated workout ignored (today, outside 1..14 projection window)",
+            )
+        })
+    }));
+    assert!(notes.iter().any(|note| {
+        note.as_str().is_some_and(|text| {
+            text.contains(
+                "2026-06-20: dated workout ignored (beyond horizon, outside 1..14 projection window)",
+            )
+        })
+    }));
+    assert!(parsed.get("baseline_applied_load").is_none());
+}
+
+#[test]
+fn simulate_forward_load_applies_today_race_load_to_baseline() {
+    let ctx = sample_context();
+    let raw_ctl = ctx.training_context.history.ctl.unwrap();
+    let raw_atl = ctx.training_context.history.atl.unwrap();
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(
+        r#"{"dated_workout_text":"2026-05-04\nEstimated race load (107 TSS)\n- 3h 60%"}"#,
+        &ctx,
+    ));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    assert!(
+        parsed.get("error").is_none(),
+        "unexpected error response: {response}"
+    );
+    let applied = parsed
+        .get("baseline_applied_load")
+        .and_then(|v| v.as_object())
+        .unwrap_or_else(|| panic!("missing baseline_applied_load in {response}"));
+    assert_eq!(applied["date"], "2026-05-04");
+    assert_eq!(applied["tss_source"], "estimated");
+    let applied_tss =
+        json_f64(&applied["tss"]).unwrap_or_else(|| panic!("tss not numeric in {response}"));
+    assert!(applied_tss > 0.0);
+    let baseline = &parsed["baseline"];
+    let num = |key: &str| {
+        json_f64(&baseline[key]).unwrap_or_else(|| panic!("{key} not numeric in {response}"))
+    };
+    assert_ne!(num("ctl"), raw_ctl);
+    assert_ne!(num("atl"), raw_atl);
+    assert_ne!(num("tsb"), raw_ctl - raw_atl);
+    let notes = parsed["notes"].as_array().cloned().unwrap_or_default();
+    assert!(!notes.iter().any(|note| {
+        note.as_str()
+            .is_some_and(|text| text.contains("2026-05-04: dated workout ignored"))
+    }));
+}
+
+#[test]
+fn simulate_forward_load_notes_a_priority_event_beyond_horizon() {
+    let mut ctx = sample_context();
+    ctx.training_context.races = vec![crate::domain::training_context::RaceContext {
+        race_id: "a-1".to_string(),
+        date: "2026-10-25".to_string(),
+        name: "Target A".to_string(),
+        distance_meters: 40_000,
+        discipline: "road".to_string(),
+        priority: "A".to_string(),
+    }];
+    let tool = SimulateForwardLoad;
+    let response = futures::executor::block_on(tool.execute(r#"{}"#, &ctx));
+    let parsed: serde_json::Value = serde_json::from_str(&response).expect("json");
+    let notes = parsed["notes"].as_array().expect("notes");
+    assert!(notes.iter().any(|note| {
+        note.as_str().is_some_and(|text| {
+            text.contains(
+                "2026-10-25: A-priority event outside projection horizon (horizon_days=14)",
+            )
+        })
+    }));
 }

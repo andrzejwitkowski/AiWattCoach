@@ -11,6 +11,11 @@ Scan newest entries first. Focus on entries matching the current task area or fa
 
 ## Entries
 
+### 2026-09-21 | user | Fix 8 event-aware forward-load horizon + dated-load feedback
+- Planner needed projection through the next A-event and honest notes when dated load sat outside the window; today-dated race text was dropped at offset 0 so evidence could not cite race TSS on baseline.
+- *Fix:* `horizon_days` (default 14, max 45); beyond-horizon A-event / future_event notes; out-of-window ignore notes; today/past race-named input → `baseline_applied_load` + recomputed baseline; evidence prefers `baseline_with_estimated_race_load`.
+- **Prevention:** when shrinking a forecast window, assert out-of-window inputs either update baseline or emit an ignore note — never silent drop. Post-deploy: replay `i188477359` SEQUENCE vs 147/148 baselines.
+
 ### 2026-09-21 | user | forward-load evidence dropped race-day TSB / day series / race TSS
 - Compactor printed `race_day_tsb=n/a` when the race sat on `baseline.today` (outside `days[]`), dropped the day-by-day TSB table the commentary was forced to invent, and omitted `race_tss` provenance — so the evaluator deducted “unverified” for numbers the tool already returned.
 - *Fix:* `baseline(today)` labeling; `baseline_pre_window` when today ∉ days; `days=[date:tsb…]` with middle-only trim; in-window `race_tss=` + per-day `@tss=:src=`; caps 1400/3200.

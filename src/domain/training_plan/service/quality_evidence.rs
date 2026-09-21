@@ -100,6 +100,7 @@ fn compact_forward_load(content: &str) -> String {
 
     let baseline = value.get("baseline");
     let baseline_today = baseline.and_then(|b| b.get("today").and_then(|t| t.as_str()));
+    let baseline_applied = value.get("baseline_applied_load");
     let baseline_bits = format_forward_load_baseline(baseline, baseline_today);
     let days = value
         .get("days")
@@ -112,18 +113,18 @@ fn compact_forward_load(content: &str) -> String {
         .min_tsb
         .map(|(tsb, date)| format!("tsb_min={tsb}@{date}"))
         .unwrap_or_else(|| "tsb_min=?".to_string());
-    let race_bit = format_forward_load_race_bit(baseline, baseline_today, &scan);
-    let race_tss_bit = scan
-        .race_day
-        .as_ref()
-        .map(|race| {
+    let race_bit = format_forward_load_race_bit(baseline, baseline_today, &scan, baseline_applied);
+    let race_tss_bit = match (baseline_applied, &scan.race_day) {
+        (Some(_), _) => String::new(),
+        (None, Some(race)) => {
             let tss = race
                 .planned_tss
                 .map(|n| n.to_string())
                 .unwrap_or_else(|| "?".to_string());
             format!("race_tss={tss} (source={})", race.tss_source)
-        })
-        .unwrap_or_default();
+        }
+        (None, None) => String::new(),
+    };
     let trend_bit = match (days.first(), days.last()) {
         (Some(first), Some(last)) => format!(
             "ctl {}→{} atl {}→{}",
@@ -233,7 +234,16 @@ fn format_forward_load_race_bit(
     baseline: Option<&serde_json::Value>,
     baseline_today: Option<&str>,
     scan: &ForwardLoadDayScan<'_>,
+    baseline_applied: Option<&serde_json::Value>,
 ) -> String {
+    if let Some(applied) = baseline_applied {
+        let date = applied.get("date").and_then(|d| d.as_str()).unwrap_or("?");
+        let tss = json_num(applied.get("tss"));
+        let tsb = json_num(baseline.and_then(|b| b.get("tsb")));
+        return format!(
+            "race_day_tsb={tsb}@{date} (race_day_tsb_source=baseline_with_estimated_race_load, race_tss={tss})"
+        );
+    }
     match &scan.race_day {
         Some(race) if race.tss_source == "none" => {
             format!(
@@ -650,6 +660,22 @@ mod tests {
         assert!(load.contains("2026-09-21:-2.07@tss=45:src=planned"));
         assert!(load.contains("2026-09-22:-1.06(rest)@tss=0:src=planned"));
         assert!(load.contains("tsb_min=-6.12@2026-09-26"));
+    }
+
+    #[test]
+    fn compact_uses_baseline_applied_load_for_race_day_tsb() {
+        let (assistant, tool) = tool_pair(
+            "1",
+            "simulate_forward_load",
+            r#"{"baseline":{"today":"2026-09-20","ctl":32.1,"atl":39.0,"tsb":-6.9},"baseline_applied_load":{"date":"2026-09-20","tss":107,"tss_source":"estimated"},"days":[{"date":"2026-09-21","ctl":31.0,"atl":35.0,"tsb":-4.0,"source":"input","planned_tss":40,"tss_source":"planned"}]}"#,
+        );
+        let evidence = evidence_from_transcript(&[assistant, tool]);
+        let load = evidence.load.as_deref().unwrap();
+        assert!(load.contains(
+            "race_day_tsb=-6.9@2026-09-20 (race_day_tsb_source=baseline_with_estimated_race_load, race_tss=107)"
+        ));
+        assert!(!load.contains("baseline_pre_window"));
+        assert!(!load.contains("race load not included"));
     }
 
     #[test]
