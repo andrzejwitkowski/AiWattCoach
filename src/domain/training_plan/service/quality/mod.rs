@@ -78,6 +78,8 @@ pub(super) struct QualityAttemptLoopCtx<'a> {
     pub draft: &'a mut QualityDraft,
     pub operation: &'a mut TrainingPlanGenerationOperation,
     pub best: &'a mut Option<BestDraft>,
+    /// Score-only backup when every draft fails the discipline gate.
+    pub fallback: &'a mut Option<BestDraft>,
     pub progress: QualityProgressSink<'a>,
     pub limits: QualityLoopLimits,
 }
@@ -87,6 +89,7 @@ struct QualityFinalizeInput<'a> {
     snapshot: TrainingPlanSnapshot,
     operation: TrainingPlanGenerationOperation,
     best: Option<BestDraft>,
+    fallback: Option<BestDraft>,
     accepted: bool,
     max_loops: u32,
     progress: QualityProgressSink<'a>,
@@ -144,38 +147,37 @@ where
         let mut quality_progress_messages = Vec::new();
         let mut best =
             self.seed_best_quality_draft(&identity, &operation, &snapshot, &draft.plan_text)?;
+        let mut fallback: Option<BestDraft> = None;
         let start_attempt = (operation.quality_evaluations.len() as u32).saturating_add(1);
-        let mut accepted = best
-            .as_ref()
-            .is_some_and(|best_draft| best_draft.evaluation.score >= pass_score);
-
-        if !accepted {
-            accepted = self
-                .run_quality_evaluation_attempts(QualityAttemptLoopCtx {
-                    identity: &identity,
-                    planning,
-                    snapshot: &mut snapshot,
-                    draft: &mut draft,
-                    operation: &mut operation,
-                    best: &mut best,
-                    progress: QualityProgressSink {
-                        messages: &mut quality_progress_messages,
-                        port: plan_quality_progress,
-                    },
-                    limits: QualityLoopLimits {
-                        start_attempt,
-                        max_loops,
-                        pass_score,
-                    },
-                })
-                .await?;
-        }
+        // Always enter the attempt path so a resumed/seeded draft is discipline-gated
+        // before we treat a prior high score as already accepted.
+        let accepted = self
+            .run_quality_evaluation_attempts(QualityAttemptLoopCtx {
+                identity: &identity,
+                planning,
+                snapshot: &mut snapshot,
+                draft: &mut draft,
+                operation: &mut operation,
+                best: &mut best,
+                fallback: &mut fallback,
+                progress: QualityProgressSink {
+                    messages: &mut quality_progress_messages,
+                    port: plan_quality_progress,
+                },
+                limits: QualityLoopLimits {
+                    start_attempt,
+                    max_loops,
+                    pass_score,
+                },
+            })
+            .await?;
 
         self.finalize_plan_quality_loop(QualityFinalizeInput {
             identity: &identity,
             snapshot,
             operation,
             best,
+            fallback,
             accepted,
             max_loops,
             progress: QualityProgressSink {
@@ -194,21 +196,36 @@ where
             snapshot,
             mut operation,
             best,
+            fallback,
             accepted,
             max_loops,
             progress,
         } = input;
 
-        let Some(best) = best else {
-            // Evaluator never produced a score (outage / empty resume range). Ship the
-            // structurally valid draft without quality metadata rather than failing save.
-            return Ok(PlanQualityLoopResult {
-                snapshot,
-                quality_evaluations: operation.quality_evaluations.clone(),
-                shipped_quality: None,
-                quality_progress_messages: std::mem::take(progress.messages),
-                operation,
-            });
+        let (best, accepted) = match (best, fallback) {
+            (Some(best), _) => (best, accepted),
+            (None, Some(fallback)) => {
+                emit_progress(
+                    progress.messages,
+                    progress.port,
+                    identity.user_id,
+                    identity.workout_id,
+                    "Shipped best available draft without meeting the discipline requirement."
+                        .to_string(),
+                );
+                (fallback, false)
+            }
+            (None, None) => {
+                // Evaluator never produced a score (outage / empty resume range). Ship the
+                // structurally valid draft without quality metadata rather than failing save.
+                return Ok(PlanQualityLoopResult {
+                    snapshot,
+                    quality_evaluations: operation.quality_evaluations.clone(),
+                    shipped_quality: None,
+                    quality_progress_messages: std::mem::take(progress.messages),
+                    operation,
+                });
+            }
         };
         let finished = if accepted {
             plan_quality_finished_accepted_message(best.evaluation.score)
@@ -262,7 +279,9 @@ where
             }));
         }
         let parsed = self.parse_window(&best_draft)?;
-        let days = self.validate_snapshot_days(&parsed.days_by_date)?;
+        let mut days_by_date = parsed.days_by_date;
+        self.clip_and_warn_overlong_window(&operation.operation_key, &mut days_by_date);
+        let days = self.validate_snapshot_days(&days_by_date)?;
         let snapshot = self.build_snapshot(
             identity.user_id,
             identity.workout_id,
@@ -406,6 +425,7 @@ where
             ));
         }
 
+        self.clip_and_warn_overlong_window(&operation.operation_key, &mut days_by_date);
         let days = self.validate_snapshot_days(&days_by_date)?;
         let plan_text = self.render_plan_window(&days_by_date);
         *operation = self

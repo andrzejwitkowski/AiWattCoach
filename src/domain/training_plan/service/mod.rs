@@ -746,6 +746,7 @@ where
             };
 
             let mut days_by_date = parsed.days_by_date;
+            service.clip_and_warn_overlong_window(&operation.operation_key, &mut days_by_date);
             let mut issues = parsed.issues;
             let mut invalid_day_sections = parsed.invalid_day_sections;
             if operation.validation_issues != issues {
@@ -778,6 +779,7 @@ where
                 )
                 .await?;
 
+            service.clip_and_warn_overlong_window(&operation.operation_key, &mut days_by_date);
             let days = match service.validate_snapshot_days(&days_by_date) {
                 Ok(days) => days,
                 Err(error) => {

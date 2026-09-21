@@ -40,6 +40,21 @@ pub(crate) fn plan_window_with_continuous_tt(start_date: &str) -> String {
     plan_window_with_quality_day(start_date, "Time-Trial Threshold\n- 15m 92%")
 }
 
+/// Contiguous window longer than the 14-day snapshot; Fix 11 clips to the first 14 days.
+pub(crate) fn plan_window_with_extra_days(start_date: &str) -> String {
+    (0..21)
+        .map(|offset| {
+            let date = add_days(start_date, offset);
+            if offset % 4 == 0 {
+                format!("{date}\nRest Day")
+            } else {
+                format!("{date}\nEndurance\n- 45m 65%")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
 fn plan_window_with_quality_day(start_date: &str, quality_body: &str) -> String {
     (0..14)
         .map(|offset| {

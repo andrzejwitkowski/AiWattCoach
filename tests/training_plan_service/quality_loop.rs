@@ -382,3 +382,198 @@ async fn quality_loop_keeps_best_when_replan_fails_discipline_requirement() {
         })
     }));
 }
+
+#[tokio::test]
+async fn quality_loop_prefers_ungated_replan_over_higher_scoring_gated_first_draft() {
+    let call_log = new_call_log();
+    let built = build_service(
+        call_log.clone(),
+        vec![Ok(workout_recap())],
+        vec![
+            Ok(plan_window_with_short_tt_blocks(FIRST_DAY)),
+            Ok(plan_window_with_continuous_tt(FIRST_DAY)),
+        ],
+        vec![],
+        FIRST_DAY,
+    );
+    built.generator.set_target_event_requirement(Some(
+        aiwattcoach::domain::training_plan::TargetEventRequirement {
+            discipline: "timetrial".to_string(),
+            date: "2026-10-25".to_string(),
+            estimated_duration_seconds: 1_320,
+            priority: "A".to_string(),
+        },
+    ));
+    built.generator.set_initial_plan_descriptions(vec![
+        Some(
+            "2026-04-07 Time-Trial Durability — demand: TT; execution: short repeats; progression: race"
+                .to_string(),
+        ),
+        Some(
+            "Adjustment rules\nUse continuous threshold\n2026-04-07 Time-Trial Threshold — demand: TT; execution: sustained; progression: race"
+                .to_string(),
+        ),
+    ]);
+    built.generator.set_quality_evaluations(vec![
+        Ok(PlanQualityEvaluation {
+            attempt: 0,
+            score: 9,
+            critique: "Strong structure but short TT reps.".to_string(),
+            raise_to_next: "Prefer continuous near-threshold work.".to_string(),
+        }),
+        Ok(PlanQualityEvaluation {
+            attempt: 0,
+            score: 7,
+            critique: "Continuous TT rehearsal present.".to_string(),
+            raise_to_next: String::new(),
+        }),
+    ]);
+    let service =
+        built
+            .service
+            .with_plan_quality_evaluator_config(Arc::new(FixedPlanQualityConfig {
+                max_loops: 5,
+                pass_score: 7,
+            }));
+
+    let result = service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    assert_eq!(result.shipped_quality.as_ref().map(|e| e.score), Some(7));
+    assert!(result.snapshot.days.iter().any(|day| {
+        day.workout.as_ref().is_some_and(|workout| {
+            workout
+                .lines
+                .iter()
+                .any(|line| line.step().is_some_and(|step| step.duration_seconds >= 780))
+        })
+    }));
+    let feedbacks = built.generator.quality_feedbacks();
+    assert!(feedbacks.iter().any(|feedback| {
+        feedback
+            .as_ref()
+            .is_some_and(|text| text.contains("REQUIREMENT NOT MET"))
+    }));
+}
+
+#[tokio::test]
+async fn quality_loop_ships_fallback_when_every_draft_fails_discipline_gate() {
+    let call_log = new_call_log();
+    let built = build_service(
+        call_log.clone(),
+        vec![Ok(workout_recap())],
+        vec![
+            Ok(plan_window_with_short_tt_blocks(FIRST_DAY)),
+            Ok(plan_window_with_short_tt_blocks("2026-04-20")),
+            Ok(plan_window_with_short_tt_blocks("2026-04-21")),
+        ],
+        vec![],
+        FIRST_DAY,
+    );
+    built.generator.set_target_event_requirement(Some(
+        aiwattcoach::domain::training_plan::TargetEventRequirement {
+            discipline: "timetrial".to_string(),
+            date: "2026-10-25".to_string(),
+            estimated_duration_seconds: 1_320,
+            priority: "A".to_string(),
+        },
+    ));
+    built.generator.set_initial_plan_descriptions(vec![
+        Some("short TT first draft".to_string()),
+        Some("Adjustment rules\nStill short\nshort TT replan".to_string()),
+        Some("Adjustment rules\nStill short\nshort TT retry".to_string()),
+    ]);
+    built
+        .generator
+        .set_quality_evaluations(vec![Ok(PlanQualityEvaluation {
+            attempt: 0,
+            score: 9,
+            critique: "High score but short TT blocks.".to_string(),
+            raise_to_next: "Prefer continuous near-threshold work.".to_string(),
+        })]);
+    let progress = RecordingPlanQualityProgress::default();
+    let service = built
+        .service
+        .with_plan_quality_evaluator_config(Arc::new(FixedPlanQualityConfig {
+            max_loops: 5,
+            pass_score: 10,
+        }))
+        .with_plan_quality_progress(Arc::new(progress.clone()));
+
+    let result = service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    assert_eq!(result.shipped_quality.as_ref().map(|e| e.score), Some(9));
+    assert_eq!(result.snapshot.start_date, FIRST_DAY);
+    assert!(result
+        .quality_progress_messages
+        .iter()
+        .any(|message| message.contains("discipline requirement")));
+    assert!(progress
+        .messages()
+        .iter()
+        .any(|message| message.contains("discipline requirement")));
+}
+
+#[tokio::test]
+async fn quality_loop_clips_overlong_replan_and_continues_attempts() {
+    let call_log = new_call_log();
+    let built = build_service(
+        call_log.clone(),
+        vec![Ok(workout_recap())],
+        vec![
+            Ok(valid_plan_window(FIRST_DAY)),
+            Ok(plan_window_with_extra_days(FIRST_DAY)),
+            Ok(plan_window_with_extra_days(FIRST_DAY)),
+        ],
+        vec![],
+        FIRST_DAY,
+    );
+    built.generator.set_initial_plan_descriptions(vec![
+        Some("initial".to_string()),
+        Some("Adjustment rules\nExtend simulation".to_string()),
+        Some("Adjustment rules\nExtend simulation again".to_string()),
+    ]);
+    built.generator.set_quality_evaluations(vec![
+        Ok(PlanQualityEvaluation {
+            attempt: 0,
+            score: 5,
+            critique: "Need longer horizon.".to_string(),
+            raise_to_next: "Extend the forward simulation.".to_string(),
+        }),
+        Ok(PlanQualityEvaluation {
+            attempt: 0,
+            score: 5,
+            critique: "Still short of pass.".to_string(),
+            raise_to_next: "Extend the forward simulation.".to_string(),
+        }),
+        Ok(PlanQualityEvaluation {
+            attempt: 0,
+            score: 5,
+            critique: "Exhausted.".to_string(),
+            raise_to_next: String::new(),
+        }),
+    ]);
+    let service =
+        built
+            .service
+            .with_plan_quality_evaluator_config(Arc::new(FixedPlanQualityConfig {
+                max_loops: 3,
+                pass_score: 10,
+            }));
+
+    let result = service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    assert_eq!(result.quality_evaluations.len(), 3);
+    assert_eq!(result.snapshot.days.len(), 14);
+    assert_eq!(result.snapshot.start_date, FIRST_DAY);
+    assert_eq!(result.snapshot.end_date, add_days(FIRST_DAY, 13));
+    assert_eq!(built.generator.initial_plan_call_count(), 3);
+}

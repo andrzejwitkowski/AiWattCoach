@@ -10,7 +10,8 @@ use crate::domain::{
     calendar_view::CalendarEntryViewRefreshPort,
     identity::Clock,
     training_plan::{
-        TargetEventRequirement, TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
+        missing_discipline_requirement, TargetEventRequirement,
+        TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
         TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
         TrainingPlanWorkoutSummaryPort,
     },
@@ -48,6 +49,19 @@ where
         let target_event = self
             .load_plan_target_event_requirement(ctx.identity, ctx.operation)
             .await?;
+        demote_gated_best_to_fallback(
+            &mut ctx.best,
+            &mut ctx.fallback,
+            target_event.as_ref(),
+            &ctx.operation.operation_key,
+        );
+        if ctx
+            .best
+            .as_ref()
+            .is_some_and(|draft| draft.evaluation.score >= ctx.limits.pass_score)
+        {
+            return Ok(true);
+        }
 
         let mut accepted = false;
         let start_attempt = ctx.limits.start_attempt;
@@ -55,7 +69,12 @@ where
 
         for attempt in start_attempt..=max_loops {
             match self
-                .run_one_quality_evaluation_attempt(&mut ctx, attempt, &availability_summary)
+                .run_one_quality_evaluation_attempt(
+                    &mut ctx,
+                    attempt,
+                    &availability_summary,
+                    target_event.as_ref(),
+                )
                 .await?
             {
                 QualityAttemptAction::Accepted => {
@@ -150,7 +169,19 @@ where
         ctx: &mut QualityAttemptLoopCtx<'_>,
         attempt: u32,
         availability_summary: &str,
+        target_event: Option<&TargetEventRequirement>,
     ) -> Result<QualityAttemptAction, TrainingPlanError> {
+        let gate_gap = target_event
+            .and_then(|target| missing_discipline_requirement(&ctx.snapshot.days, target));
+        if let Some(gap) = gate_gap.as_deref() {
+            tracing::warn!(
+                operation_key = %ctx.operation.operation_key,
+                attempt,
+                gap = %gap,
+                "draft fails the discipline requirement"
+            );
+        }
+
         let evidence = extract_plan_quality_evidence(ctx.operation);
         let mut evaluation = match self
             .generator
@@ -202,10 +233,22 @@ where
             ),
         );
 
-        let is_better = ctx
-            .best
+        let fallback_is_better = ctx
+            .fallback
             .as_ref()
             .is_none_or(|previous| evaluation.score >= previous.evaluation.score);
+        if fallback_is_better {
+            *ctx.fallback = Some(BestDraft {
+                snapshot: ctx.snapshot.clone(),
+                evaluation: evaluation.clone(),
+            });
+        }
+
+        let is_better = gate_gap.is_none()
+            && ctx
+                .best
+                .as_ref()
+                .is_none_or(|previous| evaluation.score >= previous.evaluation.score);
         if is_better {
             *ctx.best = Some(BestDraft {
                 snapshot: ctx.snapshot.clone(),
@@ -221,6 +264,21 @@ where
                 self.clock.now_epoch_seconds(),
             ))
             .await?;
+
+        if let Some(gap) = gate_gap.as_ref() {
+            if attempt == ctx.limits.max_loops {
+                return Ok(QualityAttemptAction::Stop);
+            }
+            let quality_feedback = format_quality_feedback(
+                evaluation.score,
+                &evaluation.critique,
+                &evaluation.raise_to_next,
+            );
+            return Ok(QualityAttemptAction::Replan {
+                feedback: format!("REQUIREMENT NOT MET: {gap}\n{quality_feedback}"),
+                raise_to_next: gap.clone(),
+            });
+        }
 
         if evaluation.score >= ctx.limits.pass_score {
             return Ok(QualityAttemptAction::Accepted);
@@ -238,4 +296,32 @@ where
             raise_to_next: evaluation.raise_to_next.clone(),
         })
     }
+}
+
+fn demote_gated_best_to_fallback(
+    best: &mut Option<BestDraft>,
+    fallback: &mut Option<BestDraft>,
+    target_event: Option<&TargetEventRequirement>,
+    operation_key: &str,
+) {
+    let Some(draft) = best.take() else {
+        return;
+    };
+    let gap = target_event
+        .and_then(|target| missing_discipline_requirement(&draft.snapshot.days, target));
+    if let Some(gap) = gap.as_deref() {
+        tracing::warn!(
+            operation_key = %operation_key,
+            gap = %gap,
+            "draft fails the discipline requirement"
+        );
+        let fallback_is_better = fallback
+            .as_ref()
+            .is_none_or(|previous| draft.evaluation.score >= previous.evaluation.score);
+        if fallback_is_better {
+            *fallback = Some(draft);
+        }
+        return;
+    }
+    *best = Some(draft);
 }

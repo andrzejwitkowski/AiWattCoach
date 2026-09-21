@@ -11,6 +11,11 @@ Scan newest entries first. Focus on entries matching the current task area or fa
 
 ## Entries
 
+### 2026-09-21 | user | Fix 11 clip long windows + first-draft discipline gate
+- Score-9 short TT shipped because `replan_gate_gap` only ran inside regenerate; attempt 1 bypassed it. Separately, a 35-day replan hit exact-14 `validate_snapshot_days` and aborted the loop with `shipping best draft so far`.
+- *Fix:* `clip_and_warn_overlong_window` keeps earliest 14 days before every validate; every quality attempt applies `missing_discipline_requirement` so gated drafts never become `best` (score-only `fallback` when none pass); gated drafts Replan with `REQUIREMENT NOT MET` instead of Accepting on pass score; demote resumed/seeded best before early-accept so resume cannot skip the gate.
+- **Prevention:** hard shipping gates must run on attempt 1 and on seed/resume, not only replan. Overlong windows are surplus to clip, not validation failures. Post-deploy replay vs `9,8,7,7`: continuous ≥780s step on shipped snapshot; logs show discipline and/or clip warns, not overlong Validation abort.
+
 ### 2026-09-21 | user | Fix 10 completed-race load + discipline gate
 - Continuous TT drafts scored 7 because race load only entered the audit when the model lucked into valid dated race syntax; short-repeat drafts scored 8 and shipped. Checklist gate only inspected description prose, never plan steps.
 - *Fix:* first-class `completed_race {date,tss,source}` on `simulate_forward_load` (Banister baseline apply; soft-fail invalid dated when present); evidence `baseline_with_completed_race_load` + `source=`; pure `missing_discipline_requirement` gate on parsed plan steps with one REQUIREMENT NOT MET retry, non-shippable on second fail.
