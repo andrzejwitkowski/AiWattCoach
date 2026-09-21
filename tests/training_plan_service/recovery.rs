@@ -295,7 +295,7 @@ async fn reclaim_reuses_completed_initial_tool_loop_state_without_second_provide
     let operation = operations.stored_operation();
     assert_eq!(
         operation.raw_plan_response.as_deref(),
-        Some(valid_plan_window(FIRST_DAY).as_str())
+        Some(rendered_valid_plan_window(FIRST_DAY).as_str())
     );
 }
 

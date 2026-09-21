@@ -29,6 +29,11 @@ pub(crate) fn valid_plan_window(start_date: &str) -> String {
         .join("\n\n")
 }
 
+/// Compact workout-builder text matching `render_plan_window` (single newlines between days).
+pub(crate) fn rendered_valid_plan_window(start_date: &str) -> String {
+    valid_plan_window(start_date).replace("\n\n", "\n")
+}
+
 pub(crate) fn plan_with_invalid_day(start_date: &str, invalid_date: &str) -> String {
     (0..14)
         .map(|offset| {
