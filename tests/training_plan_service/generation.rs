@@ -62,6 +62,39 @@ async fn generates_snapshot_and_projected_days_for_saved_workout() {
 }
 
 #[tokio::test]
+async fn clips_initial_plan_longer_than_fourteen_days_to_window() {
+    let call_log = new_call_log();
+    let built = build_service(
+        call_log.clone(),
+        vec![Ok(workout_recap())],
+        vec![Ok(plan_window_with_extra_days(FIRST_DAY))],
+        vec![],
+        FIRST_DAY,
+    );
+
+    let result = built
+        .service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    assert!(result.was_generated);
+    assert_eq!(result.snapshot.days.len(), 14);
+    assert_eq!(result.snapshot.start_date, FIRST_DAY);
+    assert_eq!(result.snapshot.end_date, add_days(FIRST_DAY, 13));
+    let raw = built
+        .operations
+        .stored_operation()
+        .raw_plan_response
+        .expect("aligned raw plan");
+    let dated_days = raw
+        .lines()
+        .filter(|line| NaiveDate::parse_from_str(line, "%Y-%m-%d").is_ok())
+        .count();
+    assert_eq!(dated_days, 14);
+}
+
+#[tokio::test]
 async fn persists_workout_recap_before_generating_training_plan_window() {
     let call_log = new_call_log();
     let service = build_service(

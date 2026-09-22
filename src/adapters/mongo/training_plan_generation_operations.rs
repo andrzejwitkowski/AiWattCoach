@@ -61,6 +61,8 @@ struct TrainingPlanGenerationOperationDocument {
     #[serde(default)]
     best_quality_plan_response: Option<String>,
     #[serde(default)]
+    best_quality_plan_description: Option<String>,
+    #[serde(default)]
     attempts: Vec<AttemptRecordDocument>,
     failure: Option<TrainingPlanFailureStateDocument>,
     started_at_epoch_seconds: Option<i64>,
@@ -298,6 +300,7 @@ fn map_operation_to_document(
             .map(map_quality_evaluation_to_document)
             .transpose()?,
         best_quality_plan_response: operation.best_quality_plan_response.clone(),
+        best_quality_plan_description: operation.best_quality_plan_description.clone(),
         attempts: operation
             .attempts
             .iter()
@@ -378,6 +381,7 @@ fn map_document_to_operation(
             .map(map_document_to_quality_evaluation)
             .transpose()?,
         best_quality_plan_response: document.best_quality_plan_response,
+        best_quality_plan_description: document.best_quality_plan_description,
         attempts: document
             .attempts
             .into_iter()

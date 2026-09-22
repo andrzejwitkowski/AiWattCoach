@@ -46,6 +46,34 @@ mod tests {
     }
 
     #[test]
+    fn operational_guidelines_map_all_race_disciplines_to_session_structure() {
+        use crate::domain::races::RaceDiscipline;
+
+        let ops = RACING_STRATEGIST_OPERATIONAL_GUIDELINES;
+        for disc in [
+            RaceDiscipline::Road,
+            RaceDiscipline::Mtb,
+            RaceDiscipline::Gravel,
+            RaceDiscipline::Cyclocross,
+            RaceDiscipline::Timetrial,
+        ] {
+            assert!(
+                ops.contains(disc.as_str()),
+                "discipline map missing {}",
+                disc.as_str()
+            );
+        }
+        assert!(ops.contains("2x10"));
+        assert!(ops.contains("3x8"));
+        assert!(ops.contains("Time-Trial Threshold"));
+        assert!(ops.contains("±25%"));
+        assert!(ops.contains("simulate_forward_load race duration"));
+        assert!(ops.contains("estimate's IF from pri"));
+        assert!(!ops.contains("0.12"));
+        assert!(ops.contains("plan steps, not only description"));
+    }
+
+    #[test]
     fn app_evidence_contract_requires_tools() {
         let contract = RACING_STRATEGIST_APP_EVIDENCE_CONTRACT;
         assert!(contract.contains("simulate_forward_load"));

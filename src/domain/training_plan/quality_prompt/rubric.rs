@@ -21,11 +21,17 @@ Unavailable evidence is not a plan fault: If the evidence block states that a da
 \n\
 Treat availability lines in the evidence block as authoritative constraints. A rest day on an unavailable weekday is not a conflict with the recap.\n\
 \n\
+Session-level specificity may be demonstrated in the plan commentary section. Judge specificity by (a) whether every quality session has a stated purpose tied to the athlete's target race or target capability, and (b) whether execution and progression are specified for it. Do not require cadence, zone, or inline cues inside the plan text — the output grammar forbids them; do not deduct for their absence.\n\
+\n\
+The commentary is a claim, not evidence. Credit specificity only where a session with that stated purpose actually exists in the plan text. A commentary line naming a session or day that is absent from the plan is a contradiction and must reduce the score.\n\
+\n\
 In raise_to_next, state the single highest-leverage gap as one imperative sentence naming the concrete change that would move the draft up one band (actionable; do not restate the critique).";
 
-pub(crate) const EVIDENCE_SECTION_MAX_CHARS: usize = 700;
-pub(crate) const EVIDENCE_BLOCK_MAX_CHARS: usize = 2000;
-const EVIDENCE_BLOCK_LABEL_OVERHEAD: usize = 120;
+pub(crate) const EVIDENCE_SECTION_MAX_CHARS: usize = 1400;
+pub(crate) const EVIDENCE_BLOCK_MAX_CHARS: usize = 3200;
+pub(crate) const COMMENTARY_SECTION_MAX_CHARS: usize = 1200;
+const EVIDENCE_BLOCK_LABEL_OVERHEAD: usize = 160;
+const COMMENTARY_TRUNCATION_MARKER: &str = "…[truncated]";
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PlanQualityEvidence {
@@ -41,6 +47,7 @@ pub struct PlanQualityEvaluationInput<'a> {
     pub workout_recap: &'a WorkoutRecap,
     pub planning_context: Option<&'a TrainingPlanPlanningContext>,
     pub draft_plan_text: &'a str,
+    pub draft_plan_description: Option<&'a str>,
     pub evidence: Option<&'a PlanQualityEvidence>,
     /// Date-anchored availability constraints for the evaluation window.
     pub availability_summary: Option<&'a str>,
@@ -110,23 +117,20 @@ fn field_or_missing(value: Option<&str>) -> &str {
 }
 
 pub fn assemble_plan_quality_evaluation_request(
-    user_id: String,
-    saved_at_epoch_seconds: i64,
-    workout_recap: &WorkoutRecap,
-    planning_context: Option<&TrainingPlanPlanningContext>,
-    draft_plan_text: &str,
-    evidence: Option<&PlanQualityEvidence>,
-    availability_summary: Option<&str>,
+    input: &PlanQualityEvaluationInput<'_>,
 ) -> LlmChatRequest {
-    let planning_summary = planning_context_summary(planning_context);
-    let recap_snippet = truncate_snippet(&workout_recap.text, 800);
-    let evidence_block = format_plan_quality_evidence(evidence, availability_summary);
+    let planning_summary = planning_context_summary(input.planning_context);
+    let recap_snippet = truncate_snippet(&input.workout_recap.text, 800);
+    let evidence_block = format_plan_quality_evidence(input.evidence, input.availability_summary);
+    let commentary_section = format_plan_commentary_section(input.draft_plan_description);
+    let saved_at_epoch_seconds = input.saved_at_epoch_seconds;
+    let draft_plan_text = input.draft_plan_text;
     let user_content = format!(
-        "saved_at_epoch_seconds={saved_at_epoch_seconds}\n\nWorkout recap snippet:\n{recap_snippet}\n\nPlanning context summary:\n{planning_summary}\n\n{evidence_block}\n\nDraft plan:\n{draft_plan_text}\n\nReturn JSON only."
+        "saved_at_epoch_seconds={saved_at_epoch_seconds}\n\nWorkout recap snippet:\n{recap_snippet}\n\nPlanning context summary:\n{planning_summary}\n\n{evidence_block}\n\nDraft plan:\n{draft_plan_text}{commentary_section}\n\nReturn JSON only."
     );
 
     let mut request = build_chat_request(LlmChatRequestInput {
-        user_id,
+        user_id: input.user_id.to_string(),
         system_prompt: format!(
             "{PLAN_QUALITY_EVALUATOR_SYSTEM_PROMPT}\n\n{}",
             plan_quality_evaluator_rubric()
@@ -140,6 +144,21 @@ pub fn assemble_plan_quality_evaluation_request(
     });
     request.tool_choice = LlmToolChoice::None;
     request
+}
+
+fn format_plan_commentary_section(draft_plan_description: Option<&str>) -> String {
+    let Some(description) = draft_plan_description
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return String::new();
+    };
+    let capped = truncate_with_marker(
+        description,
+        COMMENTARY_SECTION_MAX_CHARS,
+        COMMENTARY_TRUNCATION_MARKER,
+    );
+    format!("\n\nPlan commentary (author's claims; not parsed as the plan):\n{capped}")
 }
 
 fn planning_context_summary(planning_context: Option<&TrainingPlanPlanningContext>) -> String {
@@ -186,4 +205,13 @@ pub(crate) fn truncate_snippet(text: &str, max_chars: usize) -> String {
     }
     let truncated: String = trimmed.chars().take(max_chars).collect();
     format!("{truncated}...")
+}
+
+fn truncate_with_marker(text: &str, max_chars: usize, marker: &str) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    let keep = max_chars.saturating_sub(marker.chars().count());
+    let truncated: String = text.chars().take(keep).collect();
+    format!("{truncated}{marker}")
 }

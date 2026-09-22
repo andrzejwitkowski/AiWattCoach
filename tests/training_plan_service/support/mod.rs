@@ -130,6 +130,8 @@ pub(crate) struct StubTrainingPlanGenerator {
     correction_planning_contexts: PlanningContexts,
     initial_restored_states: RestoredToolLoopStates,
     correction_restored_states: RestoredToolLoopStates,
+    target_event_requirement:
+        Arc<Mutex<Option<aiwattcoach::domain::training_plan::TargetEventRequirement>>>,
     call_log: CallLog,
 }
 
@@ -156,6 +158,7 @@ impl StubTrainingPlanGenerator {
             correction_planning_contexts: Arc::new(Mutex::new(Vec::new())),
             initial_restored_states: Arc::new(Mutex::new(Vec::new())),
             correction_restored_states: Arc::new(Mutex::new(Vec::new())),
+            target_event_requirement: Arc::new(Mutex::new(None)),
             call_log,
         }
     }
@@ -207,6 +210,13 @@ impl StubTrainingPlanGenerator {
 
     pub(crate) fn set_initial_plan_descriptions(&self, descriptions: Vec<Option<String>>) {
         *self.initial_plan_descriptions.lock().unwrap() = VecDeque::from(descriptions);
+    }
+
+    pub(crate) fn set_target_event_requirement(
+        &self,
+        target: Option<aiwattcoach::domain::training_plan::TargetEventRequirement>,
+    ) {
+        *self.target_event_requirement.lock().unwrap() = target;
     }
 
     pub(crate) fn set_correction_descriptions(&self, descriptions: Vec<Option<String>>) {
@@ -351,6 +361,20 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
                 },
             ));
         Box::pin(async move { response })
+    }
+
+    fn plan_target_event_requirement(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<
+            Option<aiwattcoach::domain::training_plan::TargetEventRequirement>,
+            TrainingPlanError,
+        >,
+    > {
+        let target = self.target_event_requirement.lock().unwrap().clone();
+        Box::pin(async move { Ok(target) })
     }
 }
 

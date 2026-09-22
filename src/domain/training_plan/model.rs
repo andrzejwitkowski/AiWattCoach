@@ -137,6 +137,7 @@ pub struct TrainingPlanGenerationOperation {
     pub quality_evaluations: Vec<PlanQualityEvaluation>,
     pub best_quality_evaluation: Option<PlanQualityEvaluation>,
     pub best_quality_plan_response: Option<String>,
+    pub best_quality_plan_description: Option<String>,
     pub attempts: Vec<AttemptRecord>,
     pub failure: Option<TrainingPlanFailureState>,
     pub started_at_epoch_seconds: i64,
@@ -175,6 +176,7 @@ impl TrainingPlanGenerationOperation {
             quality_evaluations: Vec::new(),
             best_quality_evaluation: None,
             best_quality_plan_response: None,
+            best_quality_plan_description: None,
             attempts: Vec::new(),
             failure: None,
             started_at_epoch_seconds: now_epoch_seconds,
@@ -283,6 +285,30 @@ impl TrainingPlanGenerationOperation {
         updated
     }
 
+    /// Set `raw_plan_response` without clearing correction state or bumping InitialGeneration.
+    pub fn with_aligned_raw_plan_text(
+        &self,
+        raw_plan_response: String,
+        recorded_at_epoch_seconds: i64,
+    ) -> Self {
+        let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
+        updated.raw_plan_response = Some(raw_plan_response);
+        updated
+    }
+
+    /// Align raw plan fields to the shipped best draft; bumps `updated_at` via pending transition.
+    pub fn with_shipped_best_raw(
+        &self,
+        raw_plan_response: String,
+        raw_plan_description: Option<String>,
+        recorded_at_epoch_seconds: i64,
+    ) -> Self {
+        let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
+        updated.raw_plan_response = Some(raw_plan_response);
+        updated.raw_plan_description = raw_plan_description;
+        updated
+    }
+
     pub fn with_initial_plan_tool_loop_state(
         &self,
         tool_loop_state: LlmToolLoopState,
@@ -357,7 +383,7 @@ impl TrainingPlanGenerationOperation {
     pub fn with_quality_evaluation(
         &self,
         evaluation: PlanQualityEvaluation,
-        best_plan_response: Option<String>,
+        best_draft: Option<(String, Option<String>)>,
         recorded_at_epoch_seconds: i64,
     ) -> Self {
         let mut attempts = self.attempts.clone();
@@ -372,9 +398,10 @@ impl TrainingPlanGenerationOperation {
         let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
         updated.quality_evaluations = quality_evaluations;
         updated.attempts = attempts;
-        if let Some(best_plan_response) = best_plan_response {
+        if let Some((best_plan_response, best_plan_description)) = best_draft {
             updated.best_quality_evaluation = Some(evaluation);
             updated.best_quality_plan_response = Some(best_plan_response);
+            updated.best_quality_plan_description = best_plan_description;
         }
         updated
     }
@@ -475,6 +502,7 @@ mod operation_transition_tests {
             raise_to_next: "Cut midweek tempo.".to_string(),
         });
         op.best_quality_plan_response = Some("best-plan".to_string());
+        op.best_quality_plan_description = Some("best-desc".to_string());
         op.attempt_count = 3;
         op
     }
@@ -499,6 +527,10 @@ mod operation_transition_tests {
         assert_eq!(
             reclaimed.best_quality_plan_response.as_deref(),
             Some("best-plan")
+        );
+        assert_eq!(
+            reclaimed.best_quality_plan_description.as_deref(),
+            Some("best-desc")
         );
         assert_eq!(reclaimed.quality_evaluations.len(), 1);
         assert_eq!(reclaimed.created_at_epoch_seconds, 200);
@@ -564,5 +596,97 @@ mod operation_transition_tests {
         assert!(updated.correction_tool_loop_state.is_none());
         assert!(updated.raw_correction_response.is_none());
         assert!(updated.raw_correction_description.is_none());
+    }
+
+    #[test]
+    fn with_quality_evaluation_promotes_plan_and_description_together() {
+        let op = sample_operation();
+        let evaluation = PlanQualityEvaluation {
+            attempt: 2,
+            score: 8,
+            critique: "better".to_string(),
+            raise_to_next: String::new(),
+        };
+        let updated = op.with_quality_evaluation(
+            evaluation.clone(),
+            Some((
+                "new-best-plan".to_string(),
+                Some("new-best-desc".to_string()),
+            )),
+            900,
+        );
+        assert_eq!(updated.best_quality_evaluation, Some(evaluation));
+        assert_eq!(
+            updated.best_quality_plan_response.as_deref(),
+            Some("new-best-plan")
+        );
+        assert_eq!(
+            updated.best_quality_plan_description.as_deref(),
+            Some("new-best-desc")
+        );
+
+        let unchanged = updated.with_quality_evaluation(
+            PlanQualityEvaluation {
+                attempt: 3,
+                score: 5,
+                critique: "worse".to_string(),
+                raise_to_next: String::new(),
+            },
+            None,
+            901,
+        );
+        assert_eq!(
+            unchanged.best_quality_plan_response.as_deref(),
+            Some("new-best-plan")
+        );
+        assert_eq!(
+            unchanged.best_quality_plan_description.as_deref(),
+            Some("new-best-desc")
+        );
+    }
+
+    #[test]
+    fn with_aligned_raw_plan_text_preserves_correction_transcript() {
+        use crate::domain::llm_tools::LlmToolLoopState;
+
+        let mut op = sample_operation();
+        op.raw_correction_response = Some("correction".to_string());
+        op.raw_correction_description = Some("corr-desc".to_string());
+        op.correction_tool_loop_state = Some(LlmToolLoopState::default());
+
+        let updated = op.with_aligned_raw_plan_text("rendered-plan".to_string(), 800);
+        assert_eq!(updated.raw_plan_response.as_deref(), Some("rendered-plan"));
+        assert_eq!(
+            updated.raw_correction_response.as_deref(),
+            Some("correction")
+        );
+        assert_eq!(
+            updated.raw_correction_description.as_deref(),
+            Some("corr-desc")
+        );
+        assert!(updated.correction_tool_loop_state.is_some());
+    }
+
+    #[test]
+    fn with_shipped_best_raw_aligns_fields_and_bumps_updated_at() {
+        use crate::domain::llm_tools::LlmToolLoopState;
+
+        let mut op = sample_operation();
+        op.raw_plan_response = Some("stale-replan".to_string());
+        op.raw_plan_description = Some("stale-desc".to_string());
+        op.raw_correction_response = Some("correction".to_string());
+        op.correction_tool_loop_state = Some(LlmToolLoopState::default());
+        op.updated_at_epoch_seconds = 200;
+
+        let updated =
+            op.with_shipped_best_raw("best-plan".to_string(), Some("best-desc".to_string()), 950);
+        assert_eq!(updated.raw_plan_response.as_deref(), Some("best-plan"));
+        assert_eq!(updated.raw_plan_description.as_deref(), Some("best-desc"));
+        assert_eq!(updated.updated_at_epoch_seconds, 950);
+        assert_eq!(
+            updated.raw_correction_response.as_deref(),
+            Some("correction")
+        );
+        assert!(updated.correction_tool_loop_state.is_some());
     }
 }

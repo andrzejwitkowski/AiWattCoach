@@ -15,6 +15,7 @@ use crate::domain::{
     calendar_view::CalendarEntryViewRefreshPort,
     identity::Clock,
     training_plan::{
+        missing_discipline_requirement, TargetEventRequirement,
         TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
         TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
         TrainingPlanWorkoutSummaryPort,
@@ -25,11 +26,17 @@ pub(super) use super::ctx::{
     GenerationIdentity as QualityIdentity, GenerationPlanning as QualityPlanning,
 };
 
+/// Plan text and matching envelope commentary evaluated / updated together.
+pub(super) struct QualityDraft {
+    pub plan_text: String,
+    pub description: Option<String>,
+}
+
 pub(super) struct PlanQualityLoopInput<'a> {
     pub identity: GenerationIdentity<'a>,
     pub planning: GenerationPlanning<'a>,
     pub snapshot: TrainingPlanSnapshot,
-    pub draft_plan_text: String,
+    pub draft: QualityDraft,
     pub operation: TrainingPlanGenerationOperation,
     pub plan_quality_config: &'a Arc<dyn PlanQualityEvaluatorLlmConfigPort>,
     pub plan_quality_progress: Option<&'a Arc<dyn PlanQualityProgressPort>>,
@@ -46,6 +53,46 @@ pub(super) struct PlanQualityLoopResult {
 pub(super) struct BestDraft {
     snapshot: TrainingPlanSnapshot,
     evaluation: PlanQualityEvaluation,
+}
+
+struct QualityReplanDraft {
+    snapshot: TrainingPlanSnapshot,
+    draft: QualityDraft,
+}
+
+pub(super) struct QualityLoopLimits {
+    pub start_attempt: u32,
+    pub max_loops: u32,
+    pub pass_score: u8,
+}
+
+pub(super) struct QualityProgressSink<'a> {
+    pub messages: &'a mut Vec<String>,
+    pub port: Option<&'a Arc<dyn PlanQualityProgressPort>>,
+}
+
+pub(super) struct QualityAttemptLoopCtx<'a> {
+    pub identity: &'a GenerationIdentity<'a>,
+    pub planning: GenerationPlanning<'a>,
+    pub snapshot: &'a mut TrainingPlanSnapshot,
+    pub draft: &'a mut QualityDraft,
+    pub operation: &'a mut TrainingPlanGenerationOperation,
+    pub best: &'a mut Option<BestDraft>,
+    /// Score-only backup when every draft fails the discipline gate.
+    pub fallback: &'a mut Option<BestDraft>,
+    pub progress: QualityProgressSink<'a>,
+    pub limits: QualityLoopLimits,
+}
+
+struct QualityFinalizeInput<'a> {
+    identity: &'a GenerationIdentity<'a>,
+    snapshot: TrainingPlanSnapshot,
+    operation: TrainingPlanGenerationOperation,
+    best: Option<BestDraft>,
+    fallback: Option<BestDraft>,
+    accepted: bool,
+    max_loops: u32,
+    progress: QualityProgressSink<'a>,
 }
 
 pub(super) enum QualityAttemptAction {
@@ -84,7 +131,7 @@ where
             identity,
             planning,
             mut snapshot,
-            mut draft_plan_text,
+            mut draft,
             mut operation,
             plan_quality_config,
             plan_quality_progress,
@@ -99,64 +146,86 @@ where
             .await?;
         let mut quality_progress_messages = Vec::new();
         let mut best =
-            self.seed_best_quality_draft(&identity, &operation, &snapshot, &draft_plan_text)?;
+            self.seed_best_quality_draft(&identity, &operation, &snapshot, &draft.plan_text)?;
+        let mut fallback: Option<BestDraft> = None;
         let start_attempt = (operation.quality_evaluations.len() as u32).saturating_add(1);
-        let mut accepted = best
-            .as_ref()
-            .is_some_and(|draft| draft.evaluation.score >= pass_score);
-
-        if !accepted {
-            accepted = self
-                .run_quality_evaluation_attempts(
-                    &identity,
-                    planning,
-                    &mut snapshot,
-                    &mut draft_plan_text,
-                    &mut operation,
-                    &mut best,
-                    &mut quality_progress_messages,
-                    plan_quality_progress,
+        // Always enter the attempt path so a resumed/seeded draft is discipline-gated
+        // before we treat a prior high score as already accepted.
+        let accepted = self
+            .run_quality_evaluation_attempts(QualityAttemptLoopCtx {
+                identity: &identity,
+                planning,
+                snapshot: &mut snapshot,
+                draft: &mut draft,
+                operation: &mut operation,
+                best: &mut best,
+                fallback: &mut fallback,
+                progress: QualityProgressSink {
+                    messages: &mut quality_progress_messages,
+                    port: plan_quality_progress,
+                },
+                limits: QualityLoopLimits {
                     start_attempt,
                     max_loops,
                     pass_score,
-                )
-                .await?;
-        }
+                },
+            })
+            .await?;
 
-        self.finalize_plan_quality_loop(
-            &identity,
+        self.finalize_plan_quality_loop(QualityFinalizeInput {
+            identity: &identity,
             snapshot,
             operation,
             best,
+            fallback,
             accepted,
             max_loops,
-            quality_progress_messages,
-            plan_quality_progress,
-        )
+            progress: QualityProgressSink {
+                messages: &mut quality_progress_messages,
+                port: plan_quality_progress,
+            },
+        })
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn finalize_plan_quality_loop(
         &self,
-        identity: &GenerationIdentity<'_>,
-        snapshot: TrainingPlanSnapshot,
-        operation: TrainingPlanGenerationOperation,
-        best: Option<BestDraft>,
-        accepted: bool,
-        max_loops: u32,
-        mut quality_progress_messages: Vec<String>,
-        plan_quality_progress: Option<&Arc<dyn PlanQualityProgressPort>>,
+        input: QualityFinalizeInput<'_>,
     ) -> Result<PlanQualityLoopResult, TrainingPlanError> {
-        let Some(best) = best else {
-            // Evaluator never produced a score (outage / empty resume range). Ship the
-            // structurally valid draft without quality metadata rather than failing save.
-            return Ok(PlanQualityLoopResult {
-                snapshot,
-                quality_evaluations: operation.quality_evaluations.clone(),
-                shipped_quality: None,
-                quality_progress_messages,
-                operation,
-            });
+        let QualityFinalizeInput {
+            identity,
+            snapshot,
+            mut operation,
+            best,
+            fallback,
+            accepted,
+            max_loops,
+            progress,
+        } = input;
+
+        let (best, accepted) = match (best, fallback) {
+            (Some(best), _) => (best, accepted),
+            (None, Some(fallback)) => {
+                emit_progress(
+                    progress.messages,
+                    progress.port,
+                    identity.user_id,
+                    identity.workout_id,
+                    "Shipped best available draft without meeting the discipline requirement."
+                        .to_string(),
+                );
+                (fallback, false)
+            }
+            (None, None) => {
+                // Evaluator never produced a score (outage / empty resume range). Ship the
+                // structurally valid draft without quality metadata rather than failing save.
+                return Ok(PlanQualityLoopResult {
+                    snapshot,
+                    quality_evaluations: operation.quality_evaluations.clone(),
+                    shipped_quality: None,
+                    quality_progress_messages: std::mem::take(progress.messages),
+                    operation,
+                });
+            }
         };
         let finished = if accepted {
             plan_quality_finished_accepted_message(best.evaluation.score)
@@ -164,18 +233,27 @@ where
             plan_quality_finished_best_message(best.evaluation.score, max_loops)
         };
         emit_progress(
-            &mut quality_progress_messages,
-            plan_quality_progress,
+            progress.messages,
+            progress.port,
             identity.user_id,
             identity.workout_id,
             finished,
         );
 
+        if let Some(best_plan) = operation.best_quality_plan_response.clone() {
+            let best_description = operation.best_quality_plan_description.clone();
+            operation = operation.with_shipped_best_raw(
+                best_plan,
+                best_description,
+                self.clock.now_epoch_seconds(),
+            );
+        }
+
         Ok(PlanQualityLoopResult {
             snapshot: best.snapshot,
             quality_evaluations: operation.quality_evaluations.clone(),
             shipped_quality: Some(best.evaluation),
-            quality_progress_messages,
+            quality_progress_messages: std::mem::take(progress.messages),
             operation,
         })
     }
@@ -201,7 +279,9 @@ where
             }));
         }
         let parsed = self.parse_window(&best_draft)?;
-        let days = self.validate_snapshot_days(&parsed.days_by_date)?;
+        let mut days_by_date = parsed.days_by_date;
+        self.clip_and_warn_overlong_window(&operation.operation_key, &mut days_by_date);
+        let days = self.validate_snapshot_days(&days_by_date)?;
         let snapshot = self.build_snapshot(
             identity.user_id,
             identity.workout_id,
@@ -222,12 +302,13 @@ where
         operation: &mut TrainingPlanGenerationOperation,
         quality_feedback: &str,
         raise_to_next: &str,
-    ) -> Result<(TrainingPlanSnapshot, String), TrainingPlanError> {
+        target_event: Option<&TargetEventRequirement>,
+    ) -> Result<QualityReplanDraft, TrainingPlanError> {
         let GenerationPlanning {
             planning_context,
             planning_context_loaded,
         } = planning;
-        let (snapshot, draft) = self
+        let replan = self
             .generate_quality_replan_draft(
                 identity,
                 planning_context,
@@ -236,26 +317,28 @@ where
                 quality_feedback,
             )
             .await?;
-        if draft_addresses_quality_checklist(&draft, raise_to_next) {
-            return Ok((snapshot, draft));
+        if let Some(gap) = replan_gate_gap(&replan, raise_to_next, target_event) {
+            tracing::warn!(
+                operation_key = %operation.operation_key,
+                gap = %gap,
+                "plan quality replan failed structural gate; retrying once with sharper feedback"
+            );
+            let sharper = format!("{gap}\n{quality_feedback}");
+            let retry = self
+                .generate_quality_replan_draft(
+                    identity,
+                    planning_context,
+                    planning_context_loaded,
+                    operation,
+                    &sharper,
+                )
+                .await?;
+            if let Some(retry_gap) = replan_gate_gap(&retry, raise_to_next, target_event) {
+                return Err(TrainingPlanError::Validation(retry_gap));
+            }
+            return Ok(retry);
         }
-
-        tracing::warn!(
-            operation_key = %operation.operation_key,
-            raise_to_next,
-            "plan quality replan omitted Adjustment rules; retrying once with sharper feedback"
-        );
-        let sharper = format!(
-            "CHECKLIST NOT MET: draft omitted required \"Adjustment rules\" section.\n{quality_feedback}"
-        );
-        self.generate_quality_replan_draft(
-            identity,
-            planning_context,
-            planning_context_loaded,
-            operation,
-            &sharper,
-        )
-        .await
+        Ok(replan)
     }
 
     async fn generate_quality_replan_draft(
@@ -265,7 +348,7 @@ where
         planning_context_loaded: &mut bool,
         operation: &mut TrainingPlanGenerationOperation,
         quality_feedback: &str,
-    ) -> Result<(TrainingPlanSnapshot, String), TrainingPlanError> {
+    ) -> Result<QualityReplanDraft, TrainingPlanError> {
         self.ensure_planning_context_loaded(
             planning_context,
             planning_context_loaded,
@@ -294,7 +377,7 @@ where
             .operations
             .upsert(operation.with_raw_plan_payload(
                 raw_plan_response.clone(),
-                raw_plan_description,
+                raw_plan_description.clone(),
                 raw_plan_tool_loop_state,
                 self.clock.now_epoch_seconds(),
             ))
@@ -342,7 +425,16 @@ where
             ));
         }
 
+        self.clip_and_warn_overlong_window(&operation.operation_key, &mut days_by_date);
         let days = self.validate_snapshot_days(&days_by_date)?;
+        let plan_text = self.render_plan_window(&days_by_date);
+        *operation = self
+            .operations
+            .upsert(
+                operation
+                    .with_aligned_raw_plan_text(plan_text.clone(), self.clock.now_epoch_seconds()),
+            )
+            .await?;
         let snapshot = self.build_snapshot(
             identity.user_id,
             identity.workout_id,
@@ -350,7 +442,13 @@ where
             identity.saved_at_epoch_seconds,
             days,
         )?;
-        Ok((snapshot, raw_plan_response))
+        Ok(QualityReplanDraft {
+            snapshot,
+            draft: QualityDraft {
+                plan_text,
+                description: raw_plan_description,
+            },
+        })
     }
 }
 
@@ -365,4 +463,20 @@ pub(super) fn emit_progress(
         progress.on_quality_progress(user_id, workout_id, message.clone());
     }
     messages.push(message);
+}
+
+fn replan_gate_gap(
+    replan: &QualityReplanDraft,
+    raise_to_next: &str,
+    target_event: Option<&TargetEventRequirement>,
+) -> Option<String> {
+    if !draft_addresses_quality_checklist(replan.draft.description.as_deref(), raise_to_next) {
+        return Some(
+            "CHECKLIST NOT MET: draft description omitted required \"Adjustment rules\" section."
+                .to_string(),
+        );
+    }
+    let target = target_event?;
+    missing_discipline_requirement(&replan.snapshot.days, target)
+        .map(|gap| format!("REQUIREMENT NOT MET: {gap}"))
 }

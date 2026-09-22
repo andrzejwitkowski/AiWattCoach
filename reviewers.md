@@ -11,6 +11,36 @@ Scan newest entries first. Focus on entries matching the current task area or fa
 
 ## Entries
 
+### 2026-09-21 | user | Fix 11 clip long windows + first-draft discipline gate
+- Score-9 short TT shipped because `replan_gate_gap` only ran inside regenerate; attempt 1 bypassed it. Separately, a 35-day replan hit exact-14 `validate_snapshot_days` and aborted the loop with `shipping best draft so far`.
+- *Fix:* `clip_and_warn_overlong_window` keeps earliest 14 days before every validate; every quality attempt applies `missing_discipline_requirement` so gated drafts never become `best` (score-only `fallback` when none pass); gated drafts Replan with `REQUIREMENT NOT MET` instead of Accepting on pass score; demote resumed/seeded best before early-accept so resume cannot skip the gate.
+- **Prevention:** hard shipping gates must run on attempt 1 and on seed/resume, not only replan. Overlong windows are surplus to clip, not validation failures. Post-deploy replay vs `9,8,7,7`: continuous ≥780s step on shipped snapshot; logs show discipline and/or clip warns, not overlong Validation abort.
+
+### 2026-09-21 | user | Fix 10 completed-race load + discipline gate
+- Continuous TT drafts scored 7 because race load only entered the audit when the model lucked into valid dated race syntax; short-repeat drafts scored 8 and shipped. Checklist gate only inspected description prose, never plan steps.
+- *Fix:* first-class `completed_race {date,tss,source}` on `simulate_forward_load` (Banister baseline apply; soft-fail invalid dated when present); evidence `baseline_with_completed_race_load` + `source=`; pure `missing_discipline_requirement` gate on parsed plan steps with one REQUIREMENT NOT MET retry, non-shippable on second fail.
+- **Prevention:** finished race TSS is a tool arg, not dated workout syntax. Discipline gates inspect `TrainingPlanDay` steps, not commentary. Post-deploy: SEQUENCE vs `7,8,7,7,7,8,7,8,7,8` and continuous ≥13m @88–96% on shipped plan.
+
+### 2026-09-21 | user | Fix 9 timetrial must not inherit repeatability-first
+- App knew `rc.disc=timetrial` and event duration (~22 min / IF 0.90) but still shipped 2–4m stochastic intervals because ops only said “Match session type to disc” and BASE prioritized repeatability over steady-state.
+- *Fix:* five-way disc→session map in `RACING_STRATEGIST_OPERATIONAL_GUIDELINES` (TT progression `2x10→3x8→1x15-20` / `Time-Trial Threshold`, ±25% of `simulate_forward_load` race duration / IF from pri — no estimator formulas in prose); BASE precedence: when `rc.disc` or `def_disc` is `timetrial` or estimated duration under ~30 min, sustained near-threshold wins. Ops block is generator-only — do not assume evaluator loads literature.
+- **Prevention:** when a race discipline needs a different session shape, put the map in ops and an override next to any conflicting “prioritize X over Y” BASE sentence; assert all five `RaceDiscipline::as_str()` keys in unit tests; post-deploy replay `i188477359` for ≥15m continuous @90–95% in `best_quality_plan_response`.
+
+### 2026-09-21 | user | Fix 8 event-aware forward-load horizon + dated-load feedback
+- Planner needed projection through the next A-event and honest notes when dated load sat outside the window; today-dated race text was dropped at offset 0 so evidence could not cite race TSS on baseline.
+- *Fix:* `horizon_days` (default 14, max 45); beyond-horizon A-event / future_event notes; out-of-window ignore notes; today/past race-named input → `baseline_applied_load` + recomputed baseline; evidence prefers `baseline_with_estimated_race_load`.
+- **Prevention:** when shrinking a forecast window, assert out-of-window inputs either update baseline or emit an ignore note — never silent drop. Post-deploy: replay `i188477359` SEQUENCE vs 147/148 baselines.
+
+### 2026-09-21 | user | forward-load evidence dropped race-day TSB / day series / race TSS
+- Compactor printed `race_day_tsb=n/a` when the race sat on `baseline.today` (outside `days[]`), dropped the day-by-day TSB table the commentary was forced to invent, and omitted `race_tss` provenance — so the evaluator deducted “unverified” for numbers the tool already returned.
+- *Fix:* `baseline(today)` labeling; `baseline_pre_window` when today ∉ days; `days=[date:tsb…]` with middle-only trim; in-window `race_tss=` + per-day `@tss=:src=`; caps 1400/3200.
+- **Prevention:** when adding evaluator evidence, grep the tool response schema and assert every field the rubric can demand is compacted (or explicitly marked unavailable).
+
+### 2026-09-21 | user (thermonuclear residual) | quality-loop attempt args, checklist home, finalize timestamps
+- **Attempt arg sprawl**: `run_one_quality_evaluation_attempt` still exceeded clippy `too_many_arguments` after a partial nest. *Fix*: pass `&mut QualityAttemptLoopCtx` plus `attempt` / `availability_summary`; drop all quality allows. *Prevention*: after nesting a loop ctx, confirm every helper takes the ctx (not a re-exploded arg list) under `clippy -D warnings`.
+- **Adjustment rules hitchhiked on plan text**: checklist scanned rendered plan days, so heading landed on the last day. *Fix*: gate `draft_addresses_quality_checklist` on `description` only; guidance + feedback copy say so; quality_loop retry uses `set_initial_plan_descriptions`. *Prevention*: coach commentary gates belong on the envelope field the OUTPUT_GRAMMAR keeps free for prose.
+- **Finalize raw align skipped timestamps**: bare field writes left `updated_at` stale. *Fix*: `with_shipped_best_raw` via `clone_pending_update`. *Prevention*: any operation field mutation that should count as progress goes through a transition helper.
+
 ### 2026-05-31 | user | LLM coach prompts lack authoritative conversation timing
 - Outbound LLM prompts carried only weak date context; transcripts omitted per-message timestamps. Model could guess a same-day reply was sent the next day.
 - Added RFC3339 timing helpers + `conversation_timing` block in `volatile_context` across all four LLM surfaces. Prefixed transcript messages with `sent_at=...`. Added `created_at_epoch_seconds` to `TrainingPlanConversationMessage`. Refactored `AthleteSummaryLlmGenerator` to use injected `Clock`.

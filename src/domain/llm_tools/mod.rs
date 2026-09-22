@@ -16,6 +16,7 @@ use crate::domain::{
 pub const TOOL_LOOP_MAX_ROUNDS: u32 = 6;
 
 mod simulate_forward_load;
+pub(crate) use simulate_forward_load::duration_from_distance_meters;
 pub use simulate_forward_load::SimulateForwardLoad;
 
 mod get_selected_workout;

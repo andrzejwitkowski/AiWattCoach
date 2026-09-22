@@ -29,6 +29,53 @@ pub(crate) fn valid_plan_window(start_date: &str) -> String {
         .join("\n\n")
 }
 
+pub(crate) fn plan_window_with_short_tt_blocks(start_date: &str) -> String {
+    plan_window_with_quality_day(
+        start_date,
+        "Time-Trial Durability\nMain Set 2x\n- 2m 105-110%\n- 3m 88-92%",
+    )
+}
+
+pub(crate) fn plan_window_with_continuous_tt(start_date: &str) -> String {
+    plan_window_with_quality_day(start_date, "Time-Trial Threshold\n- 15m 92%")
+}
+
+/// Contiguous window longer than the 14-day snapshot; Fix 11 clips to the first 14 days.
+pub(crate) fn plan_window_with_extra_days(start_date: &str) -> String {
+    (0..21)
+        .map(|offset| {
+            let date = add_days(start_date, offset);
+            if offset % 4 == 0 {
+                format!("{date}\nRest Day")
+            } else {
+                format!("{date}\nEndurance\n- 45m 65%")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn plan_window_with_quality_day(start_date: &str, quality_body: &str) -> String {
+    (0..14)
+        .map(|offset| {
+            let date = add_days(start_date, offset);
+            if offset == 1 {
+                format!("{date}\n{quality_body}")
+            } else if offset % 4 == 0 {
+                format!("{date}\nRest Day")
+            } else {
+                format!("{date}\nEndurance\n- 45m 65%")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+/// Compact workout-builder text matching `render_plan_window` (single newlines between days).
+pub(crate) fn rendered_valid_plan_window(start_date: &str) -> String {
+    valid_plan_window(start_date).replace("\n\n", "\n")
+}
+
 pub(crate) fn plan_with_invalid_day(start_date: &str, invalid_date: &str) -> String {
     (0..14)
         .map(|offset| {
@@ -98,6 +145,7 @@ pub(crate) fn stale_pending_operation_with_checkpoints() -> TrainingPlanGenerati
         quality_evaluations: Vec::new(),
         best_quality_evaluation: None,
         best_quality_plan_response: None,
+        best_quality_plan_description: None,
         validation_issues: Vec::new(),
         attempts: Vec::new(),
         failure: None,
@@ -133,6 +181,7 @@ pub(crate) fn stale_pending_operation_with_recap_only() -> TrainingPlanGeneratio
         quality_evaluations: Vec::new(),
         best_quality_evaluation: None,
         best_quality_plan_response: None,
+        best_quality_plan_description: None,
         validation_issues: Vec::new(),
         attempts: vec![AttemptRecord {
             phase: WorkflowPhase::WorkoutRecap,
@@ -173,6 +222,7 @@ pub(crate) fn stale_pending_operation_with_invalid_correction_response(
         quality_evaluations: Vec::new(),
         best_quality_evaluation: None,
         best_quality_plan_response: None,
+        best_quality_plan_description: None,
         validation_issues: vec![ValidationIssue {
             scope: "2026-04-10".to_string(),
             message: "invalid planned workout step: - nope".to_string(),
@@ -211,6 +261,7 @@ pub(crate) fn stale_pending_operation_with_snapshot_mismatch() -> TrainingPlanGe
         quality_evaluations: Vec::new(),
         best_quality_evaluation: None,
         best_quality_plan_response: None,
+        best_quality_plan_description: None,
         validation_issues: Vec::new(),
         attempts: Vec::new(),
         failure: None,

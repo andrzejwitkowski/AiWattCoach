@@ -82,6 +82,14 @@ async fn training_plan_generation_operation_repository_round_trips_and_reclaims_
             assert_eq!(operation.status, WorkflowStatus::Pending);
             assert_eq!(operation.attempt_count, failed.attempt_count + 1);
             assert_eq!(operation.failure, None);
+            assert_eq!(
+                operation.best_quality_plan_response.as_deref(),
+                Some("best-plan-text")
+            );
+            assert_eq!(
+                operation.best_quality_plan_description.as_deref(),
+                Some("best-plan-desc")
+            );
         }
         other => panic!("expected reclaimed operation, got {other:?}"),
     }
@@ -862,7 +870,8 @@ fn sample_operation(operation_key: &str) -> TrainingPlanGenerationOperation {
         correction_tool_loop_state: None,
         quality_evaluations: Vec::new(),
         best_quality_evaluation: None,
-        best_quality_plan_response: None,
+        best_quality_plan_response: Some("best-plan-text".to_string()),
+        best_quality_plan_description: Some("best-plan-desc".to_string()),
         validation_issues: Vec::new(),
         attempts: Vec::new(),
         failure: None,

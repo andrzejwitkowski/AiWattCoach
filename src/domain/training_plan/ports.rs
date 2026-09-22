@@ -191,6 +191,16 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
     ) -> BoxFuture<Result<String, TrainingPlanError>> {
         Box::pin(async move { Ok("availability: not configured".to_string()) })
     }
+
+    fn plan_target_event_requirement(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> BoxFuture<
+        Result<Option<crate::domain::training_plan::TargetEventRequirement>, TrainingPlanError>,
+    > {
+        Box::pin(async move { Ok(None) })
+    }
 }
 
 pub trait TrainingPlanWorkoutSummaryPort: Send + Sync + 'static {

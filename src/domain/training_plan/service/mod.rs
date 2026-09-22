@@ -1,11 +1,16 @@
 mod correction;
 mod ctx;
+mod discipline_requirement;
 pub(crate) mod parsing;
 mod quality;
 mod quality_evidence;
 mod scheduler;
 mod snapshot;
 mod structural;
+
+pub use discipline_requirement::{
+    missing_discipline_requirement, select_target_event_requirement, TargetEventRequirement,
+};
 
 use chrono::{TimeZone, Utc};
 
@@ -741,6 +746,7 @@ where
             };
 
             let mut days_by_date = parsed.days_by_date;
+            service.clip_and_warn_overlong_window(&operation.operation_key, &mut days_by_date);
             let mut issues = parsed.issues;
             let mut invalid_day_sections = parsed.invalid_day_sections;
             if operation.validation_issues != issues {
@@ -773,6 +779,7 @@ where
                 )
                 .await?;
 
+            service.clip_and_warn_overlong_window(&operation.operation_key, &mut days_by_date);
             let days = match service.validate_snapshot_days(&days_by_date) {
                 Ok(days) => days,
                 Err(error) => {
@@ -786,6 +793,15 @@ where
                         .await?)
                 }
             };
+
+            let graded_plan_text = service.render_plan_window(&days_by_date);
+            operation = service
+                .operations
+                .upsert(operation.with_aligned_raw_plan_text(
+                    graded_plan_text.clone(),
+                    service.clock.now_epoch_seconds(),
+                ))
+                .await?;
 
             let snapshot = match service.build_snapshot(
                 &user_id,
@@ -827,7 +843,10 @@ where
                             planning_context_loaded: &mut planning_context_loaded,
                         },
                         snapshot,
-                        draft_plan_text: raw_plan_response,
+                        draft: quality::QualityDraft {
+                            description: operation.raw_plan_description.clone(),
+                            plan_text: graded_plan_text,
+                        },
                         operation,
                         plan_quality_config: &plan_quality_config,
                         plan_quality_progress: service.plan_quality_progress.as_ref(),

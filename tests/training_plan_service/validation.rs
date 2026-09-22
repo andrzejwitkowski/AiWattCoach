@@ -221,7 +221,7 @@ async fn preamble_before_first_date_still_reaches_correction_flow() {
     assert_eq!(operation.status, WorkflowStatus::Completed);
     assert_eq!(
         operation.raw_plan_response.as_deref(),
-        Some(initial_raw.as_str())
+        Some(rendered_valid_plan_window(FIRST_DAY).as_str())
     );
     assert!(operation.validation_issues.is_empty());
 }

@@ -118,8 +118,11 @@ pub(super) struct Baseline {
 pub(super) fn snapshot_baseline(training_context: &TrainingContext) -> Baseline {
     let ctl = ctl_from_context(training_context);
     let atl = atl_from_context(training_context);
-    let tsb = tsb_from_context(training_context);
-    Baseline { ctl, atl, tsb }
+    Baseline {
+        ctl,
+        atl,
+        tsb: tsb_from_context(training_context),
+    }
 }
 
 pub(super) fn select_estimates_for_day(
@@ -234,7 +237,7 @@ pub(super) fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedL
     }
 }
 
-fn input_day_estimate(
+pub(super) fn input_day_estimate(
     days: &[crate::domain::intervals::PlannedWorkoutDay],
     date: &str,
     ftp_watts: Option<i32>,
@@ -520,7 +523,7 @@ fn estimate_tss(duration_seconds: i32, intensity_factor: f64) -> f64 {
     (duration_seconds as f64 / 3600.0) * intensity_factor * intensity_factor * 100.0
 }
 
-fn duration_from_distance_meters(meters: i32) -> Option<i32> {
+pub(crate) fn duration_from_distance_meters(meters: i32) -> Option<i32> {
     (meters > 0).then(|| (f64::from(meters) * 0.12).round() as i32)
 }
 

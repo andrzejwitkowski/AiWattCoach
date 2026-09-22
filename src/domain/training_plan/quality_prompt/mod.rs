@@ -9,13 +9,14 @@ pub use feedback::{
     PLAN_QUALITY_PASS_SCORE,
 };
 pub(crate) use rubric::truncate_evidence_section;
+pub(crate) use rubric::EVIDENCE_SECTION_MAX_CHARS;
 pub use rubric::{
     assemble_plan_quality_evaluation_request, PlanQualityEvaluationInput, PlanQualityEvidence,
 };
 #[cfg(test)]
 pub(crate) use rubric::{
-    format_plan_quality_evidence, plan_quality_evaluator_rubric, EVIDENCE_BLOCK_MAX_CHARS,
-    EVIDENCE_SECTION_MAX_CHARS,
+    format_plan_quality_evidence, plan_quality_evaluator_rubric, COMMENTARY_SECTION_MAX_CHARS,
+    EVIDENCE_BLOCK_MAX_CHARS,
 };
 
 #[cfg(test)]
@@ -29,7 +30,8 @@ mod tests {
         assemble_plan_quality_evaluation_request, format_plan_quality_availability,
         format_plan_quality_evidence, format_quality_feedback, plan_quality_attempt_message,
         plan_quality_finished_accepted_message, plan_quality_finished_best_message,
-        PlanQualityEvidence, EVIDENCE_BLOCK_MAX_CHARS, EVIDENCE_SECTION_MAX_CHARS,
+        PlanQualityEvaluationInput, PlanQualityEvidence, COMMENTARY_SECTION_MAX_CHARS,
+        EVIDENCE_BLOCK_MAX_CHARS, EVIDENCE_SECTION_MAX_CHARS,
     };
 
     fn sample_recap() -> WorkoutRecap {
@@ -39,6 +41,26 @@ mod tests {
             model: "test".to_string(),
             generated_at_epoch_seconds: 1,
         }
+    }
+
+    fn assemble_for_test(
+        draft_plan_text: &str,
+        draft_plan_description: Option<&str>,
+        evidence: Option<&PlanQualityEvidence>,
+        availability_summary: Option<&str>,
+    ) -> crate::domain::llm::LlmChatRequest {
+        let recap = sample_recap();
+        assemble_plan_quality_evaluation_request(&PlanQualityEvaluationInput {
+            user_id: "u",
+            workout_id: "w",
+            saved_at_epoch_seconds: 1,
+            workout_recap: &recap,
+            planning_context: None,
+            draft_plan_text,
+            draft_plan_description,
+            evidence,
+            availability_summary,
+        })
     }
 
     #[test]
@@ -75,7 +97,7 @@ mod tests {
     fn format_quality_feedback_includes_raise_to_next_when_present() {
         assert_eq!(
             format_quality_feedback(6, "tempo heavy", "Cut midweek Z3."),
-            "Previous plan quality evaluation (must address):\nscore: 6/10\ncritique: tempo heavy\nUnresolved raise_to_next checklist (draft MUST include a section realizing each item; preferred heading \"Adjustment rules\"):\n1. Cut midweek Z3.\nIf any checklist item is omitted, the draft is invalid for shipping."
+            "Previous plan quality evaluation (must address):\nscore: 6/10\ncritique: tempo heavy\nUnresolved raise_to_next checklist (JSON `description` MUST include a section realizing each item; preferred heading \"Adjustment rules\"):\n1. Cut midweek Z3.\nPut Adjustment rules only in `description`, never in `plan`. If any checklist item is omitted from description, the draft is invalid for shipping."
         );
         assert_eq!(
             format_quality_feedback(6, "tempo heavy", ""),
@@ -84,16 +106,25 @@ mod tests {
     }
 
     #[test]
-    fn draft_addresses_quality_checklist_requires_adjustment_rules_heading() {
+    fn draft_addresses_quality_checklist_requires_adjustment_rules_in_description() {
         use super::draft_addresses_quality_checklist;
-        assert!(draft_addresses_quality_checklist("any draft", ""));
+        assert!(draft_addresses_quality_checklist(Some("any draft"), ""));
         assert!(!draft_addresses_quality_checklist(
-            "Plan with fatigue notes but no section",
+            Some("Plan with fatigue notes but no section"),
+            "Add explicit fatigue correction for 17.09 and 19.09"
+        ));
+        assert!(!draft_addresses_quality_checklist(
+            None,
             "Add explicit fatigue correction for 17.09 and 19.09"
         ));
         assert!(draft_addresses_quality_checklist(
-            "## Adjustment rules\n- Cut load on 17.09 and 19.09 when TSB < -10",
+            Some("## Adjustment rules\n- Cut load on 17.09 and 19.09 when TSB < -10"),
             "Add explicit fatigue correction for 17.09 and 19.09"
+        ));
+        // Plan-only heading must not pass once the gate is description-scoped.
+        assert!(!draft_addresses_quality_checklist(
+            Some("Endurance notes only"),
+            "Add explicit fatigue correction"
         ));
     }
 
@@ -108,15 +139,7 @@ mod tests {
 
     #[test]
     fn evaluator_system_prompt_uses_rubric_not_generator_rulebook() {
-        let request = assemble_plan_quality_evaluation_request(
-            "u".to_string(),
-            1,
-            &sample_recap(),
-            None,
-            "draft",
-            None,
-            None,
-        );
+        let request = assemble_for_test("draft", None, None, None);
         let system = &request.system_prompt;
         assert!(system.contains("1-3:"));
         assert!(system.contains("4-5:"));
@@ -174,21 +197,69 @@ mod tests {
             power_curve: Some("curve".to_string()),
             w_prime: None,
         };
-        let request = assemble_plan_quality_evaluation_request(
-            "u".to_string(),
-            1,
-            &sample_recap(),
-            None,
+        let request = assemble_for_test(
             "MY_DRAFT",
+            Some("2026-09-20 TT rehearsal — demand: aero TT; execution: steady; progression: race"),
             Some(&evidence),
             Some("availability: 2026-09-14 unavailable (Monday)"),
         );
         let user = &request.conversation[0].content;
         let evidence_at = user.find("Evidence (tool-verified facts").unwrap();
         let draft_at = user.find("Draft plan:\nMY_DRAFT").unwrap();
+        let commentary_at = user
+            .find("Plan commentary (author's claims; not parsed as the plan):")
+            .unwrap();
         assert!(evidence_at < draft_at);
+        assert!(draft_at < commentary_at);
         assert!(user.contains("missing: get_w_prime_balance"));
         assert!(user.contains("availability: 2026-09-14 unavailable (Monday)"));
+        assert!(user.contains("2026-09-20 TT rehearsal"));
+    }
+
+    #[test]
+    fn assemble_omits_commentary_section_when_absent() {
+        let request = assemble_for_test("MY_DRAFT", None, None, None);
+        let user = &request.conversation[0].content;
+        assert!(user.contains("Draft plan:\nMY_DRAFT"));
+        assert!(!user.contains("Plan commentary"));
+    }
+
+    #[test]
+    fn assemble_omits_commentary_section_when_blank() {
+        let request = assemble_for_test("MY_DRAFT", Some("   "), None, None);
+        let user = &request.conversation[0].content;
+        assert!(!user.contains("Plan commentary"));
+    }
+
+    #[test]
+    fn assemble_truncates_over_cap_commentary_with_marker() {
+        let long = "x".repeat(COMMENTARY_SECTION_MAX_CHARS + 50);
+        let request = assemble_for_test("MY_DRAFT", Some(&long), None, None);
+        let user = &request.conversation[0].content;
+        let label = "Plan commentary (author's claims; not parsed as the plan):\n";
+        let start = user.find(label).unwrap() + label.len();
+        let end = user[start..]
+            .find("\n\nReturn JSON only.")
+            .map(|offset| start + offset)
+            .unwrap();
+        let commentary = &user[start..end];
+        assert!(commentary.ends_with("…[truncated]"));
+        assert!(commentary.chars().count() <= COMMENTARY_SECTION_MAX_CHARS);
+    }
+
+    #[test]
+    fn evaluator_rubric_allows_commentary_specificity_for_top_band() {
+        let rubric = super::plan_quality_evaluator_rubric();
+        assert!(rubric.contains(
+            "Session-level specificity may be demonstrated in the plan commentary section"
+        ));
+        assert!(
+            rubric.contains("Do not require cadence, zone, or inline cues inside the plan text")
+        );
+        assert!(rubric.contains("The commentary is a claim, not evidence"));
+        assert!(rubric.contains(
+            "A commentary line naming a session or day that is absent from the plan is a contradiction"
+        ));
     }
 
     #[test]
