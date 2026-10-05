@@ -23,6 +23,7 @@ pub fn resolve_llm_config(
         LlmProvider::DeepSeek => ai_agents.deepseek_api_key.clone(),
         LlmProvider::Zai => ai_agents.zai_api_key.clone(),
         LlmProvider::OpenAiCompatible => ai_agents.openai_compatible_api_key.clone(),
+        LlmProvider::OpenCodeGo => ai_agents.opencode_go_api_key.clone(),
     }
     .filter(|value| !value.trim().is_empty())
     .ok_or(LlmError::CredentialsNotConfigured)?;
@@ -141,5 +142,21 @@ mod tests {
 
         let error = resolve_llm_config(&ai_agents, None, None).unwrap_err();
         assert!(matches!(error, LlmError::ProviderRejected(_)));
+    }
+
+    #[test]
+    fn resolve_llm_config_supports_opencode_go_without_user_base_url() {
+        let ai_agents = AiAgentsConfig {
+            opencode_go_api_key: Some("go-test-key".to_string()),
+            selected_provider: Some(LlmProvider::OpenCodeGo),
+            selected_model: Some("gpt-5.6-luna".to_string()),
+            ..AiAgentsConfig::default()
+        };
+
+        let config = resolve_llm_config(&ai_agents, None, None).unwrap();
+        assert_eq!(config.provider, LlmProvider::OpenCodeGo);
+        assert_eq!(config.model, "gpt-5.6-luna");
+        assert_eq!(config.api_key, "go-test-key");
+        assert_eq!(config.base_url, None);
     }
 }

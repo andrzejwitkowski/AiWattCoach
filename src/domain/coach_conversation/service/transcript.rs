@@ -76,6 +76,7 @@ pub fn build_calendar_conversation(
                 tool_call_id: None,
                 reasoning_content: None,
                 image_base64: None,
+                provider_continuation_json: None,
             }),
             CoachConversationMessageRole::Coach => Some(LlmChatMessage {
                 role: LlmMessageRole::Assistant,
@@ -87,6 +88,7 @@ pub fn build_calendar_conversation(
                 tool_call_id: None,
                 reasoning_content: message.reasoning_content.clone(),
                 image_base64: None,
+                provider_continuation_json: None,
             }),
             CoachConversationMessageRole::Tool | CoachConversationMessageRole::System => None,
         })

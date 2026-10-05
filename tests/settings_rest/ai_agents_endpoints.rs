@@ -144,6 +144,41 @@ async fn update_ai_agents_supports_openrouter_provider_and_model() {
 }
 
 #[tokio::test]
+async fn update_ai_agents_supports_opencode_go_provider_and_model() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "opencodeGoApiKey": "go-test-key-123456",
+        "selectedProvider": "opencode_go",
+        "selectedModel": "gpt-5.6-luna"
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/ai-agents")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_body: Value = get_json(response).await;
+    let ai_agents = response_body.get("aiAgents").unwrap();
+    assert_eq!(ai_agents["selectedProvider"], "opencode_go");
+    assert_eq!(ai_agents["selectedModel"], "gpt-5.6-luna");
+    assert_eq!(ai_agents["opencodeGoApiKey"], "***...3456");
+    assert_eq!(ai_agents["opencodeGoApiKeySet"], true);
+}
+
+#[tokio::test]
 async fn update_ai_agents_persists_meso_cycle_provider_and_model() {
     let app = settings_test_app(
         TestIdentityServiceWithSession::default(),
@@ -835,6 +870,41 @@ async fn test_ai_agents_connection_returns_ok_for_zai_settings() {
 }
 
 #[tokio::test]
+async fn test_ai_agents_connection_returns_ok_for_opencode_go_settings() {
+    let app = settings_test_app_with_services(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        None,
+        Some(std::sync::Arc::new(MockLlmChatService::returning_ok())),
+        Some(std::sync::Arc::new(TestLlmConfigProvider)),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "opencodeGoApiKey": "go-test-key-123456",
+        "selectedProvider": "opencode_go",
+        "selectedModel": "gpt-5.6-luna"
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_body: Value = get_json(response).await;
+    assert_eq!(response_body["connected"], true);
+    assert_eq!(response_body["message"], "Connection successful.");
+}
+
+#[tokio::test]
 async fn test_ai_agents_connection_returns_unauthorized_for_missing_auth() {
     let app = settings_test_app_with_services(
         TestIdentityServiceWithSession::default(),
@@ -1106,6 +1176,7 @@ async fn test_ai_agents_connection_returns_bad_request_when_provider_changes_wit
         zai_api_key: None,
         openai_compatible_api_key: None,
         openai_compatible_base_url: None,
+        opencode_go_api_key: None,
         selected_provider: Some(aiwattcoach::domain::llm::LlmProvider::OpenAi),
         selected_model: Some("gpt-4o-mini".to_string()),
         workout_chat_provider: None,

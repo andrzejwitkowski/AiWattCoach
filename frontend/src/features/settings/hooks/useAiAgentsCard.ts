@@ -277,6 +277,7 @@ function hasAnyPersistedConnectionValue(aiAgents: UserSettingsResponse['aiAgents
     aiAgents.deepseekApiKeySet ||
     aiAgents.zaiApiKeySet ||
     aiAgents.openaiCompatibleApiKeySet ||
+    aiAgents.opencodeGoApiKeySet ||
     Boolean(aiAgents.openaiCompatibleBaseUrl) ||
     Boolean(aiAgents.selectedProvider) ||
     Boolean(aiAgents.selectedModel)

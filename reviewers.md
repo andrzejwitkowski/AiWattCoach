@@ -11,6 +11,10 @@ Scan newest entries first. Focus on entries matching the current task area or fa
 
 ## Entries
 
+### 2026-10-05 | user | OpenCode Go must be a separate provider
+- The initial implementation placed OpenCode Go behind the OpenAI Compatible provider; the user clarified it needs its own provider and key while preserving the existing provider unchanged.
+- *Fix:* added `opencode_go` across domain settings, Mongo/REST/frontend wiring, a dedicated protocol-routing adapter, and tool-loop session propagation. *Prevention:* when a provider has a distinct account, endpoint, or protocol, model it as a first-class provider before touching the shared adapter.
+
 ### 2026-09-21 | user | Fix 11 clip long windows + first-draft discipline gate
 - Score-9 short TT shipped because `replan_gate_gap` only ran inside regenerate; attempt 1 bypassed it. Separately, a 35-day replan hit exact-14 `validate_snapshot_days` and aborted the loop with `shipping best draft so far`.
 - *Fix:* `clip_and_warn_overlong_window` keeps earliest 14 days before every validate; every quality attempt applies `missing_discipline_requirement` so gated drafts never become `best` (score-only `fallback` when none pass); gated drafts Replan with `REQUIREMENT NOT MET` instead of Accepting on pass score; demote resumed/seeded best before early-accept so resume cannot skip the gate.

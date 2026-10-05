@@ -1,13 +1,94 @@
 use aiwattcoach::{
     adapters::llm::gemini::cache::context_hash,
-    domain::llm::{LlmChatPort, LlmProvider, LlmProviderConfig, LlmToolChoice, LlmToolDefinition},
+    domain::llm::{
+        LlmChatMessage, LlmChatPort, LlmProvider, LlmProviderConfig, LlmToolChoice,
+        LlmToolDefinition,
+    },
 };
 
 use crate::shared_support::tracing_capture::capture_tracing_logs;
 use crate::support::{
-    deepseek_client, gemini_client, openai_client, openai_forbidden_client, openrouter_client,
-    sample_request, zai_client, MockServer,
+    deepseek_client, gemini_client, openai_client, openai_forbidden_client, opencode_go_client,
+    openrouter_client, sample_request, zai_client, MockServer,
 };
+
+#[tokio::test]
+async fn opencode_go_responses_maps_text_and_tool_continuation() {
+    let server = MockServer::start().await;
+    let client = opencode_go_client(&format!("{}/", server.base_url));
+    let config = LlmProviderConfig {
+        provider: LlmProvider::OpenCodeGo,
+        model: "gpt-5.6-luna".to_string(),
+        api_key: "go-test-key".to_string(),
+        base_url: None,
+    };
+    let mut request = sample_request();
+    request.session_id = Some("session-1".to_string());
+    request.tools = vec![LlmToolDefinition {
+        name: "lookupWorkout".to_string(),
+        description: "Look up a workout".to_string(),
+        input_schema_json: r#"{"type":"object"}"#.to_string(),
+    }];
+    request.tool_choice = LlmToolChoice::Auto;
+
+    let first = client.chat(config.clone(), request.clone()).await.unwrap();
+    assert_eq!(first.assistant_text(), Some(""));
+    assert_eq!(first.tool_calls()[0].id, "call-go-1");
+    assert!(first.message.provider_continuation_json.is_some());
+
+    request.conversation = vec![
+        LlmChatMessage::user("How did I do?"),
+        first.message.clone(),
+        LlmChatMessage::tool("call-go-1", "workout found"),
+    ];
+    let second = client.chat(config, request).await.unwrap();
+    assert_eq!(second.assistant_text(), Some("Tool result received"));
+    assert_eq!(
+        second.provider_request_id.as_deref(),
+        Some("responses-req-2")
+    );
+    assert_eq!(second.usage.total_tokens, Some(16));
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 2);
+    assert!(requests.iter().all(|request| request.path == "/responses"));
+    assert!(requests
+        .iter()
+        .all(|request| request.authorization.as_deref() == Some("Bearer go-test-key")));
+    assert_eq!(requests[0].opencode_session.as_deref(), Some("session-1"));
+    assert_eq!(requests[1].opencode_session, requests[0].opencode_session);
+    assert_eq!(requests[0].body["model"], "gpt-5.6-luna");
+    assert_eq!(requests[0].body["input"][0]["role"], "system");
+    assert!(requests[1].body["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["type"] == "function_call"));
+    assert!(requests[1].body["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["type"] == "function_call_output"));
+}
+
+#[tokio::test]
+async fn opencode_go_generates_distinct_sessions_when_not_supplied() {
+    let server = MockServer::start().await;
+    let client = opencode_go_client(&server.base_url);
+    let config = LlmProviderConfig {
+        provider: LlmProvider::OpenCodeGo,
+        model: "gpt-5.6-luna".to_string(),
+        api_key: "go-test-key".to_string(),
+        base_url: None,
+    };
+    client.chat(config.clone(), sample_request()).await.unwrap();
+    client.chat(config, sample_request()).await.unwrap();
+
+    let requests = server.requests();
+    assert_ne!(requests[0].opencode_session, requests[1].opencode_session);
+    assert!(requests[0].opencode_session.is_some());
+    assert!(requests[1].opencode_session.is_some());
+}
 
 #[tokio::test]
 async fn openai_client_maps_response_and_cached_tokens() {
@@ -67,6 +148,7 @@ async fn openai_compatible_client_prefers_config_base_url_over_client_default() 
         requests[0].authorization.as_deref(),
         Some("Bearer compat-key")
     );
+    assert_eq!(requests[0].opencode_session, None);
 }
 
 #[tokio::test]

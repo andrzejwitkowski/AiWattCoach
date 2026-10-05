@@ -34,6 +34,8 @@ pub(super) struct AiAgentsDocument {
     pub(super) openai_compatible_api_key: Option<String>,
     #[serde(default)]
     pub(super) openai_compatible_base_url: Option<String>,
+    #[serde(default)]
+    pub(super) opencode_go_api_key: Option<String>,
     pub(super) selected_provider: Option<String>,
     pub(super) selected_model: Option<String>,
     #[serde(default)]
@@ -87,6 +89,10 @@ impl std::fmt::Debug for AiAgentsDocument {
             .field(
                 "openai_compatible_base_url",
                 &self.openai_compatible_base_url,
+            )
+            .field(
+                "opencode_go_api_key",
+                &RedactedOptionalText(&self.opencode_go_api_key),
             )
             .field("selected_provider", &self.selected_provider)
             .field("selected_model", &self.selected_model)

@@ -28,6 +28,7 @@ pub struct AiAgentsConfig {
     pub zai_api_key: Option<String>,
     pub openai_compatible_api_key: Option<String>,
     pub openai_compatible_base_url: Option<String>,
+    pub opencode_go_api_key: Option<String>,
     pub selected_provider: Option<LlmProvider>,
     pub selected_model: Option<String>,
     pub workout_chat_provider: Option<LlmProvider>,

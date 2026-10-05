@@ -7,8 +7,8 @@ use crate::domain::llm::{
 
 use super::{
     dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
-    openai_compatible::client::OpenAiCompatibleClient, openrouter::client::OpenRouterClient,
-    zai::client::ZaiClient,
+    openai_compatible::client::OpenAiCompatibleClient, opencode_go::client::OpenCodeGoClient,
+    openrouter::client::OpenRouterClient, zai::client::ZaiClient,
 };
 
 #[derive(Clone)]
@@ -20,6 +20,7 @@ pub enum LlmAdapter {
         zai: ZaiClient,
         gemini: GeminiClient,
         openrouter: OpenRouterClient,
+        opencode_go: Box<OpenCodeGoClient>,
     },
 }
 
@@ -30,6 +31,7 @@ impl LlmAdapter {
         zai: ZaiClient,
         gemini: GeminiClient,
         openrouter: OpenRouterClient,
+        opencode_go: OpenCodeGoClient,
     ) -> Self {
         Self::Live {
             openai,
@@ -37,6 +39,7 @@ impl LlmAdapter {
             zai,
             gemini,
             openrouter,
+            opencode_go: Box::new(opencode_go),
         }
     }
 
@@ -61,12 +64,14 @@ impl LlmChatPort for LlmAdapter {
                 zai,
                 gemini,
                 openrouter,
+                opencode_go,
             } => match config.provider {
                 LlmProvider::OpenAi | LlmProvider::OpenAiCompatible => openai.chat(config, request),
                 LlmProvider::DeepSeek => deepseek.chat(config, request),
                 LlmProvider::Zai => zai.chat(config, request),
                 LlmProvider::Gemini => gemini.chat(config, request),
                 LlmProvider::OpenRouter => openrouter.chat(config, request),
+                LlmProvider::OpenCodeGo => opencode_go.chat(config, request),
             },
         };
 

@@ -79,6 +79,10 @@ pub(super) struct AiAgentsDto {
     pub(super) openai_compatible_api_key_set: bool,
     #[serde(rename = "openaiCompatibleBaseUrl")]
     pub(super) openai_compatible_base_url: Option<String>,
+    #[serde(rename = "opencodeGoApiKey")]
+    pub(super) opencode_go_api_key: Option<String>,
+    #[serde(rename = "opencodeGoApiKeySet")]
+    pub(super) opencode_go_api_key_set: bool,
     #[serde(rename = "selectedProvider")]
     pub(super) selected_provider: Option<String>,
     #[serde(rename = "selectedModel")]
@@ -192,6 +196,8 @@ pub(crate) struct UpdateAiAgentsRequest {
     pub(super) openai_compatible_api_key: OptionalStringInput,
     #[serde(default, rename = "openaiCompatibleBaseUrl")]
     pub(super) openai_compatible_base_url: OptionalStringInput,
+    #[serde(default, rename = "opencodeGoApiKey")]
+    pub(super) opencode_go_api_key: OptionalStringInput,
     #[serde(default, rename = "selectedProvider")]
     pub(super) selected_provider: OptionalStringInput,
     #[serde(default, rename = "selectedModel")]

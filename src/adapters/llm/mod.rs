@@ -7,6 +7,7 @@ pub mod get_selected_workout_data;
 pub mod meso_cycle_generator;
 pub mod meso_cycle_llm_config;
 pub mod openai_compatible;
+pub mod opencode_go;
 pub mod openrouter;
 pub mod resolve_settings_llm_config;
 pub mod settings_adapter;

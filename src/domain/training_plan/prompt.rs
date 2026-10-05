@@ -185,6 +185,7 @@ pub fn planning_conversation_messages(
             tool_call_id: None,
             reasoning_content: None,
             image_base64: None,
+            provider_continuation_json: None,
         })
         .collect()
 }

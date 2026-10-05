@@ -253,6 +253,9 @@ pub(crate) fn ai_config(
             config.openai_compatible_api_key = Some(api_key.to_string());
             config.openai_compatible_base_url = Some("http://127.0.0.1:8080/v1".to_string());
         }
+        aiwattcoach::domain::llm::LlmProvider::OpenCodeGo => {
+            config.opencode_go_api_key = Some(api_key.to_string());
+        }
     }
     config
 }

@@ -136,6 +136,7 @@ pub(crate) fn map_message(message: LlmChatMessage, include_images: bool) -> Open
         tool_call_id,
         reasoning_content,
         image_base64,
+        ..
     } = message;
     let content = match (include_images, image_base64) {
         (true, Some(b64)) => {

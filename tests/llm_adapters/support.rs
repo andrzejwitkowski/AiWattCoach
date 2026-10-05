@@ -4,7 +4,8 @@ use aiwattcoach::{
     adapters::llm::{
         gemini::client::GeminiClient,
         openai_compatible::client::OpenAiCompatibleClient as OpenAiClient,
-        openrouter::client::OpenRouterClient, zai::client::ZaiClient,
+        opencode_go::client::OpenCodeGoClient, openrouter::client::OpenRouterClient,
+        zai::client::ZaiClient,
     },
     domain::llm::{
         BoxFuture as LlmBoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse,
@@ -47,6 +48,7 @@ pub(crate) struct CapturedRequest {
     pub(crate) authorization: Option<String>,
     pub(crate) referer: Option<String>,
     pub(crate) title: Option<String>,
+    pub(crate) opencode_session: Option<String>,
     pub(crate) body: Value,
 }
 
@@ -293,6 +295,7 @@ impl MockServer {
         let app = Router::new()
             .route("/v1/chat/completions", post(openai_handler))
             .route("/chat/completions", post(deepseek_handler))
+            .route("/responses", post(opencode_go_handler))
             .route("/api/paas/v4/chat/completions", post(zai_handler))
             .route(
                 "/v1-forbidden/chat/completions",
@@ -343,10 +346,12 @@ pub(crate) fn sample_request() -> LlmChatRequest {
             tool_call_id: None,
             reasoning_content: None,
             image_base64: None,
+            provider_continuation_json: None,
         }],
         cache_scope_key: Some("scope-1".to_string()),
         cache_key: Some("cache-key-1".to_string()),
         reusable_cache_id: None,
+        session_id: None,
         tools: Vec::new(),
         tool_choice: LlmToolChoice::None,
     }
@@ -388,6 +393,10 @@ pub(crate) fn openai_forbidden_client(base_url: &str) -> OpenAiClient {
 
 pub(crate) fn openrouter_client(base_url: &str) -> OpenRouterClient {
     OpenRouterClient::new(reqwest::Client::new()).with_base_url(format!("{base_url}/api/v1"))
+}
+
+pub(crate) fn opencode_go_client(base_url: &str) -> OpenCodeGoClient {
+    OpenCodeGoClient::new(reqwest::Client::new()).with_base_url(base_url)
 }
 
 pub(crate) fn gemini_client(base_url: &str) -> GeminiClient {
@@ -474,6 +483,39 @@ async fn deepseek_handler(
             "prompt_cache_hit_tokens": 80,
             "prompt_cache_miss_tokens": 20
         }
+    }))
+}
+
+async fn opencode_go_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    let has_tool_output = body
+        .get("input")
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items.iter().any(|item| {
+                item.get("type").and_then(Value::as_str) == Some("function_call_output")
+            })
+        });
+    capture_request(&state, "/responses", headers, body);
+    if has_tool_output {
+        return Json(json!({
+            "id": "responses-req-2",
+            "model": "gpt-5.6-luna",
+            "status": "completed",
+            "output_text": "Tool result received",
+            "output": [{"type":"message","content":[{"type":"output_text","text":"Tool result received"}]}],
+            "usage": {"input_tokens": 12, "output_tokens": 4, "total_tokens": 16}
+        }));
+    }
+    Json(json!({
+        "id": "responses-req-1",
+        "model": "gpt-5.6-luna",
+        "status": "completed",
+        "output": [{"type":"function_call","call_id":"call-go-1","name":"lookupWorkout","arguments":"{\"workoutId\":\"workout-1\"}"}],
+        "usage": {"input_tokens": 10, "output_tokens": 3, "total_tokens": 13}
     }))
 }
 
@@ -707,6 +749,10 @@ fn capture_request(state: &MockServerState, path: &str, headers: HeaderMap, body
             .map(|value| value.to_string()),
         title: headers
             .get("X-OpenRouter-Title")
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_string()),
+        opencode_session: headers
+            .get("x-opencode-session")
             .and_then(|value| value.to_str().ok())
             .map(|value| value.to_string()),
         body,

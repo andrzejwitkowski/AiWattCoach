@@ -23,6 +23,8 @@ pub enum LlmProvider {
     Zai,
     #[serde(rename = "openai_compatible")]
     OpenAiCompatible,
+    #[serde(rename = "opencode_go")]
+    OpenCodeGo,
 }
 
 impl LlmProvider {
@@ -34,6 +36,7 @@ impl LlmProvider {
             Self::DeepSeek => "deepseek",
             Self::Zai => "zai",
             Self::OpenAiCompatible => "openai_compatible",
+            Self::OpenCodeGo => "opencode_go",
         }
     }
 
@@ -45,6 +48,7 @@ impl LlmProvider {
             "deepseek" => Some(Self::DeepSeek),
             "zai" => Some(Self::Zai),
             "openai_compatible" => Some(Self::OpenAiCompatible),
+            "opencode_go" => Some(Self::OpenCodeGo),
             _ => None,
         }
     }
@@ -57,6 +61,7 @@ impl LlmProvider {
             Self::DeepSeek => "deepseek-v4-flash",
             Self::Zai => "glm-5.2",
             Self::OpenAiCompatible => "gpt-4o-mini",
+            Self::OpenCodeGo => "gpt-5.6-luna",
         }
     }
 }
@@ -108,7 +113,7 @@ pub fn normalize_openai_compatible_base_url(raw: &str) -> Result<String, String>
     Ok(format!("{prefix}{path}"))
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LlmMessageRole {
     System,
     User,
@@ -148,6 +153,8 @@ pub struct LlmChatMessage {
     #[serde(default)]
     pub reasoning_content: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_continuation_json: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_base64: Option<String>,
 }
 
@@ -159,6 +166,7 @@ impl LlmChatMessage {
             tool_calls: Vec::new(),
             tool_call_id: None,
             reasoning_content: None,
+            provider_continuation_json: None,
             image_base64: None,
         }
     }
@@ -170,6 +178,7 @@ impl LlmChatMessage {
             tool_calls: Vec::new(),
             tool_call_id: None,
             reasoning_content: None,
+            provider_continuation_json: None,
             image_base64: None,
         }
     }
@@ -181,6 +190,7 @@ impl LlmChatMessage {
             tool_calls: Vec::new(),
             tool_call_id: None,
             reasoning_content: None,
+            provider_continuation_json: None,
             image_base64: None,
         }
     }
@@ -195,6 +205,7 @@ impl LlmChatMessage {
             tool_calls,
             tool_call_id: None,
             reasoning_content: None,
+            provider_continuation_json: None,
             image_base64: None,
         }
     }
@@ -206,6 +217,7 @@ impl LlmChatMessage {
             tool_calls: Vec::new(),
             tool_call_id: Some(tool_call_id.into()),
             reasoning_content: None,
+            provider_continuation_json: None,
             image_base64: None,
         }
     }
@@ -221,6 +233,8 @@ pub struct LlmChatRequest {
     pub cache_scope_key: Option<String>,
     pub cache_key: Option<String>,
     pub reusable_cache_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     /// Populated by the orchestrator (e.g. `run_tool_loop`) based on scope.
     /// Do NOT set this in domain request builders; it is injected at the
     /// transport boundary so the builder is not misleading about whether
@@ -326,6 +340,7 @@ impl std::fmt::Debug for LlmChatRequest {
             .field("cache_scope_key", &self.cache_scope_key)
             .field("cache_key", &self.cache_key)
             .field("reusable_cache_id", &self.reusable_cache_id)
+            .field("session_id", &self.session_id)
             .finish()
     }
 }

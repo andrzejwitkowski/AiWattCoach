@@ -17,6 +17,7 @@ export function AiAgentsApiKeyFields({ aiAgents, draft, onUpdate }: AiAgentsApiK
   const [showDeepseek, setShowDeepseek] = useState(false);
   const [showZai, setShowZai] = useState(false);
   const [showOpenaiCompatible, setShowOpenaiCompatible] = useState(false);
+  const [showOpencodeGo, setShowOpencodeGo] = useState(false);
 
   return (
     <div className="mt-6 space-y-4">
@@ -142,6 +143,22 @@ export function AiAgentsApiKeyFields({ aiAgents, draft, onUpdate }: AiAgentsApiK
         )}
         onVisibilityChange={() => setShowOpenaiCompatible((value) => !value)}
         onChange={(value) => onUpdate('openaiCompatibleApiKey', value)}
+      />
+      <ApiKeyField
+        id="opencode-go-api-key"
+        label="OpenCode Go API Key"
+        placeholder={aiAgents.opencodeGoApiKeySet ? 'Already configured' : 'sk-...'}
+        value={draft.opencodeGoApiKey}
+        visible={showOpencodeGo}
+        configured={aiAgents.opencodeGoApiKeySet}
+        emphasized={!draft.selectedProvider || draft.selectedProvider === 'opencode_go'}
+        helperText={apiKeyHelperText(
+          draft.selectedProvider,
+          'opencode_go',
+          aiAgents.opencodeGoApiKeySet || draft.opencodeGoApiKey.trim().length > 0,
+        )}
+        onVisibilityChange={() => setShowOpencodeGo((value) => !value)}
+        onChange={(value) => onUpdate('opencodeGoApiKey', value)}
       />
     </div>
   );

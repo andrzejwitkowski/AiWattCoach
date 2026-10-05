@@ -29,6 +29,11 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: 'OpenAI Compatible',
     suggestedModels: ['qwen3-vl-plus', 'qwen-vl-plus', 'gpt-4o-mini', 'llama3.2'],
   },
+  {
+    value: 'opencode_go',
+    label: 'OpenCode Go',
+    suggestedModels: ['gpt-5.6-luna', 'gpt-6-luna', 'grok-4.7', 'glm-5.3'],
+  },
 ];
 
 export function getProviderOption(provider: string) {
@@ -54,6 +59,8 @@ export function isLlmProviderKeyConfigured(
       return aiAgents.zaiApiKeySet;
     case 'openai_compatible':
       return aiAgents.openaiCompatibleApiKeySet;
+    case 'opencode_go':
+      return aiAgents.opencodeGoApiKeySet;
     default:
       return false;
   }
@@ -66,6 +73,7 @@ type ProviderDraftKeys = {
   deepseekApiKey: string;
   zaiApiKey: string;
   openaiCompatibleApiKey: string;
+  opencodeGoApiKey: string;
 };
 
 export function getProviderKeyState(
@@ -109,6 +117,12 @@ export function getProviderKeyState(
         draftValue: draft.openaiCompatibleApiKey.trim(),
         hasPersistedKey: aiAgents.openaiCompatibleApiKeySet,
         label: 'OpenAI Compatible',
+      };
+    case 'opencode_go':
+      return {
+        draftValue: draft.opencodeGoApiKey.trim(),
+        hasPersistedKey: aiAgents.opencodeGoApiKeySet,
+        label: 'OpenCode Go',
       };
     default:
       return { draftValue: '', hasPersistedKey: false, label: 'Provider' };

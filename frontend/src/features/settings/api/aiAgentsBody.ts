@@ -6,6 +6,7 @@ type AiAgentsFieldKey =
   | 'zaiApiKey'
   | 'openaiCompatibleApiKey'
   | 'openaiCompatibleBaseUrl'
+  | 'opencodeGoApiKey'
   | 'selectedProvider'
   | 'selectedModel';
 
@@ -98,6 +99,7 @@ export function buildAiAgentsConnectionBody(
     'zaiApiKey',
     'openaiCompatibleApiKey',
     'openaiCompatibleBaseUrl',
+    'opencodeGoApiKey',
     'selectedProvider',
     'selectedModel',
   ];

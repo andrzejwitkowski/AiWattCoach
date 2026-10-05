@@ -13,7 +13,8 @@ use aiwattcoach::{
         llm::{
             adapter::LlmAdapter, gemini::client::GeminiClient,
             openai_compatible::client::OpenAiCompatibleClient as OpenAiClient,
-            openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
+            opencode_go::client::OpenCodeGoClient, openrouter::client::OpenRouterClient,
+            settings_adapter::SettingsLlmConfigProvider,
             workout_llm_config::WorkoutLlmConfigProvider, workout_summary_coach::LlmWorkoutCoach,
             zai::client::ZaiClient,
         },
@@ -162,7 +163,8 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
         OpenAiClient::new(llm_http_client.clone()).with_base_url(server.deepseek_base_url()),
         ZaiClient::new(llm_http_client.clone()).with_base_url(server.zai_base_url()),
         GeminiClient::new(llm_http_client.clone()).with_base_url(server.gemini_base_url()),
-        OpenRouterClient::new(llm_http_client).with_base_url(server.openrouter_base_url()),
+        OpenRouterClient::new(llm_http_client.clone()).with_base_url(server.openrouter_base_url()),
+        OpenCodeGoClient::new(llm_http_client),
     ));
     let workout_summary_service = Arc::new(
         WorkoutSummaryService::with_coach(
