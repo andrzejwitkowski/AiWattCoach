@@ -218,17 +218,45 @@ fn map_messages_request(
             }
         }
         match message.role {
-            LlmMessageRole::Tool => messages.push(json!({"role":"user","content":[{"type":"tool_result","tool_use_id":message.tool_call_id,"content":message.content}]})),
+            LlmMessageRole::Tool => {
+                let block = json!({
+                    "type":"tool_result",
+                    "tool_use_id":message.tool_call_id,
+                    "content":message.content
+                });
+                let append_to_previous = messages.last().is_some_and(|last| {
+                    last["role"] == "user"
+                        && last["content"].as_array().is_some_and(|content| {
+                            !content.is_empty()
+                                && content.iter().all(|block| block["type"] == "tool_result")
+                        })
+                });
+                if append_to_previous {
+                    if let Some(content) = messages
+                        .last_mut()
+                        .and_then(|last| last["content"].as_array_mut())
+                    {
+                        content.push(block);
+                        continue;
+                    }
+                }
+                messages.push(json!({"role":"user","content":[block]}));
+            }
             LlmMessageRole::Assistant if !message.tool_calls.is_empty() => {
                 let mut content = Vec::new();
-                if !message.content.trim().is_empty() { content.push(json!({"type":"text","text":message.content})); }
+                if !message.content.trim().is_empty() {
+                    content.push(json!({"type":"text","text":message.content}));
+                }
                 for call in &message.tool_calls {
-                    let input = serde_json::from_str::<Value>(&call.arguments_json).map_err(|error| {
-                        LlmError::InvalidResponse(format!(
-                            "OpenCode Go Messages tool arguments are invalid: {error}"
-                        ))
-                    })?;
-                    content.push(json!({"type":"tool_use","id":call.id,"name":call.name,"input":input}));
+                    let input =
+                        serde_json::from_str::<Value>(&call.arguments_json).map_err(|error| {
+                            LlmError::InvalidResponse(format!(
+                                "OpenCode Go Messages tool arguments are invalid: {error}"
+                            ))
+                        })?;
+                    content.push(
+                        json!({"type":"tool_use","id":call.id,"name":call.name,"input":input}),
+                    );
                 }
                 messages.push(json!({"role":"assistant","content":content}));
             }

@@ -112,6 +112,40 @@ fn messages_tool_calls_preserve_provider_content_for_next_round() {
 }
 
 #[test]
+fn messages_group_parallel_tool_results_in_one_user_message() {
+    let request = LlmChatRequest {
+        conversation: vec![
+            LlmChatMessage::assistant_with_tool_calls(
+                "",
+                vec![
+                    LlmToolCall {
+                        id: "tool-1".to_string(),
+                        name: "lookup-one".to_string(),
+                        arguments_json: "{}".to_string(),
+                    },
+                    LlmToolCall {
+                        id: "tool-2".to_string(),
+                        name: "lookup-two".to_string(),
+                        arguments_json: "{}".to_string(),
+                    },
+                ],
+            ),
+            LlmChatMessage::tool("tool-1", "first result"),
+            LlmChatMessage::tool("tool-2", "second result"),
+        ],
+        ..Default::default()
+    };
+
+    let body = map_request(Protocol::Messages, &config("minimax-m3"), &request).unwrap();
+    let messages = body["messages"].as_array().unwrap();
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[1]["role"], "user");
+    assert_eq!(messages[1]["content"].as_array().unwrap().len(), 2);
+    assert_eq!(messages[1]["content"][0]["tool_use_id"], "tool-1");
+    assert_eq!(messages[1]["content"][1]["tool_use_id"], "tool-2");
+}
+
+#[test]
 fn messages_reject_invalid_tool_arguments() {
     let request = LlmChatRequest {
         conversation: vec![LlmChatMessage::assistant_with_tool_calls(
