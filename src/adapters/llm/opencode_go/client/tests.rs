@@ -110,3 +110,39 @@ fn messages_tool_calls_preserve_provider_content_for_next_round() {
     assert_eq!(body["messages"][0]["content"][0]["id"], "tool-1");
     assert_eq!(body["messages"][1]["content"][0]["tool_use_id"], "tool-1");
 }
+
+#[test]
+fn messages_reject_invalid_tool_arguments() {
+    let request = LlmChatRequest {
+        conversation: vec![LlmChatMessage::assistant_with_tool_calls(
+            "",
+            vec![LlmToolCall {
+                id: "tool-1".to_string(),
+                name: "lookup".to_string(),
+                arguments_json: "not-json".to_string(),
+            }],
+        )],
+        ..Default::default()
+    };
+
+    let error = map_request(Protocol::Messages, &config("minimax-m3"), &request).unwrap_err();
+    assert!(matches!(error, LlmError::InvalidResponse(_)));
+}
+
+#[test]
+fn responses_failed_status_is_invalid_response() {
+    let error = map_response(
+        Protocol::Responses,
+        &config("gpt-5.6-luna"),
+        json!({
+            "id": "resp-failed",
+            "model": "gpt-5.6-luna",
+            "status": "failed",
+            "output_text": "partial output",
+            "error": {"message": "provider failed"}
+        }),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, LlmError::InvalidResponse(_)));
+}

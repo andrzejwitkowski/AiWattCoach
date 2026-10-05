@@ -222,7 +222,14 @@ fn map_messages_request(
             LlmMessageRole::Assistant if !message.tool_calls.is_empty() => {
                 let mut content = Vec::new();
                 if !message.content.trim().is_empty() { content.push(json!({"type":"text","text":message.content})); }
-                for call in &message.tool_calls { content.push(json!({"type":"tool_use","id":call.id,"name":call.name,"input":serde_json::from_str::<Value>(&call.arguments_json).unwrap_or(Value::String(call.arguments_json.clone()))})); }
+                for call in &message.tool_calls {
+                    let input = serde_json::from_str::<Value>(&call.arguments_json).map_err(|error| {
+                        LlmError::InvalidResponse(format!(
+                            "OpenCode Go Messages tool arguments are invalid: {error}"
+                        ))
+                    })?;
+                    content.push(json!({"type":"tool_use","id":call.id,"name":call.name,"input":input}));
+                }
                 messages.push(json!({"role":"assistant","content":content}));
             }
             role => messages.push(json!({"role":messages_role(role),"content":message.content})),
@@ -295,6 +302,11 @@ fn map_responses_response(
     config: &LlmProviderConfig,
     value: Value,
 ) -> Result<LlmChatResponse, LlmError> {
+    if value.get("status").and_then(Value::as_str) == Some("failed") {
+        return Err(LlmError::InvalidResponse(
+            "OpenCode Go Responses response has failed status".to_string(),
+        ));
+    }
     let output = value.get("output").and_then(Value::as_array);
     let mut content = String::new();
     let mut calls = Vec::new();
