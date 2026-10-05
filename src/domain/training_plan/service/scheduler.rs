@@ -6,6 +6,7 @@ use crate::domain::{
     calendar_view::CalendarEntryViewRefreshPort,
     identity::{Clock, IdGenerator},
     llm::LLM_REQUEST_TIMEOUT_SECONDS,
+    llm_tools::TOOL_LOOP_MAX_ROUNDS,
     task_scheduler::{
         build_scheduled_task, parse_failed_or_error_message, parse_optional_json_value,
         parse_required_json_value, scheduled_task_handler, serialize_json_value,
@@ -26,8 +27,11 @@ use super::{
 pub(crate) const TRAINING_PLAN_GENERATE_TASK_TYPE: &str =
     "training_plan.generate_for_saved_workout";
 pub(crate) const TRAINING_PLAN_EXECUTION_TIMEOUT_BUFFER_SECONDS: i64 = 30;
-pub(crate) const TRAINING_PLAN_EXECUTION_TIMEOUT_SECONDS: i64 =
-    (LLM_REQUEST_TIMEOUT_SECONDS as i64 * 4) + TRAINING_PLAN_EXECUTION_TIMEOUT_BUFFER_SECONDS;
+pub(crate) const TRAINING_PLAN_EXTRA_LLM_REQUEST_BUDGET: i64 = 4;
+pub(crate) const TRAINING_PLAN_EXECUTION_TIMEOUT_SECONDS: i64 = (LLM_REQUEST_TIMEOUT_SECONDS
+    as i64
+    * (TOOL_LOOP_MAX_ROUNDS as i64 + TRAINING_PLAN_EXTRA_LLM_REQUEST_BUDGET))
+    + TRAINING_PLAN_EXECUTION_TIMEOUT_BUFFER_SECONDS;
 pub(crate) const TRAINING_PLAN_RETRY_MAX_ATTEMPTS: u32 = 3;
 // Match the stale pending reclaim window so panic/restart retries do not race into
 // a still-pending durable operation and fail with "already in progress".
