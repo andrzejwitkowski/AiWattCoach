@@ -13,7 +13,7 @@ use crate::domain::{
     workout_summary::PublicToolCall,
 };
 
-pub const TOOL_LOOP_MAX_ROUNDS: u32 = 6;
+pub const TOOL_LOOP_MAX_ROUNDS: u32 = 20;
 
 mod simulate_forward_load;
 pub(crate) use simulate_forward_load::duration_from_distance_meters;
@@ -919,6 +919,53 @@ mod tests {
     }
 
     #[test]
+    fn tool_loop_allows_up_to_twenty_model_rounds() {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let result = futures::executor::block_on(run_tool_loop(
+            Arc::new(RepeatedToolCallLlmChatPort {
+                calls: calls.clone(),
+            }),
+            sample_provider_config(),
+            LlmChatRequest {
+                user_id: "user-1".to_string(),
+                conversation: vec![LlmChatMessage::user("hello")],
+                ..Default::default()
+            },
+            ToolScope::TrainingPlanGeneration,
+            sample_tool_context(false),
+            None,
+        ));
+
+        assert!(matches!(result, Err(LlmError::InvalidResponse(_))));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 20);
+    }
+
+    #[test]
+    fn tool_loop_resumes_checkpoint_at_round_six_and_uses_remaining_rounds() {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let result = futures::executor::block_on(run_tool_loop(
+            Arc::new(RepeatedToolCallLlmChatPort {
+                calls: calls.clone(),
+            }),
+            sample_provider_config(),
+            LlmChatRequest {
+                user_id: "user-1".to_string(),
+                conversation: vec![LlmChatMessage::user("hello")],
+                ..Default::default()
+            },
+            ToolScope::TrainingPlanGeneration,
+            sample_tool_context(false),
+            Some(LlmToolLoopState {
+                round_count: 6,
+                ..Default::default()
+            }),
+        ));
+
+        assert!(matches!(result, Err(LlmError::InvalidResponse(_))));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 14);
+    }
+
+    #[test]
     fn tool_loop_rejects_runtime_calls_for_tools_not_available_in_scope() {
         let response = futures::executor::block_on(run_tool_loop(
             Arc::new(SingleResponseLlmChatPort::tool_call("get_selected_workout")),
@@ -964,6 +1011,39 @@ mod tests {
 
     #[derive(Clone)]
     struct NoopGetSelectedWorkoutDataPort;
+
+    #[derive(Clone)]
+    struct RepeatedToolCallLlmChatPort {
+        calls: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl crate::domain::llm::LlmChatPort for RepeatedToolCallLlmChatPort {
+        fn chat(
+            &self,
+            _config: LlmProviderConfig,
+            _request: LlmChatRequest,
+        ) -> crate::domain::llm::BoxFuture<Result<LlmChatResponse, LlmError>> {
+            let round = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            Box::pin(async move {
+                Ok(LlmChatResponse {
+                    provider: LlmProvider::OpenAi,
+                    model: "gpt-4o-mini".to_string(),
+                    message: LlmChatMessage::assistant_with_tool_calls(
+                        "",
+                        vec![LlmToolCall {
+                            id: format!("tool-{round}"),
+                            name: "simulate_forward_load".to_string(),
+                            arguments_json: r#"{"horizon_days":1}"#.to_string(),
+                        }],
+                    ),
+                    finish_reason: Some(LlmFinishReason::ToolCalls),
+                    provider_request_id: None,
+                    usage: LlmTokenUsage::default(),
+                    cache: LlmCacheUsage::default(),
+                })
+            })
+        }
+    }
 
     #[derive(Clone)]
     struct SingleResponseLlmChatPort {

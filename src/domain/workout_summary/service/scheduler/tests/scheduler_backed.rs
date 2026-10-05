@@ -153,6 +153,7 @@ async fn scheduler_backed_send_message_returns_failed_task_error() {
 
     let stored_task = task_repository.only_task();
     assert_eq!(stored_task.status, TaskStatus::Failed);
+    assert_eq!(stored_task.execution_timeout_seconds, 3_630);
     assert!(stored_task.checkpoint.is_some());
     assert_eq!(
         error,

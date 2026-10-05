@@ -104,6 +104,7 @@ async fn scheduler_backed_generate_for_saved_workout_runs_through_shared_worker_
     assert_eq!(generator.initial_plan_call_count(), 1);
     assert_eq!(task.status, TaskStatus::Completed);
     assert_eq!(task.attempt_count, 1);
+    assert_eq!(task.execution_timeout_seconds, 4_350);
     worker.shutdown().await;
 }
 
