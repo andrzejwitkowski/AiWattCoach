@@ -19,7 +19,7 @@ impl std::fmt::Display for SettingsError {
 
 impl std::error::Error for SettingsError {}
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Eq, Default)]
 pub struct AiAgentsConfig {
     pub openai_api_key: Option<String>,
     pub gemini_api_key: Option<String>,
@@ -42,6 +42,61 @@ pub struct AiAgentsConfig {
     pub plan_quality_max_loops: Option<u32>,
     pub plan_quality_pass_score: Option<u32>,
     pub include_power_image: bool,
+}
+
+impl std::fmt::Debug for AiAgentsConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AiAgentsConfig")
+            .field(
+                "openai_api_key",
+                &RedactedOptionalText(&self.openai_api_key),
+            )
+            .field(
+                "gemini_api_key",
+                &RedactedOptionalText(&self.gemini_api_key),
+            )
+            .field(
+                "openrouter_api_key",
+                &RedactedOptionalText(&self.openrouter_api_key),
+            )
+            .field(
+                "deepseek_api_key",
+                &RedactedOptionalText(&self.deepseek_api_key),
+            )
+            .field("zai_api_key", &RedactedOptionalText(&self.zai_api_key))
+            .field(
+                "openai_compatible_api_key",
+                &RedactedOptionalText(&self.openai_compatible_api_key),
+            )
+            .field(
+                "openai_compatible_base_url",
+                &self.openai_compatible_base_url,
+            )
+            .field(
+                "opencode_go_api_key",
+                &RedactedOptionalText(&self.opencode_go_api_key),
+            )
+            .field("selected_provider", &self.selected_provider)
+            .field("selected_model", &self.selected_model)
+            .field("workout_chat_provider", &self.workout_chat_provider)
+            .field("workout_chat_model", &self.workout_chat_model)
+            .field("workout_planning_provider", &self.workout_planning_provider)
+            .field("workout_planning_model", &self.workout_planning_model)
+            .field("meso_cycle_provider", &self.meso_cycle_provider)
+            .field("meso_cycle_model", &self.meso_cycle_model)
+            .field(
+                "plan_quality_evaluator_provider",
+                &self.plan_quality_evaluator_provider,
+            )
+            .field(
+                "plan_quality_evaluator_model",
+                &self.plan_quality_evaluator_model,
+            )
+            .field("plan_quality_max_loops", &self.plan_quality_max_loops)
+            .field("plan_quality_pass_score", &self.plan_quality_pass_score)
+            .field("include_power_image", &self.include_power_image)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -336,6 +391,22 @@ mod tests {
         assert_eq!(settings.cycling, CyclingSettings::default());
         assert_eq!(settings.created_at_epoch_seconds, now);
         assert_eq!(settings.updated_at_epoch_seconds, now);
+    }
+
+    #[test]
+    fn ai_agents_debug_redacts_api_keys() {
+        let config = AiAgentsConfig {
+            openai_api_key: Some("openai-secret".to_string()),
+            opencode_go_api_key: Some("opencode-go-secret".to_string()),
+            ..AiAgentsConfig::default()
+        };
+
+        let debug_output = format!("{config:?}");
+
+        assert!(!debug_output.contains("openai-secret"));
+        assert!(!debug_output.contains("opencode-go-secret"));
+        assert!(debug_output.contains("openai_api_key: Some(<redacted:"));
+        assert!(debug_output.contains("opencode_go_api_key: Some(<redacted:"));
     }
 
     #[test]
