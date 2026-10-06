@@ -11,6 +11,10 @@ Scan newest entries first. Focus on entries matching the current task area or fa
 
 ## Entries
 
+### 2026-10-06 | CodeRabbit | OpenCode Go request safety and continuation
+- Request bodies were logged at info level, parallel Messages tool results were split across user messages, and `AiAgentsConfig` derived `Debug` exposed provider keys. *Fix:* gate OpenCode Go request-body serialization behind full debug logging, group consecutive tool results, and redact all provider API-key fields in the custom debug implementation.
+- **Prevention:** default LLM logs to metadata and verify that every provider continuation format preserves one assistant turn's complete tool-result block sequence.
+
 ### 2026-10-05 | user | OpenCode Go must be a separate provider
 - The initial implementation placed OpenCode Go behind the OpenAI Compatible provider; the user clarified it needs its own provider and key while preserving the existing provider unchanged.
 - *Fix:* added `opencode_go` across domain settings, Mongo/REST/frontend wiring, a dedicated protocol-routing adapter, and tool-loop session propagation. *Prevention:* when a provider has a distinct account, endpoint, or protocol, model it as a first-class provider before touching the shared adapter.

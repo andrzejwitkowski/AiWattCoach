@@ -146,6 +146,17 @@ fn messages_group_parallel_tool_results_in_one_user_message() {
 }
 
 #[test]
+fn request_body_logging_requires_full_debug_logging() {
+    let payload = json!({"prompt": "athlete training context"});
+
+    assert!(request_body_for_log(&payload, false).is_none());
+    assert_eq!(
+        request_body_for_log(&payload, true).as_deref(),
+        Some(r#"{"prompt":"athlete training context"}"#)
+    );
+}
+
+#[test]
 fn messages_reject_invalid_tool_arguments() {
     let request = LlmChatRequest {
         conversation: vec![LlmChatMessage::assistant_with_tool_calls(

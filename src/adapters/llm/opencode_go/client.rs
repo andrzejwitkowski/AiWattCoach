@@ -2,9 +2,9 @@ use reqwest::StatusCode;
 use serde_json::{json, Value};
 
 use crate::domain::llm::{
-    serialize_logged_body, truncate_logged_body, BoxFuture, LlmCacheUsage, LlmChatMessage,
-    LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError, LlmFinishReason, LlmMessageRole,
-    LlmProviderConfig, LlmTokenUsage, LlmToolCall, LlmToolChoice,
+    llm_full_debug_logging_enabled, serialize_logged_body, truncate_logged_body, BoxFuture,
+    LlmCacheUsage, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError,
+    LlmFinishReason, LlmMessageRole, LlmProviderConfig, LlmTokenUsage, LlmToolCall, LlmToolChoice,
 };
 
 use super::{protocol_for_model, Protocol};
@@ -59,14 +59,26 @@ impl LlmChatPort for OpenCodeGoClient {
         let api_key = config.api_key.clone();
 
         Box::pin(async move {
-            tracing::info!(
-                provider = "opencode_go",
-                model = %model,
-                url = %url,
-                session_id = %session_id,
-                request_body = %serialize_logged_body(&payload),
-                "sending opencode go request"
-            );
+            if let Some(request_body) =
+                request_body_for_log(&payload, llm_full_debug_logging_enabled())
+            {
+                tracing::info!(
+                    provider = "opencode_go",
+                    model = %model,
+                    url = %url,
+                    session_id = %session_id,
+                    request_body = %request_body,
+                    "sending opencode go request"
+                );
+            } else {
+                tracing::info!(
+                    provider = "opencode_go",
+                    model = %model,
+                    url = %url,
+                    session_id = %session_id,
+                    "sending opencode go request"
+                );
+            }
             let mut builder = client
                 .post(url.clone())
                 .bearer_auth(&api_key)
@@ -105,6 +117,10 @@ impl LlmChatPort for OpenCodeGoClient {
             map_response(protocol, &config, value)
         })
     }
+}
+
+fn request_body_for_log(payload: &Value, full_debug_logging: bool) -> Option<String> {
+    full_debug_logging.then(|| serialize_logged_body(payload))
 }
 
 fn endpoint(protocol: Protocol) -> &'static str {
