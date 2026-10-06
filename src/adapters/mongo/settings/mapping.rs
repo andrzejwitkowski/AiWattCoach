@@ -24,6 +24,7 @@ pub(super) fn map_document_to_domain(doc: SettingsDocument) -> Result<UserSettin
             zai_api_key: doc.ai_agents.zai_api_key,
             openai_compatible_api_key: doc.ai_agents.openai_compatible_api_key,
             openai_compatible_base_url: doc.ai_agents.openai_compatible_base_url,
+            opencode_go_api_key: doc.ai_agents.opencode_go_api_key,
             selected_provider: doc
                 .ai_agents
                 .selected_provider
@@ -109,6 +110,7 @@ pub(super) fn map_domain_to_document(settings: &UserSettings) -> SettingsDocumen
             zai_api_key: settings.ai_agents.zai_api_key.clone(),
             openai_compatible_api_key: settings.ai_agents.openai_compatible_api_key.clone(),
             openai_compatible_base_url: settings.ai_agents.openai_compatible_base_url.clone(),
+            opencode_go_api_key: settings.ai_agents.opencode_go_api_key.clone(),
             selected_provider: settings
                 .ai_agents
                 .selected_provider

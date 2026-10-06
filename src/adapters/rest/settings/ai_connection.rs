@@ -24,7 +24,7 @@ pub(super) fn merge_ai_connection_config(
     let transient_provider = parse_provider_input(body.selected_provider, || {
         test_ai_agents_connection_response(
             false,
-            "selectedProvider must be one of: openai, gemini, openrouter, deepseek, zai, openai_compatible",
+            "selectedProvider must be one of: openai, gemini, openrouter, deepseek, zai, openai_compatible, opencode_go",
             false,
             false,
             false,
@@ -40,6 +40,7 @@ pub(super) fn merge_ai_connection_config(
         normalize_string_input(body.openai_compatible_api_key);
     let transient_openai_compatible_base_url =
         normalize_string_input(body.openai_compatible_base_url);
+    let transient_opencode_go_api_key = normalize_string_input(body.opencode_go_api_key);
 
     let used_saved_provider =
         used_saved_value(&transient_provider, &current.ai_agents.selected_provider);
@@ -101,16 +102,26 @@ pub(super) fn merge_ai_connection_config(
             transient_openai_compatible_api_key.clone(),
             current.ai_agents.openai_compatible_api_key.clone(),
         ),
+        LlmProvider::OpenCodeGo => apply_field_update(
+            transient_opencode_go_api_key.clone(),
+            current.ai_agents.opencode_go_api_key.clone(),
+        ),
     };
     let used_saved_api_key = current_api_key_is_saved(provider.clone(), current)
         && selected_key_was_not_provided(
             &provider,
-            matches!(&transient_openai_api_key, FieldUpdate::Missing),
-            matches!(&transient_gemini_api_key, FieldUpdate::Missing),
-            matches!(&transient_openrouter_api_key, FieldUpdate::Missing),
-            matches!(&transient_deepseek_api_key, FieldUpdate::Missing),
-            matches!(&transient_zai_api_key, FieldUpdate::Missing),
-            matches!(&transient_openai_compatible_api_key, FieldUpdate::Missing),
+            MissingApiKeys {
+                openai: matches!(&transient_openai_api_key, FieldUpdate::Missing),
+                gemini: matches!(&transient_gemini_api_key, FieldUpdate::Missing),
+                openrouter: matches!(&transient_openrouter_api_key, FieldUpdate::Missing),
+                deepseek: matches!(&transient_deepseek_api_key, FieldUpdate::Missing),
+                zai: matches!(&transient_zai_api_key, FieldUpdate::Missing),
+                openai_compatible: matches!(
+                    &transient_openai_compatible_api_key,
+                    FieldUpdate::Missing
+                ),
+                opencode_go: matches!(&transient_opencode_go_api_key, FieldUpdate::Missing),
+            },
         );
 
     let base_url = match provider {
@@ -266,6 +277,7 @@ fn current_api_key_is_saved(provider: LlmProvider, current: &UserSettings) -> bo
         LlmProvider::OpenAiCompatible => {
             non_empty_key(&current.ai_agents.openai_compatible_api_key)
         }
+        LlmProvider::OpenCodeGo => non_empty_key(&current.ai_agents.opencode_go_api_key),
     }
 }
 
@@ -273,21 +285,24 @@ fn non_empty_key(value: &Option<String>) -> bool {
     value.as_ref().is_some_and(|key| !key.trim().is_empty())
 }
 
-fn selected_key_was_not_provided(
-    provider: &LlmProvider,
-    openai_missing: bool,
-    gemini_missing: bool,
-    openrouter_missing: bool,
-    deepseek_missing: bool,
-    zai_missing: bool,
-    openai_compatible_missing: bool,
-) -> bool {
+struct MissingApiKeys {
+    openai: bool,
+    gemini: bool,
+    openrouter: bool,
+    deepseek: bool,
+    zai: bool,
+    openai_compatible: bool,
+    opencode_go: bool,
+}
+
+fn selected_key_was_not_provided(provider: &LlmProvider, missing: MissingApiKeys) -> bool {
     match provider {
-        LlmProvider::OpenAi => openai_missing,
-        LlmProvider::Gemini => gemini_missing,
-        LlmProvider::OpenRouter => openrouter_missing,
-        LlmProvider::DeepSeek => deepseek_missing,
-        LlmProvider::Zai => zai_missing,
-        LlmProvider::OpenAiCompatible => openai_compatible_missing,
+        LlmProvider::OpenAi => missing.openai,
+        LlmProvider::Gemini => missing.gemini,
+        LlmProvider::OpenRouter => missing.openrouter,
+        LlmProvider::DeepSeek => missing.deepseek,
+        LlmProvider::Zai => missing.zai,
+        LlmProvider::OpenAiCompatible => missing.openai_compatible,
+        LlmProvider::OpenCodeGo => missing.opencode_go,
     }
 }

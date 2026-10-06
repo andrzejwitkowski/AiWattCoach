@@ -41,6 +41,8 @@ pub(super) fn map_settings_to_dto(
                 &settings.ai_agents.openai_compatible_api_key,
             ),
             openai_compatible_base_url: settings.ai_agents.openai_compatible_base_url.clone(),
+            opencode_go_api_key: mask_sensitive(&settings.ai_agents.opencode_go_api_key),
+            opencode_go_api_key_set: api_key_is_set(&settings.ai_agents.opencode_go_api_key),
             selected_provider: settings
                 .ai_agents
                 .selected_provider
@@ -175,6 +177,7 @@ pub(super) fn map_ai_agents_update(
     let zai_api_key = normalize_string_input(body.zai_api_key);
     let openai_compatible_api_key = normalize_string_input(body.openai_compatible_api_key);
     let openai_compatible_base_url = normalize_string_input(body.openai_compatible_base_url);
+    let opencode_go_api_key = normalize_string_input(body.opencode_go_api_key);
 
     let provider_changed = match &selected_provider_update {
         FieldUpdate::Missing => false,
@@ -301,6 +304,10 @@ pub(super) fn map_ai_agents_update(
             current.ai_agents.openai_compatible_api_key.clone(),
         ),
         openai_compatible_base_url,
+        opencode_go_api_key: apply_field_update(
+            opencode_go_api_key,
+            current.ai_agents.opencode_go_api_key.clone(),
+        ),
         selected_provider: validation::validate_ai_provider(selected_provider)?,
         selected_model,
         workout_chat_provider: validation::validate_ai_provider(workout_chat_provider)?,

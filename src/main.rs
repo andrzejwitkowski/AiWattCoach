@@ -22,7 +22,8 @@ use aiwattcoach::{
             meso_cycle_generator::MesoCycleLlmGenerator,
             meso_cycle_llm_config::MesoCycleLlmConfigProvider,
             openai_compatible::client::OpenAiCompatibleClient,
-            openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
+            opencode_go::client::OpenCodeGoClient, openrouter::client::OpenRouterClient,
+            settings_adapter::SettingsLlmConfigProvider,
             training_plan_generator::TrainingPlanLlmGenerator,
             update_planned_workout_data::UpdatePlannedWorkoutDataAdapter,
             workout_llm_config::WorkoutLlmConfigProvider, workout_summary_coach::LlmWorkoutCoach,
@@ -240,7 +241,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 .with_base_url("https://api.deepseek.com"),
             ZaiClient::new(llm_http_client.clone()),
             GeminiClient::new(llm_http_client.clone()),
-            OpenRouterClient::new(llm_http_client),
+            OpenRouterClient::new(llm_http_client.clone()),
+            OpenCodeGoClient::new(llm_http_client.clone()),
         ))
     };
     let workout_summary_repository =

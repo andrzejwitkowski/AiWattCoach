@@ -477,6 +477,6 @@ describe('AiAgentsCard', () => {
 
     expect(screen.getByText('Used by the active provider.')).toBeInTheDocument();
     expect(screen.getAllByText('Saved for quick provider switching.')).toHaveLength(1);
-    expect(screen.queryAllByText('Optional unless you switch to this provider.')).toHaveLength(4);
+    expect(screen.queryAllByText('Optional unless you switch to this provider.')).toHaveLength(5);
   });
 });

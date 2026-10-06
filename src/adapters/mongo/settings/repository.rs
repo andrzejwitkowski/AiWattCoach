@@ -330,6 +330,7 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "ai_agents.zai_api_key": &ai_agents.zai_api_key,
                             "ai_agents.openai_compatible_api_key": &ai_agents.openai_compatible_api_key,
                             "ai_agents.openai_compatible_base_url": &ai_agents.openai_compatible_base_url,
+                            "ai_agents.opencode_go_api_key": &ai_agents.opencode_go_api_key,
                             "ai_agents.selected_provider": ai_agents.selected_provider.as_ref().map(|provider| provider.as_str()),
                             "ai_agents.selected_model": &ai_agents.selected_model,
                             "ai_agents.workout_chat_provider": ai_agents.workout_chat_provider.as_ref().map(|provider| provider.as_str()),

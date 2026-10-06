@@ -89,6 +89,7 @@ where
                     tool_call_id: None,
                     reasoning_content: None,
                     image_base64: None,
+                    provider_continuation_json: None,
                 }],
                 cache_scope_key: Some("athlete-summary".to_string()),
                 cache_key: Some(hash_text(&stable_context)),

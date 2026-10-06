@@ -7,6 +7,7 @@ const llmProviderSchema = z.enum([
   'deepseek',
   'zai',
   'openai_compatible',
+  'opencode_go',
 ]);
 const availabilityWeekdaySchema = z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 
@@ -24,6 +25,8 @@ const aiAgentsSettingsSchema = z.object({
   openaiCompatibleApiKey: z.string().nullable(),
   openaiCompatibleApiKeySet: z.boolean(),
   openaiCompatibleBaseUrl: z.string().nullable(),
+  opencodeGoApiKey: z.string().nullable(),
+  opencodeGoApiKeySet: z.boolean(),
   selectedProvider: llmProviderSchema.nullable().optional(),
   selectedModel: z.string().nullable().optional(),
   mesoCycleProvider: llmProviderSchema.nullable().optional(),
@@ -172,6 +175,7 @@ export const updateAiAgentsRequestSchema = z.object({
   zaiApiKey: z.string().nullable().optional(),
   openaiCompatibleApiKey: z.string().nullable().optional(),
   openaiCompatibleBaseUrl: z.string().nullable().optional(),
+  opencodeGoApiKey: z.string().nullable().optional(),
   selectedProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
   selectedModel: z.string().nullable().optional(),
   mesoCycleProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),

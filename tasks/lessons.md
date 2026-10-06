@@ -30,6 +30,7 @@
 - Domain code must not import from `adapters`. Keep Axum, Mongo, and provider SDK types in adapters; map at boundaries.
 - REST handlers stay thin: validate input, delegate to services, map errors. No domain logic, no external API calls.
 - Keep `spawn_task_worker(...)` and runtime loops in `config/` or test helpers. Domain task contracts stay in `src/domain/task_scheduler/**`.
+- **Provider scope corrections**: If the user changes a shared-client request to a dedicated provider, re-plan the settings, persistence, routing, and UI surfaces before implementation; do not keep the provider hidden behind an existing BYOK slot.
 
 ### Error handling and recovery
 - **Alias resolution**: If a summary endpoint delegates to an alias-aware domain service, do not add a second pre-check through a narrower reader. Use the domain path that matches the endpoint contract as the single source of truth.

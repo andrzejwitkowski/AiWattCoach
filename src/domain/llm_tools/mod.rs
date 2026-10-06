@@ -115,6 +115,8 @@ pub struct LlmToolLoopState {
     pub round_count: u32,
     #[serde(default)]
     pub completed_response: Option<CompletedLlmToolLoopResponse>,
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -141,6 +143,7 @@ impl LlmToolLoopOutput {
                 public_tool_calls: Vec::new(),
                 round_count: 1,
                 completed_response,
+                session_id: None,
             },
         }
     }
@@ -224,6 +227,13 @@ pub fn run_tool_loop_with_checkpoint(
     Box::pin(async move {
         let mut conversation = request.conversation;
         let mut state = restored_state.unwrap_or_default();
+        if state.session_id.is_none() {
+            state.session_id = request
+                .session_id
+                .clone()
+                .or_else(|| Some(uuid::Uuid::new_v4().to_string()));
+        }
+        request.session_id = state.session_id.clone();
         if let Some(completed_response) = state.completed_response.clone() {
             let response = completed_response.into_response();
             tracing::info!(
@@ -326,6 +336,7 @@ pub fn run_tool_loop_with_checkpoint(
                     completed_response: Some(CompletedLlmToolLoopResponse::from_response(
                         &response,
                     )),
+                    session_id: state.session_id.clone(),
                 };
                 if let Some(checkpoint) = checkpoint.as_ref() {
                     checkpoint(state.clone()).await?;
@@ -395,6 +406,7 @@ pub fn run_tool_loop_with_checkpoint(
                             public_tool_calls,
                             round_count,
                             completed_response: None,
+                            session_id: state.session_id.clone(),
                         },
                     });
                 }
@@ -406,6 +418,7 @@ pub fn run_tool_loop_with_checkpoint(
                 public_tool_calls,
                 round_count,
                 completed_response: None,
+                session_id: state.session_id.clone(),
             };
 
             if let Some(checkpoint) = checkpoint.as_ref() {
@@ -687,6 +700,7 @@ fn provider_supports_tools(provider: &LlmProvider) -> bool {
             | LlmProvider::DeepSeek
             | LlmProvider::Zai
             | LlmProvider::OpenAiCompatible
+            | LlmProvider::OpenCodeGo
     )
 }
 
@@ -741,7 +755,7 @@ async fn execute_available_tool_call(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use super::{
         run_tool_loop, with_tool_prompt_guidance, GetSelectedWorkoutDataPort, LlmToolLoopState,
@@ -994,6 +1008,50 @@ mod tests {
         assert!(tool_message.content.contains("get_selected_workout"));
     }
 
+    #[test]
+    fn opencode_go_tool_loop_reuses_session_and_separates_runs() {
+        let first_port = Arc::new(SessionCapturingLlmChatPort::default());
+        let first = futures::executor::block_on(run_tool_loop(
+            first_port.clone(),
+            LlmProviderConfig {
+                provider: LlmProvider::OpenCodeGo,
+                model: "gpt-5.6-luna".to_string(),
+                api_key: "test-key".to_string(),
+                base_url: None,
+            },
+            LlmChatRequest::default(),
+            ToolScope::TrainingPlanGeneration,
+            sample_tool_context(false),
+            None,
+        ))
+        .unwrap();
+
+        let second_port = Arc::new(SessionCapturingLlmChatPort::default());
+        let second = futures::executor::block_on(run_tool_loop(
+            second_port.clone(),
+            LlmProviderConfig {
+                provider: LlmProvider::OpenCodeGo,
+                model: "gpt-5.6-luna".to_string(),
+                api_key: "test-key".to_string(),
+                base_url: None,
+            },
+            LlmChatRequest::default(),
+            ToolScope::TrainingPlanGeneration,
+            sample_tool_context(false),
+            None,
+        ))
+        .unwrap();
+
+        let first_sessions = first_port.sessions.lock().unwrap().clone();
+        let second_sessions = second_port.sessions.lock().unwrap().clone();
+        assert_eq!(first_sessions.len(), 2);
+        assert_eq!(first_sessions[0], first_sessions[1]);
+        assert_eq!(first.state.session_id, first_sessions[0]);
+        assert_ne!(first_sessions[0], second_sessions[0]);
+        assert_ne!(first.state.session_id, second.state.session_id);
+        assert!(first_sessions[0].is_some());
+    }
+
     fn sample_tool_context(with_data_port: bool) -> ToolExecutionContext {
         ToolExecutionContext {
             user_id: "user-1".to_string(),
@@ -1015,6 +1073,49 @@ mod tests {
     #[derive(Clone)]
     struct RepeatedToolCallLlmChatPort {
         calls: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    #[derive(Default)]
+    struct SessionCapturingLlmChatPort {
+        calls: std::sync::atomic::AtomicUsize,
+        sessions: Mutex<Vec<Option<String>>>,
+    }
+
+    impl crate::domain::llm::LlmChatPort for SessionCapturingLlmChatPort {
+        fn chat(
+            &self,
+            _config: LlmProviderConfig,
+            request: LlmChatRequest,
+        ) -> crate::domain::llm::BoxFuture<Result<LlmChatResponse, LlmError>> {
+            self.sessions.lock().unwrap().push(request.session_id);
+            let call = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move {
+                Ok(LlmChatResponse {
+                    provider: LlmProvider::OpenCodeGo,
+                    model: "gpt-5.6-luna".to_string(),
+                    message: if call == 0 {
+                        LlmChatMessage::assistant_with_tool_calls(
+                            "",
+                            vec![LlmToolCall {
+                                id: "call-1".to_string(),
+                                name: "simulate_forward_load".to_string(),
+                                arguments_json: r#"{"horizon_days":1}"#.to_string(),
+                            }],
+                        )
+                    } else {
+                        LlmChatMessage::assistant("done")
+                    },
+                    finish_reason: Some(if call == 0 {
+                        LlmFinishReason::ToolCalls
+                    } else {
+                        LlmFinishReason::Stop
+                    }),
+                    provider_request_id: None,
+                    usage: LlmTokenUsage::default(),
+                    cache: LlmCacheUsage::default(),
+                })
+            })
+        }
     }
 
     impl crate::domain::llm::LlmChatPort for RepeatedToolCallLlmChatPort {

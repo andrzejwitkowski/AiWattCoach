@@ -7,6 +7,7 @@ export type AiAgentsDraftState = {
   deepseekApiKey: string;
   zaiApiKey: string;
   openaiCompatibleApiKey: string;
+  opencodeGoApiKey: string;
   openaiCompatibleBaseUrl: string;
   selectedProvider: string;
   selectedModel: string;
@@ -51,6 +52,7 @@ export function createEmptyAiAgentsDraft(persisted: PersistedAiAgentsDraft): AiA
     deepseekApiKey: '',
     zaiApiKey: '',
     openaiCompatibleApiKey: '',
+    opencodeGoApiKey: '',
     openaiCompatibleBaseUrl: persisted.openaiCompatibleBaseUrl,
     selectedProvider: persisted.selectedProvider,
     selectedModel: persisted.selectedModel,
@@ -75,6 +77,7 @@ const API_KEY_FIELDS = [
   'deepseekApiKey',
   'zaiApiKey',
   'openaiCompatibleApiKey',
+  'opencodeGoApiKey',
 ] as const;
 
 export function clearRequestedApiKeys(
@@ -117,6 +120,10 @@ export function mergeDraftWithPersisted(
       current.openaiCompatibleApiKey === previousPersisted.openaiCompatibleApiKey
         ? persisted.openaiCompatibleApiKey
         : current.openaiCompatibleApiKey,
+    opencodeGoApiKey:
+      current.opencodeGoApiKey === previousPersisted.opencodeGoApiKey
+        ? persisted.opencodeGoApiKey
+        : current.opencodeGoApiKey,
     openaiCompatibleBaseUrl:
       current.openaiCompatibleBaseUrl === previousPersisted.openaiCompatibleBaseUrl
         ? persisted.openaiCompatibleBaseUrl
@@ -182,6 +189,7 @@ export function isAiAgentsDraftDirty(current: AiAgentsDraftState, clean: AiAgent
     current.deepseekApiKey !== clean.deepseekApiKey ||
     current.zaiApiKey !== clean.zaiApiKey ||
     current.openaiCompatibleApiKey !== clean.openaiCompatibleApiKey ||
+    current.opencodeGoApiKey !== clean.opencodeGoApiKey ||
     current.openaiCompatibleBaseUrl !== clean.openaiCompatibleBaseUrl ||
     current.selectedProvider !== clean.selectedProvider ||
     current.selectedModel !== clean.selectedModel ||
@@ -234,6 +242,7 @@ export function buildVisibleAiAgentsRequest(
   assignTrimmedApiKey(request, 'deepseekApiKey', draft.deepseekApiKey);
   assignTrimmedApiKey(request, 'zaiApiKey', draft.zaiApiKey);
   assignTrimmedApiKey(request, 'openaiCompatibleApiKey', draft.openaiCompatibleApiKey);
+  assignTrimmedApiKey(request, 'opencodeGoApiKey', draft.opencodeGoApiKey);
   assignChangedStringField(
     request,
     'openaiCompatibleBaseUrl',

@@ -6,6 +6,7 @@ const TRIMMED_STRING_FIELDS = [
   'zaiApiKey',
   'openaiCompatibleApiKey',
   'openaiCompatibleBaseUrl',
+  'opencodeGoApiKey',
   'selectedProvider',
   'selectedModel',
   'workoutChatProvider',

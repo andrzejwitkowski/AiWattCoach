@@ -600,6 +600,7 @@ fn should_invalidate_llm_cache(previous: &AiAgentsConfig, updated: &AiAgentsConf
         || previous.zai_api_key != updated.zai_api_key
         || previous.openai_compatible_api_key != updated.openai_compatible_api_key
         || previous.openai_compatible_base_url != updated.openai_compatible_base_url
+        || previous.opencode_go_api_key != updated.opencode_go_api_key
 }
 
 #[cfg(test)]

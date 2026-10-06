@@ -208,6 +208,7 @@ pub fn build_conversation(
                     .image_url
                     .as_ref()
                     .and_then(|_| power_chart_base64.map(str::to_string)),
+                provider_continuation_json: None,
             }),
             MessageRole::Coach => Some(LlmChatMessage {
                 role: LlmMessageRole::Assistant,
@@ -219,6 +220,7 @@ pub fn build_conversation(
                 tool_call_id: None,
                 reasoning_content: None,
                 image_base64: None,
+                provider_continuation_json: None,
             }),
             MessageRole::Tool => None,
         })
