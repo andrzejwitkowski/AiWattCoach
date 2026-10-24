@@ -245,6 +245,7 @@ impl TrainingContextBuilder for StubTrainingContextBuilder {
                     volatile_context: "{\"volatile\":true}".to_string(),
                     approximate_tokens: 100,
                 },
+                pack_mode: aiwattcoach::domain::training_context::PackMode::Full,
             })
         })
     }

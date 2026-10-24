@@ -5,6 +5,7 @@ use super::super::header_table::{
     cell_opt_str, cell_opt_u16, cell_str, interval_blocks_table, uniform_string, HeaderTable,
     TableBuilder,
 };
+use super::super::{last_n, PackMode, LEAN_HISTORY_WORKOUTS, LEAN_LOAD_TREND_DAYS};
 use crate::domain::training_context::model::{
     AthleteProfileContext, FuturePlannedEventContext, HistoricalTrainingContext,
     HistoricalWorkoutContext, IntervalsStatusContext, PlannedRestDayContext, RaceContext,
@@ -26,7 +27,7 @@ pub(crate) struct StablePayload {
 }
 
 impl StablePayload {
-    pub(crate) fn from_context(context: &TrainingContext) -> Self {
+    pub(crate) fn from_context(context: &TrainingContext, mode: PackMode) -> Self {
         Self {
             v: 3,
             i: CompactIntervalsStatus::from_status(&context.intervals_status),
@@ -34,7 +35,7 @@ impl StablePayload {
             rc: build_race_table(&context.races),
             fe: build_future_events_table(&context.future_events),
             prd: build_planned_rest_days_table(&context.planned_rest_days),
-            h: CompactHistory::from_history(&context.history),
+            h: CompactHistory::from_history(&context.history, mode),
         }
     }
 }
@@ -127,7 +128,12 @@ fn build_planned_rest_days_table(entries: &[PlannedRestDayContext]) -> Option<He
 
 fn build_load_trend_table(
     points: &[crate::domain::training_context::model::HistoricalLoadTrendPoint],
+    mode: PackMode,
 ) -> Option<HeaderTable> {
+    let points = match mode {
+        PackMode::Full => points,
+        PackMode::Lean => last_n(points, LEAN_LOAD_TREND_DAYS),
+    };
     if points.is_empty() {
         return None;
     }
@@ -138,7 +144,14 @@ fn build_load_trend_table(
     builder.build()
 }
 
-fn build_historical_workouts_table(workouts: &[HistoricalWorkoutContext]) -> Option<HeaderTable> {
+fn build_historical_workouts_table(
+    workouts: &[HistoricalWorkoutContext],
+    mode: PackMode,
+) -> Option<HeaderTable> {
+    let workouts = match mode {
+        PackMode::Full => workouts,
+        PackMode::Lean => last_n(workouts, LEAN_HISTORY_WORKOUTS),
+    };
     if workouts.is_empty() {
         return None;
     }
@@ -170,6 +183,11 @@ fn build_historical_workouts_table(workouts: &[HistoricalWorkoutContext]) -> Opt
         } else {
             workout.activity_type.as_deref()
         };
+        let blocks = if mode == PackMode::Full {
+            cell_opt_json(interval_blocks_table(&workout.interval_blocks))
+        } else {
+            cell_opt_json(None)
+        };
         builder = builder.push_row(vec![
             cell_str(&workout.date),
             cell_str(&workout.activity_id),
@@ -180,7 +198,7 @@ fn build_historical_workouts_table(workouts: &[HistoricalWorkoutContext]) -> Opt
             cell_opt_i32(workout.normalized_power_watts),
             cell_opt_i32(workout.ftp_watts),
             cell_opt_str(workout.workout_recap.as_deref()),
-            cell_opt_json(interval_blocks_table(&workout.interval_blocks)),
+            blocks,
         ]);
     }
     if let Some(ty) = def_ty {
@@ -298,7 +316,7 @@ struct CompactHistory {
 }
 
 impl CompactHistory {
-    fn from_history(history: &HistoricalTrainingContext) -> Self {
+    fn from_history(history: &HistoricalTrainingContext, mode: PackMode) -> Self {
         Self {
             ws: history.window_start.clone(),
             we: history.window_end.clone(),
@@ -313,8 +331,8 @@ impl CompactHistory {
             t28: history.average_tss_28d,
             if28: history.average_if_28d,
             ef28: history.average_ef_28d,
-            lt: build_load_trend_table(&history.load_trend),
-            w: build_historical_workouts_table(&history.workouts),
+            lt: build_load_trend_table(&history.load_trend, mode),
+            w: build_historical_workouts_table(&history.workouts, mode),
         }
     }
 }

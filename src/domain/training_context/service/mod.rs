@@ -29,7 +29,10 @@ use crate::domain::{
         BoxFuture as SpecialDayBoxFuture, SpecialDay, SpecialDayError, SpecialDayKind,
         SpecialDayRepository,
     },
-    training_context::{model::*, packing::render_training_context},
+    training_context::{
+        model::*,
+        packing::{render_training_context_with_mode, PackMode},
+    },
     training_load::{
         BoxFuture as TrainingLoadBoxFuture, FtpHistoryEntry, FtpHistoryRepository,
         TrainingLoadDailySnapshot, TrainingLoadDailySnapshotRepository, TrainingLoadError,
@@ -270,6 +273,7 @@ where
     race_repository: Option<Arc<dyn RaceRepository>>,
     planned_rest_day_repository: Option<Arc<dyn PlannedRestDayRepository>>,
     training_plan_projection_repository: Option<Arc<dyn TrainingPlanProjectionRepository>>,
+    pack_mode: PackMode,
     clock: Time,
 }
 
@@ -296,8 +300,14 @@ where
             race_repository: None,
             planned_rest_day_repository: None,
             training_plan_projection_repository: None,
+            pack_mode: PackMode::Full,
             clock,
         }
+    }
+
+    pub fn with_pack_mode(mut self, pack_mode: PackMode) -> Self {
+        self.pack_mode = pack_mode;
+        self
     }
 
     pub fn with_completed_workout_repository<Repository>(mut self, repository: Repository) -> Self
@@ -789,12 +799,13 @@ where
             upcoming_days,
             projected_days,
         };
-        let rendered = render_training_context(&context);
+        let rendered = render_training_context_with_mode(&context, self.pack_mode);
 
         Ok(TrainingContextBuildResult {
             focus_date: focus_date.format("%Y-%m-%d").to_string(),
             context,
             rendered,
+            pack_mode: self.pack_mode,
         })
     }
 
