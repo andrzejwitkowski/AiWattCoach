@@ -922,3 +922,25 @@ async fn backfill_wahoo_user_id_updates_only_wahoo_fields() {
 
     client.database(&database_name).drop().await.unwrap();
 }
+
+#[test]
+fn coaching_preferences_round_trip_and_legacy_document_defaults_to_unset() {
+    use crate::domain::settings::{IntensityDistribution, SessionEmphasis, TrainingPhase};
+
+    let legacy: CyclingDocument = mongodb::bson::from_document(mongodb::bson::doc! {
+        "athlete_notes": "keep me",
+    })
+    .expect("legacy cycling document without coaching fields deserializes");
+    let domain = super::mapping::map_document_cycling_to_domain(legacy);
+    assert_eq!(domain.athlete_notes.as_deref(), Some("keep me"));
+    assert_eq!(domain.coaching, Default::default());
+
+    let mut saved = domain;
+    saved.coaching.phase = Some(TrainingPhase::Base);
+    saved.coaching.distribution = Some(IntensityDistribution::Polarized);
+    saved.coaching.emphasis = vec![SessionEmphasis::Vo2];
+    let document = super::mapping::map_domain_cycling_to_document(&saved);
+    let restored = super::mapping::map_document_cycling_to_domain(document);
+    assert_eq!(restored.coaching, saved.coaching);
+    assert_eq!(restored.athlete_notes.as_deref(), Some("keep me"));
+}

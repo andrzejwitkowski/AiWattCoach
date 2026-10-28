@@ -1,7 +1,8 @@
 use crate::domain::llm::{normalize_openai_compatible_base_url, LlmProvider};
 use crate::domain::settings::{
     mask_sensitive, validation, AiAgentsConfig, AnalysisOptions, AvailabilityDay,
-    AvailabilitySettings, CyclingSettings, IntervalsConfig, SettingsError, UserSettings, Weekday,
+    AvailabilitySettings, CoachingPreferences, CyclingSettings, IntensityDistribution,
+    IntervalsConfig, SessionEmphasis, SettingsError, TrainingPhase, UserSettings, Weekday,
 };
 
 use super::dto::{
@@ -118,6 +119,23 @@ pub(super) fn map_settings_to_dto(
             athlete_prompt: settings.cycling.athlete_prompt.clone(),
             medications: settings.cycling.medications.clone(),
             athlete_notes: settings.cycling.athlete_notes.clone(),
+            coaching_phase: settings
+                .cycling
+                .coaching
+                .phase
+                .map(|v| v.as_str().to_string()),
+            coaching_distribution: settings
+                .cycling
+                .coaching
+                .distribution
+                .map(|v| v.as_str().to_string()),
+            coaching_emphasis: settings
+                .cycling
+                .coaching
+                .emphasis
+                .iter()
+                .map(|v| v.as_str().to_string())
+                .collect(),
             last_zone_update_epoch_seconds: settings.cycling.last_zone_update_epoch_seconds,
         },
     }
@@ -393,6 +411,57 @@ pub(super) fn map_options_update(
     }
 }
 
+fn parse_choice<T>(
+    field: &str,
+    value: Option<&str>,
+    current: Option<T>,
+    parse: fn(&str) -> Option<T>,
+) -> Result<Option<T>, SettingsError> {
+    match value.map(str::trim) {
+        None => Ok(current),
+        Some("") => Ok(None),
+        Some(text) => parse(text)
+            .map(Some)
+            .ok_or_else(|| SettingsError::Validation(format!("{field} has an unsupported value"))),
+    }
+}
+
+fn map_coaching_update(
+    body: &UpdateCyclingRequest,
+    current: &CoachingPreferences,
+) -> Result<CoachingPreferences, SettingsError> {
+    let emphasis = match &body.coaching_emphasis {
+        None => current.emphasis.clone(),
+        Some(values) => {
+            let mut parsed = Vec::new();
+            for value in values {
+                let item = SessionEmphasis::parse(value.trim()).ok_or_else(|| {
+                    SettingsError::Validation("coachingEmphasis has an unsupported value".into())
+                })?;
+                if !parsed.contains(&item) {
+                    parsed.push(item);
+                }
+            }
+            parsed
+        }
+    };
+    Ok(CoachingPreferences {
+        phase: parse_choice(
+            "coachingPhase",
+            body.coaching_phase.as_deref(),
+            current.phase,
+            TrainingPhase::parse,
+        )?,
+        distribution: parse_choice(
+            "coachingDistribution",
+            body.coaching_distribution.as_deref(),
+            current.distribution,
+            IntensityDistribution::parse,
+        )?,
+        emphasis,
+    })
+}
+
 pub(super) fn map_cycling_update(
     body: UpdateCyclingRequest,
     current: &UserSettings,
@@ -406,6 +475,7 @@ pub(super) fn map_cycling_update(
     let hr_max_bpm =
         validation::validate_cycling_hr(body.hr_max_bpm.or(current.cycling.hr_max_bpm))?;
     let vo2_max = validation::validate_cycling_vo2(body.vo2_max.or(current.cycling.vo2_max))?;
+    let coaching = map_coaching_update(&body, &current.cycling.coaching)?;
     let full_name_update = normalize_string_input(body.full_name);
     let athlete_prompt_update = normalize_string_input(body.athlete_prompt);
     let medications_update = normalize_string_input(body.medications);
@@ -440,6 +510,7 @@ pub(super) fn map_cycling_update(
         athlete_prompt,
         medications,
         athlete_notes,
+        coaching,
         last_zone_update_epoch_seconds: current.cycling.last_zone_update_epoch_seconds,
     })
 }

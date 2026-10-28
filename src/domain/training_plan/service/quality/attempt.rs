@@ -46,6 +46,21 @@ where
         else {
             return Ok(false);
         };
+        let policy = match self
+            .generator
+            .plan_quality_policy(ctx.identity.user_id, ctx.identity.workout_id)
+            .await
+        {
+            Ok(policy) => policy,
+            Err(error) => {
+                tracing::warn!(
+                    operation_key = %ctx.operation.operation_key,
+                    error = %error,
+                    "plan quality policy lookup failed; shipping best available draft"
+                );
+                return Ok(false);
+            }
+        };
         let target_event = self
             .load_plan_target_event_requirement(ctx.identity, ctx.operation)
             .await?;
@@ -73,6 +88,7 @@ where
                     &mut ctx,
                     attempt,
                     &availability_summary,
+                    policy.as_ref(),
                     target_event.as_ref(),
                 )
                 .await?
@@ -169,6 +185,7 @@ where
         ctx: &mut QualityAttemptLoopCtx<'_>,
         attempt: u32,
         availability_summary: &str,
+        policy: Option<&crate::domain::training_plan::PlanQualityPolicy>,
         target_event: Option<&TargetEventRequirement>,
     ) -> Result<QualityAttemptAction, TrainingPlanError> {
         let gate_gap = target_event
@@ -183,6 +200,18 @@ where
         }
 
         let evidence = extract_plan_quality_evidence(ctx.operation);
+        let availability_summary = match policy {
+            Some(policy) => {
+                let adherence = policy.distribution.map_or_else(
+                    || "distribution_adherence: no distribution selected; not assessed".to_string(),
+                    |distribution| {
+                        super::super::distribution_adherence_line(&ctx.snapshot.days, distribution)
+                    },
+                );
+                format!("{availability_summary}\n{}\n{adherence}", policy.rendered)
+            }
+            None => availability_summary.to_string(),
+        };
         let mut evaluation = match self
             .generator
             .evaluate_plan_quality(PlanQualityEvaluationInput {
@@ -194,7 +223,7 @@ where
                 draft_plan_text: &ctx.draft.plan_text,
                 draft_plan_description: ctx.draft.description.as_deref(),
                 evidence: evidence.as_ref(),
-                availability_summary: Some(availability_summary),
+                availability_summary: Some(&availability_summary),
             })
             .await
         {

@@ -36,6 +36,7 @@ pub use service::{
     IntervalsConnectionError, IntervalsConnectionTester, IntervalsService, IntervalsUseCases,
 };
 pub use workout::{
-    find_best_activity_match, parse_workout_doc, ActualWorkoutMatch, MatchedWorkoutInterval,
-    ParsedWorkoutDoc, WorkoutIntervalDefinition, WorkoutSegment, WorkoutSummary,
+    find_best_activity_match, parse_workout_doc, zone_for_percent, ActualWorkoutMatch,
+    MatchedWorkoutInterval, ParsedWorkoutDoc, WorkoutIntervalDefinition, WorkoutSegment,
+    WorkoutSummary,
 };

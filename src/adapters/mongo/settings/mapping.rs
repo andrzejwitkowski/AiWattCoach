@@ -5,7 +5,8 @@ use crate::adapters::mongo::time::{
 use crate::domain::llm::LlmProvider;
 use crate::domain::settings::{
     validation, AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings,
-    CyclingSettings, IntervalsConfig, SettingsError, UserSettings, WahooConfig, Weekday,
+    CoachingPreferences, CyclingSettings, IntensityDistribution, IntervalsConfig, SessionEmphasis,
+    SettingsError, TrainingPhase, UserSettings, WahooConfig, Weekday,
 };
 
 use super::document::{
@@ -202,6 +203,22 @@ pub(super) fn map_document_cycling_to_domain(cycling: CyclingDocument) -> Cyclin
         athlete_prompt: cycling.athlete_prompt,
         medications: cycling.medications,
         athlete_notes: cycling.athlete_notes,
+        // unknown stored values are dropped (treated as unset) so a bad document never blocks loading settings
+        coaching: CoachingPreferences {
+            phase: cycling
+                .coaching_phase
+                .as_deref()
+                .and_then(TrainingPhase::parse),
+            distribution: cycling
+                .coaching_distribution
+                .as_deref()
+                .and_then(IntensityDistribution::parse),
+            emphasis: cycling
+                .coaching_emphasis
+                .iter()
+                .filter_map(|value| SessionEmphasis::parse(value))
+                .collect(),
+        },
         last_zone_update_epoch_seconds: resolve_optional_epoch_seconds(
             cycling.last_zone_update_at,
             cycling.last_zone_update_epoch_seconds,
@@ -221,6 +238,17 @@ pub(super) fn map_domain_cycling_to_document(cycling: &CyclingSettings) -> Cycli
         athlete_prompt: cycling.athlete_prompt.clone(),
         medications: cycling.medications.clone(),
         athlete_notes: cycling.athlete_notes.clone(),
+        coaching_phase: cycling.coaching.phase.map(|v| v.as_str().to_string()),
+        coaching_distribution: cycling
+            .coaching
+            .distribution
+            .map(|v| v.as_str().to_string()),
+        coaching_emphasis: cycling
+            .coaching
+            .emphasis
+            .iter()
+            .map(|v| v.as_str().to_string())
+            .collect(),
         last_zone_update_epoch_seconds: cycling.last_zone_update_epoch_seconds,
         last_zone_update_at: optional_epoch_seconds_to_bson_datetime(
             cycling.last_zone_update_epoch_seconds,

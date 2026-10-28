@@ -646,6 +646,24 @@ describe('settings api', () => {
     });
   });
 
+  it('sends coaching policy choices in the outbound body', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }));
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateCycling('', {
+      coachingPhase: 'base',
+      coachingDistribution: 'polarized',
+      coachingEmphasis: ['road_race_repeatability'],
+    });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.coachingPhase).toBe('base');
+    expect(body.coachingDistribution).toBe('polarized');
+    expect(body.coachingEmphasis).toEqual(['road_race_repeatability']);
+  });
+
   it('clears athlete profile context fields when blank values are sent', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()

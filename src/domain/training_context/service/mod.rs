@@ -702,6 +702,13 @@ where
             Vec::new()
         };
 
+        let focus_date_text = focus_date.format("%Y-%m-%d").to_string();
+        // only races on/after the focus date are targets; past races stay history
+        let future_target_events: Vec<String> = races
+            .iter()
+            .filter(|race| race.date >= focus_date_text)
+            .map(|race| format!("{} {} {}", race.date, race.priority, race.discipline))
+            .collect();
         let profile = AthleteProfileContext {
             full_name: settings.cycling.full_name,
             age: settings.cycling.age,
@@ -713,6 +720,11 @@ where
             athlete_prompt: settings.cycling.athlete_prompt,
             medications: settings.cycling.medications,
             athlete_notes: settings.cycling.athlete_notes,
+            coaching_policy: settings
+                .cycling
+                .coaching
+                .render_policy_context(&future_target_events),
+            coaching: settings.cycling.coaching,
             availability_configured,
             weekly_availability,
         };

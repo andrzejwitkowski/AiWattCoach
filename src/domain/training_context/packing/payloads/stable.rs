@@ -243,6 +243,8 @@ struct CompactProfile {
     meds: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     notes: Option<String>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    cpol: String,
     acfg: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     av: Option<HeaderTable>,
@@ -261,6 +263,7 @@ impl CompactProfile {
             ap: profile.athlete_prompt.clone(),
             meds: profile.medications.clone(),
             notes: profile.athlete_notes.clone(),
+            cpol: profile.coaching_policy.clone(),
             acfg: profile.availability_configured,
             av: build_availability_table(&profile.weekly_availability),
         }

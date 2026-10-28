@@ -1,6 +1,7 @@
 mod correction;
 mod ctx;
 mod discipline_requirement;
+mod distribution_adherence;
 pub(crate) mod parsing;
 mod quality;
 mod quality_evidence;
@@ -11,6 +12,7 @@ mod structural;
 pub use discipline_requirement::{
     missing_discipline_requirement, select_target_event_requirement, TargetEventRequirement,
 };
+use distribution_adherence::distribution_adherence_line;
 
 use chrono::{TimeZone, Utc};
 

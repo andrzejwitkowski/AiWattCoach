@@ -176,6 +176,12 @@ pub(super) struct CyclingDto {
     pub(super) medications: Option<String>,
     #[serde(rename = "athleteNotes")]
     pub(super) athlete_notes: Option<String>,
+    #[serde(rename = "coachingPhase")]
+    pub(super) coaching_phase: Option<String>,
+    #[serde(rename = "coachingDistribution")]
+    pub(super) coaching_distribution: Option<String>,
+    #[serde(rename = "coachingEmphasis")]
+    pub(super) coaching_emphasis: Vec<String>,
     #[serde(rename = "lastZoneUpdateEpochSeconds")]
     pub(super) last_zone_update_epoch_seconds: Option<i64>,
 }
@@ -274,6 +280,13 @@ pub(crate) struct UpdateCyclingRequest {
     pub(super) medications: OptionalStringInput,
     #[serde(default, rename = "athleteNotes")]
     pub(super) athlete_notes: OptionalStringInput,
+    // absent keeps the saved value; "" / [] clears it
+    #[serde(default, rename = "coachingPhase")]
+    pub(super) coaching_phase: Option<String>,
+    #[serde(default, rename = "coachingDistribution")]
+    pub(super) coaching_distribution: Option<String>,
+    #[serde(default, rename = "coachingEmphasis")]
+    pub(super) coaching_emphasis: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]

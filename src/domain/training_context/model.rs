@@ -122,6 +122,9 @@ pub struct AthleteProfileContext {
     pub athlete_prompt: Option<String>,
     pub medications: Option<String>,
     pub athlete_notes: Option<String>,
+    /// Rendered canonical coaching policy (see `CoachingPreferences::render_policy_context`).
+    pub coaching_policy: String,
+    pub coaching: crate::domain::settings::CoachingPreferences,
     pub availability_configured: bool,
     pub weekly_availability: Vec<WeeklyAvailabilityContext>,
 }

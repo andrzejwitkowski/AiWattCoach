@@ -1,5 +1,7 @@
 use crate::domain::llm::LlmProvider;
 
+use super::coaching::CoachingPreferences;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum SettingsError {
     Unauthenticated,
@@ -217,6 +219,7 @@ pub struct CyclingSettings {
     pub athlete_prompt: Option<String>,
     pub medications: Option<String>,
     pub athlete_notes: Option<String>,
+    pub coaching: CoachingPreferences,
     pub last_zone_update_epoch_seconds: Option<i64>,
 }
 
@@ -236,6 +239,7 @@ impl std::fmt::Debug for CyclingSettings {
             )
             .field("medications", &RedactedOptionalText(&self.medications))
             .field("athlete_notes", &RedactedOptionalText(&self.athlete_notes))
+            .field("coaching", &self.coaching)
             .field(
                 "last_zone_update_epoch_seconds",
                 &self.last_zone_update_epoch_seconds,

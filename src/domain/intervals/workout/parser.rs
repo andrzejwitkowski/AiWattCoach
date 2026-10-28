@@ -276,7 +276,7 @@ fn append_segment(
     true
 }
 
-fn zone_for_percent(percent: f64) -> i32 {
+pub fn zone_for_percent(percent: f64) -> i32 {
     match percent {
         value if value <= 55.0 => 1,
         value if value < 76.0 => 2,

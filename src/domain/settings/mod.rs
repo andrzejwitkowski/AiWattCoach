@@ -1,9 +1,11 @@
+mod coaching;
 mod model;
 mod noop_repository;
 mod ports;
 mod service;
 pub mod validation;
 
+pub use coaching::{CoachingPreferences, IntensityDistribution, SessionEmphasis, TrainingPhase};
 pub use model::{
     mask_sensitive, AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings,
     CyclingSettings, IntervalsConfig, SettingsError, UserSettings, WahooConfig, Weekday,
