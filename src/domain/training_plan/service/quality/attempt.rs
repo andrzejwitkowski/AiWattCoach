@@ -56,9 +56,9 @@ where
                 tracing::warn!(
                     operation_key = %ctx.operation.operation_key,
                     error = %error,
-                    "plan quality policy lookup failed; evaluating without coaching policy"
+                    "plan quality policy lookup failed; shipping best available draft"
                 );
-                None
+                return Ok(false);
             }
         };
         let target_event = self
