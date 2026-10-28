@@ -48,7 +48,9 @@ fn add_step_seconds(zones: &mut ZoneSeconds, step: &PlannedWorkoutStep, repeat_c
         // Ramp time is spread over the zones it crosses, not assigned to its midpoint.
         for slice in 0..RAMP_SLICES {
             let percent = min + (max - min) * (slice as f64 + 0.5) / RAMP_SLICES as f64;
-            add_zone_seconds(zones, percent, seconds / RAMP_SLICES);
+            // cumulative boundaries keep the slice sum equal to the ramp duration
+            let slice_seconds = seconds * (slice + 1) / RAMP_SLICES - seconds * slice / RAMP_SLICES;
+            add_zone_seconds(zones, percent, slice_seconds);
         }
     } else {
         add_zone_seconds(zones, (min + max) / 2.0, seconds);
@@ -141,6 +143,15 @@ mod tests {
         let plan = days("2026-10-01\nVO2\n- 30m 65%\n\nMain Set 4x\n- 5m 110%\n");
         let zones = plan_zone_seconds(&plan);
         assert_eq!((zones.low, zones.high), (1800, 1200));
+    }
+
+    #[test]
+    fn ramp_keeps_total_duration_for_short_and_uneven_durations() {
+        for (block, total) in [("1m", 60), ("2m", 120), ("90s", 90)] {
+            let plan = days(&format!("2026-10-01\nRamp\n- {block} ramp 50-120%\n"));
+            let zones = plan_zone_seconds(&plan);
+            assert_eq!(zones.low + zones.middle + zones.high, total, "{block}");
+        }
     }
 
     #[test]
