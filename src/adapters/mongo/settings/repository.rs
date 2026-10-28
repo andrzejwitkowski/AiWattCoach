@@ -470,6 +470,9 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "cycling.athlete_prompt": &cycling_document.athlete_prompt,
                             "cycling.medications": &cycling_document.medications,
                             "cycling.athlete_notes": &cycling_document.athlete_notes,
+            "cycling.coaching_phase": &cycling_document.coaching_phase,
+            "cycling.coaching_distribution": &cycling_document.coaching_distribution,
+            "cycling.coaching_emphasis": &cycling_document.coaching_emphasis,
                             "cycling.last_zone_update_epoch_seconds": cycling_document.last_zone_update_epoch_seconds,
                             "cycling.last_zone_update_at": optional_epoch_seconds_to_bson_datetime(
                                 cycling_document.last_zone_update_epoch_seconds,

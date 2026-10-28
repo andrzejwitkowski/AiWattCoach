@@ -5,7 +5,7 @@ mod pest_parser;
 use serde::{Deserialize, Serialize};
 
 pub use matching::find_best_activity_match;
-pub use parser::parse_workout_doc;
+pub use parser::{parse_workout_doc, zone_for_percent};
 pub(crate) use pest_parser::parse_workout_ast;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

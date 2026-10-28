@@ -24,7 +24,7 @@ pub use model::{
 };
 pub use planning_context::{map_workout_summary_to_planning_context, workout_recap_from_summary};
 pub use ports::{
-    BoxFuture, PlanQualityEvaluatorLlmConfigPort, PlanQualityProgressPort,
+    BoxFuture, PlanQualityEvaluatorLlmConfigPort, PlanQualityPolicy, PlanQualityProgressPort,
     TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
     TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
     TrainingPlanToolLoopCheckpoint, TrainingPlanWorkoutSummaryPort, WorkoutPlanningLlmConfigPort,

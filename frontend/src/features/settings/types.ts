@@ -58,6 +58,8 @@ const wahooSettingsSchema = z.object({
   connected: z.boolean(),
 });
 
+export const sessionEmphasisValues = ['sweet_spot', 'threshold', 'vo2', 'road_race_repeatability', 'aerobic_endurance'] as const;
+
 export const testIntervalsConnectionResponseSchema = z.object({
   connected: z.boolean(),
   message: z.string(),
@@ -144,6 +146,9 @@ const cyclingSettingsDataSchema = z.object({
   athletePrompt: z.string().nullable(),
   medications: z.string().nullable(),
   athleteNotes: z.string().nullable(),
+  coachingPhase: z.enum(['base', 'build']).nullable().default(null),
+  coachingDistribution: z.enum(['polarized', 'pyramidal', 'threshold']).nullable().default(null),
+  coachingEmphasis: z.array(z.enum(sessionEmphasisValues)).default([]),
   lastZoneUpdateEpochSeconds: z.number().nullable(),
 });
 
@@ -164,6 +169,7 @@ export const athleteSummaryResponseSchema = z.object({
   updatedAtEpochSeconds: z.number().int().nullable().optional(),
 });
 
+export type SessionEmphasis = (typeof sessionEmphasisValues)[number];
 export type UserSettingsResponse = z.infer<typeof userSettingsResponseSchema>;
 export type AthleteSummaryResponse = z.infer<typeof athleteSummaryResponseSchema>;
 
@@ -224,6 +230,10 @@ export const updateCyclingRequestSchema = z.object({
   athletePrompt: z.string().max(6000).nullable().optional(),
   medications: z.string().max(4000).nullable().optional(),
   athleteNotes: z.string().max(8000).nullable().optional(),
+  // '' clears the saved choice; omitted keeps it
+  coachingPhase: z.enum(['base', 'build', '']).optional(),
+  coachingDistribution: z.enum(['polarized', 'pyramidal', 'threshold', '']).optional(),
+  coachingEmphasis: z.array(z.enum(sessionEmphasisValues)).optional(),
 });
 
 export type AvailabilitySettingsData = z.infer<typeof availabilitySettingsSchema>;

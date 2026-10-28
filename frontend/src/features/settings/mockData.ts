@@ -82,6 +82,9 @@ export function buildTestSettings(overrides: TestSettingsOverrides = {}): UserSe
       athletePrompt: null,
       medications: null,
       athleteNotes: null,
+      coachingPhase: null,
+      coachingDistribution: null,
+      coachingEmphasis: [],
       lastZoneUpdateEpochSeconds: null,
     },
   };

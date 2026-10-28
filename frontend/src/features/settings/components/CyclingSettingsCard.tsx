@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import type { UserSettingsResponse } from '../types';
+import type { SessionEmphasis, UserSettingsResponse } from '../types';
 import { updateCycling } from '../api/settings';
 
 type CyclingSettingsCardProps = {
@@ -84,6 +84,14 @@ function MetricCard({ label, value, unit, accent }: { label: string; value: numb
   );
 }
 
+const SESSION_EMPHASIS_OPTIONS: ReadonlyArray<readonly [SessionEmphasis, string]> = [
+  ['sweet_spot', 'Sweet Spot'],
+  ['threshold', 'Threshold'],
+  ['vo2', 'VO2'],
+  ['road_race_repeatability', 'Road-race repeatability'],
+  ['aerobic_endurance', 'Aerobic endurance'],
+];
+
 export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSettingsCardProps) {
   const cycling = settings.cycling;
   const [form, setForm] = useState({
@@ -97,6 +105,9 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
     athletePrompt: cycling.athletePrompt ?? '',
     medications: cycling.medications ?? '',
     athleteNotes: cycling.athleteNotes ?? '',
+    coachingPhase: cycling.coachingPhase ?? '',
+    coachingDistribution: cycling.coachingDistribution ?? '',
+    coachingEmphasis: cycling.coachingEmphasis,
   });
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -135,6 +146,9 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
       req.athletePrompt = form.athletePrompt;
       req.medications = form.medications;
       req.athleteNotes = form.athleteNotes;
+      req.coachingPhase = form.coachingPhase;
+      req.coachingDistribution = form.coachingDistribution;
+      req.coachingEmphasis = form.coachingEmphasis;
       await updateCycling(apiBaseUrl, req);
       onSave();
     } catch (err) {
@@ -299,6 +313,63 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
           rows={5}
         />
       </div>
+
+      <fieldset className="mt-6 rounded-xl border border-white/10 bg-slate-900/40 p-4 text-sm text-slate-300">
+        <legend className="px-1 text-xs font-medium uppercase tracking-wider text-slate-400">Coaching policy</legend>
+        <p className="mb-3 text-xs text-slate-500">
+          Phase, intensity distribution and session emphasis are independent. Leave unset to keep the adaptive
+          coach behaviour; the coach will say the selection is missing. Phase is never switched automatically.
+        </p>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <label className="text-xs text-slate-400" htmlFor="coaching-phase">
+            Phase
+            <select
+              id="coaching-phase"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white"
+              value={form.coachingPhase}
+              onChange={(e) => { setForm((p) => ({ ...p, coachingPhase: e.target.value })); setSaveError(null); }}
+            >
+              <option value="">Not selected (adaptive)</option>
+              <option value="base">Base</option>
+              <option value="build">Build</option>
+            </select>
+          </label>
+          <label className="text-xs text-slate-400" htmlFor="coaching-distribution">
+            Intensity distribution
+            <select
+              id="coaching-distribution"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white"
+              value={form.coachingDistribution}
+              onChange={(e) => { setForm((p) => ({ ...p, coachingDistribution: e.target.value })); setSaveError(null); }}
+            >
+              <option value="">Not selected (adaptive)</option>
+              <option value="polarized">Polarized</option>
+              <option value="pyramidal">Pyramidal</option>
+              <option value="threshold">Threshold-focused</option>
+            </select>
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-4">
+          {SESSION_EMPHASIS_OPTIONS.map(([value, label]) => (
+            <label key={value} className="flex items-center gap-2 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={form.coachingEmphasis.includes(value)}
+                onChange={(e) => {
+                  setForm((p) => ({
+                    ...p,
+                    coachingEmphasis: e.target.checked
+                      ? [...p.coachingEmphasis, value]
+                      : p.coachingEmphasis.filter((item) => item !== value),
+                  }));
+                  setSaveError(null);
+                }}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       {saveError && (
         <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">

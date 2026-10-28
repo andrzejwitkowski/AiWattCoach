@@ -192,6 +192,14 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
         Box::pin(async move { Ok("availability: not configured".to_string()) })
     }
 
+    fn plan_quality_policy(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> BoxFuture<Result<Option<PlanQualityPolicy>, TrainingPlanError>> {
+        Box::pin(async move { Ok(None) })
+    }
+
     fn plan_target_event_requirement(
         &self,
         _user_id: &str,
@@ -201,6 +209,13 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
     > {
         Box::pin(async move { Ok(None) })
     }
+}
+
+/// Saved coaching policy handed to the plan-quality loop (evaluator evidence + adherence check).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanQualityPolicy {
+    pub rendered: String,
+    pub distribution: Option<crate::domain::settings::IntensityDistribution>,
 }
 
 pub trait TrainingPlanWorkoutSummaryPort: Send + Sync + 'static {

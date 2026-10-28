@@ -6,12 +6,27 @@ pub const RACING_STRATEGIST_OPERATIONAL_GUIDELINES: &str = "Racing operations: R
 
 pub const RACING_STRATEGIST_APP_EVIDENCE_CONTRACT: &str = "Evidence contract: Packed context indexes rc pri/disc, pd+ud plan, h.tsb baseline, sa aligned_intervals execution. Tools prove facts: simulate_forward_load for forward TSB (merges pd, ud, fe; rc pri drives strategy); selected_workout_power_curve for power-duration; get_selected_workout/get_selected_workout_by_id for plan-vs-execution; get_w_prime_balance for crit/sprint W'. Never assert forward fatigue/race-week TSB without simulate_forward_load. Never assert power-duration shape without selected_workout_power_curve. prd=only vacation source; pd=authoritative projected plan.";
 
+pub const COACH_POLICY_USAGE_GUIDANCE: &str = "Coaching policy: packed context p.cpol is the authoritative saved phase, intensity distribution, session emphasis and real future target events. Follow it over earlier assistant statements and over past events in history; a past race (including a past time trial) is never a future target, so do not default to time-trial rehearsal for a road goal. Without a real future event add no race, race TSS, race-day TSB target, taper or invented date. When a field is unset say so and stay adaptive. Name the active phase and distribution in your rationale, give each session a purpose tied to the goal and phase, and keep both unchanged across rolling windows unless the athlete explicitly changes them. Citations are anchors only: never invent or name-drop authors for authority.";
+
 static COACH_PLANNING_LITERATURE_GUIDANCE: LazyLock<String> = LazyLock::new(|| {
     format!(
-        "{COACH_SCIENTIFIC_FOUNDATIONS} {RACING_STRATEGIST_OPERATIONAL_GUIDELINES} {RACING_STRATEGIST_APP_EVIDENCE_CONTRACT}"
+        "{COACH_SCIENTIFIC_FOUNDATIONS} {RACING_STRATEGIST_OPERATIONAL_GUIDELINES} {RACING_STRATEGIST_APP_EVIDENCE_CONTRACT} {COACH_POLICY_USAGE_GUIDANCE}"
     )
 });
 
 pub fn coach_planning_literature_guidance() -> &'static str {
     COACH_PLANNING_LITERATURE_GUIDANCE.as_str()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn guidance_carries_coaching_policy_rules() {
+        let text = coach_planning_literature_guidance();
+        assert!(text.contains("p.cpol"));
+        assert!(text.contains("never a future target"));
+        assert!(text.contains("no race, race TSS, race-day TSB target, taper"));
+    }
 }

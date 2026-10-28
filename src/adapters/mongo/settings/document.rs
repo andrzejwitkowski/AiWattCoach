@@ -213,6 +213,12 @@ pub(super) struct CyclingDocument {
     pub(super) athlete_prompt: Option<String>,
     pub(super) medications: Option<String>,
     pub(super) athlete_notes: Option<String>,
+    #[serde(default)]
+    pub(super) coaching_phase: Option<String>,
+    #[serde(default)]
+    pub(super) coaching_distribution: Option<String>,
+    #[serde(default)]
+    pub(super) coaching_emphasis: Vec<String>,
     pub(super) last_zone_update_epoch_seconds: Option<i64>,
     #[serde(default)]
     pub(super) last_zone_update_at: Option<DateTime>,
@@ -267,6 +273,9 @@ impl std::fmt::Debug for CyclingDocument {
             )
             .field("medications", &RedactedOptionalText(&self.medications))
             .field("athlete_notes", &RedactedOptionalText(&self.athlete_notes))
+            .field("coaching_phase", &self.coaching_phase)
+            .field("coaching_distribution", &self.coaching_distribution)
+            .field("coaching_emphasis", &self.coaching_emphasis)
             .field(
                 "last_zone_update_epoch_seconds",
                 &self.last_zone_update_epoch_seconds,

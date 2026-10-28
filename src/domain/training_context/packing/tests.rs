@@ -488,3 +488,19 @@ fn mixed_workout_activity_types_keep_per_row_ty_column() {
     assert!(rendered.stable_context.contains("\"Run\""));
     assert!(!rendered.stable_context.contains("\"def_ty\""));
 }
+
+#[test]
+fn stable_context_carries_coaching_policy_for_every_workflow() {
+    let mut context = rich_training_context();
+    context.profile.coaching_policy =
+        "coaching_policy: phase=base; distribution=polarized".to_string();
+    let rendered = render_training_context(&context);
+    assert!(rendered
+        .stable_context
+        .contains("phase=base; distribution=polarized"));
+
+    context.profile.coaching_policy = String::new();
+    assert!(!render_training_context(&context)
+        .stable_context
+        .contains("cpol"));
+}
